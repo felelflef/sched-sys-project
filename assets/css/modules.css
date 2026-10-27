@@ -1,0 +1,282 @@
+/* ═════════════════════════════════════
+   MODULE 3 — ROOM INVENTORY
+   ═════════════════════════════════════ */
+.data-table-wrapper {
+  overflow-x: auto;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.data-table thead th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.data-table tbody td {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.data-table tbody tr:hover { background: #FAFBFC; }
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-lecture { background: #EEF1F7; color: var(--accent-primary); }
+.badge-lab { background: #F0E6F6; color: #6C3483; }
+.badge-success { background: var(--success-bg); color: var(--success); }
+.badge-warning { background: var(--warning-bg); color: var(--warning); }
+.badge-danger { background: var(--danger-bg); color: var(--danger); }
+
+.capacity-bar {
+  width: 80px; height: 6px; background: #ECEEF2; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 6px;
+}
+.capacity-bar-fill { height: 100%; border-radius: 3px; }
+
+/* ═════════════════════════════════════
+   MODULE 4 — FACULTY PROFILING
+   ═════════════════════════════════════ */
+.faculty-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+.faculty-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+  transition: all var(--transition);
+}
+.faculty-card:hover { transform: translateY(-3px); box-shadow: 0 14px 40px rgba(44,48,58,0.08); }
+.faculty-card-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.faculty-avatar {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 15px;
+  color: var(--text-on-accent);
+}
+.faculty-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.faculty-dept { font-size: 11.5px; color: var(--text-secondary); }
+.faculty-body { padding: 16px 18px; }
+.faculty-meta-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.faculty-meta-label { font-size: 11.5px; color: var(--text-secondary); }
+.faculty-meta-value { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.avail-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  margin-top: 10px;
+}
+.avail-slot {
+  padding: 4px 2px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+.avail-slot.open { background: var(--success-bg); color: var(--success); }
+.avail-slot.busy { background: #ECEEF2; color: var(--text-secondary); }
+.avail-slot.header { background: none; color: var(--text-secondary); font-weight: 700; font-size: 9px; }
+.qual-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.qual-tag {
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: #EEF1F7;
+  color: var(--accent-primary);
+  border: 1px solid #D8DEE9;
+}
+.qual-tag.locked::after { content: ' 🔒'; font-size: 9px; }
+
+/* ═════════════════════════════════════
+   MODULE 5 — SYSTEM ADMIN / CMS
+   ═════════════════════════════════════ */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+}
+.settings-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-tab {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.settings-tab:hover { background: var(--bg-primary); color: var(--text-primary); }
+.settings-tab.active { background: #EEF1F7; color: var(--accent-primary); font-weight: 600; }
+
+.form-group { margin-bottom: 20px; }
+.form-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.form-hint { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+.form-input {
+  width: 100%;
+  padding: 9px 14px;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  outline: none;
+  transition: border-color var(--transition);
+}
+.form-input:focus { border-color: var(--accent-primary); }
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.toggle-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.toggle-desc { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+.toggle-switch {
+  width: 42px; height: 24px;
+  background: #CDD1DA;
+  border-radius: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+.toggle-switch.on { background: var(--accent-primary); }
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 18px; height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: transform var(--transition);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.toggle-switch.on::after { transform: translateX(18px); }
+
+/* ═════════════════════════════════════
+   MODULE 6 — USER MANAGEMENT
+   ═════════════════════════════════════ */
+.role-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.role-admin { background: var(--accent-primary); color: var(--text-on-accent); }
+.role-academic-head { background: #EEF1F7; color: var(--accent-primary); border: 1px solid #C8D2E4; }
+.role-program-head { background: var(--success-bg); color: var(--success); border: 1px solid #B8DFC8; }
+.role-viewer { background: #F2F2F2; color: var(--text-secondary); border: 1px solid var(--border-subtle); }
+
+.access-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+.access-matrix th {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border-subtle);
+  text-align: center;
+}
+.access-matrix th:first-child { text-align: left; }
+.access-matrix td {
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: center;
+}
+.access-matrix td:first-child { text-align: left; font-weight: 500; }
+.access-check { color: var(--success); font-weight: 700; font-size: 16px; }
+.access-deny { color: #CDD1DA; font-size: 16px; }
+
+
+/* ─── AI STATUS INDICATOR ─── */
+.ai-status {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ai-status.active { background: var(--success-bg); color: var(--success); }
+.ai-status.processing { background: var(--info-bg); color: var(--info); }
+.ai-status .ai-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ai-pulse 1.5s ease-in-out infinite;
+}
+@keyframes ai-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ─── SEARCH BAR ─── */
+.search-bar {
+  position: relative;
+  max-width: 260px;
+}
+.search-bar input {
+  width: 100%;
+  padding: 7px 12px 7px 34px;
+}
+.search-bar svg {
+  position: absolute; left: 10px; top: 50%;
+  transform: translateY(-50%);
+  width: 16px; height: 16px;
+  color: var(--text-secondary);
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 1100px) {
+  .minimap-layout { grid-template-columns: 1fr; }
+  .settings-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 800px) {
+  .sidebar { display: none; }
+  .stats-row { grid-template-columns: 1fr 1fr; }
+}

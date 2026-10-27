@@ -1,0 +1,41 @@
+/* ─────────────────────────────────────────────
+   DESIGN TOKENS — Psychological Color Palette
+   ───────────────────────────────────────────── */
+:root {
+  --bg-primary: #FAF9F5;
+  --bg-secondary: #FFFFFF;
+  --accent-primary: #25447A;
+  --accent-hover: #1A3057;
+  --text-primary: #2C303A;
+  --text-secondary: #5C6375;
+  --text-on-accent: #FFFFFF;
+  --border-subtle: #E2E4E9;
+  --shadow-float: 0 8px 30px rgba(44, 48, 58, 0.04);
+
+  /* Extended palette */
+  --success: #2E7D5B;
+  --success-bg: #E8F5EE;
+  --warning: #C27A1A;
+  --warning-bg: #FFF4E0;
+  --danger: #C0392B;
+  --danger-bg: #FDECEB;
+  --info: #2980B9;
+  --info-bg: #E8F4FD;
+  --sidebar-w: 260px;
+  --header-h: 64px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─────────── RESET & BASE ─────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow: hidden;
+  height: 100vh;
+}
