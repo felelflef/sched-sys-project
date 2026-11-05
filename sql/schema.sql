@@ -1,4 +1,4 @@
-﻿-- ─────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────
 -- Scheduling System — Database Schema
 -- Import this into your Aiven MySQL database via the Aiven
 -- web console (Query Editor) or via mysql CLI:
@@ -14,7 +14,7 @@
 CREATE TABLE classrooms (
     room_id INT AUTO_INCREMENT PRIMARY KEY,
     room_name_number VARCHAR(50) NOT NULL,
-    room_type ENUM('Lecture', 'Lab', 'Kitchen', 'Bar') NOT NULL,
+    room_type ENUM('Lecture', 'Lab', 'Kitchen', 'Bar', 'Special') NOT NULL,
     capacity INT NOT NULL,
     floor_level INT NOT NULL,
     current_status ENUM('Vacant', 'Occupied', 'Reserved') DEFAULT 'Vacant'

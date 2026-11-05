@@ -19,7 +19,7 @@ validateCSRF();
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? '';
 
-$validTypes = ['Lecture', 'Lab', 'Kitchen', 'Bar'];
+$validTypes = ['Lecture', 'Lab', 'Kitchen', 'Bar', 'Special', 'CompLab'];
 
 if ($action === 'add') {
     $room_name_number = trim($input['room_name_number'] ?? '');

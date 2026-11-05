@@ -22,6 +22,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Freshly evaluate and render modules based on active role
       if (mod === 'rooms') renderRoomTable();
+      if (mod === 'minimap') {
+        const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
+        if (typeof renderFloorMap === 'function') renderFloorMap(activeFloor + 'F');
+      }
       if (mod === 'faculty') renderFacultyCards();
       if (mod === 'subjects') renderSubjectTable();
       if (mod === 'schedule') renderGrid();
@@ -38,6 +42,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+window.switchPage = function(mod) {
+  const navItem = document.querySelector(`.nav-item[data-module="${mod}"]`);
+  if (navItem) navItem.click();
+};
 
 window.toggleUserMenu = function(e) {
   if (e) e.stopPropagation();

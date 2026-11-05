@@ -261,13 +261,20 @@ window.confirmDeleteUser = function() {
   // Remove corresponding faculty profile and clear any assigned schedule slots
   if (userName) {
     FACULTY = FACULTY.filter(f => f.email.toLowerCase() !== email.toLowerCase() && f.name !== userName);
-    Object.keys(scheduleData).forEach(roomCode => {
-      Object.keys(scheduleData[roomCode]).forEach(slotIdx => {
-        if (scheduleData[roomCode][slotIdx]?.faculty === userName) {
-          delete scheduleData[roomCode][slotIdx];
-        }
+    if (typeof scheduleData !== 'undefined' && scheduleData) {
+      Object.keys(scheduleData).forEach(roomCode => {
+        Object.keys(scheduleData[roomCode]).forEach(slotIdx => {
+          if (scheduleData[roomCode][slotIdx]?.faculty === userName) {
+            delete scheduleData[roomCode][slotIdx];
+          }
+        });
       });
-    });
+    }
+    if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
+      MASTER_SCHEDULE_DATA.forEach(c => {
+        if (c.instructor === userName) c.instructor = 'TBA';
+      });
+    }
   }
 
   closeDeleteUserModal();

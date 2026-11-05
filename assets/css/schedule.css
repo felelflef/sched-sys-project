@@ -1,17 +1,23 @@
-/* ═══════════════════════════════════════
-   MODULE 1 — INTERACTIVE SCHEDULE GRID
-   ═══════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════
+   MODULE 1 — SECTION MASTER TIMETABLE (SPREADSHEET-LIKE ARCHITECTURE)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Grid Controls ─── */
 .grid-controls {
-  display: flex; align-items: center; gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 20px;
   flex-wrap: wrap;
 }
 .filter-group {
-  display: flex; align-items: center; gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .filter-group label {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-secondary);
 }
 select, input[type="text"], input[type="search"] {
@@ -24,98 +30,411 @@ select, input[type="text"], input[type="search"] {
   outline: none;
   transition: border-color var(--transition);
 }
-select:focus, input:focus { border-color: var(--accent-primary); }
+select:focus, input:focus {
+  border-color: var(--accent-primary);
+}
 
-.schedule-grid {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+/* ─── Export Dropdown ─── */
+.export-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  background: #FFFFFF;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  min-width: 220px;
   overflow: hidden;
-  background: var(--bg-secondary);
-  box-shadow: var(--shadow-float);
 }
-.schedule-grid thead th {
-  background: var(--accent-primary);
-  color: var(--text-on-accent);
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  padding: 12px 10px;
-  text-align: center;
-  border-right: 1px solid rgba(255,255,255,0.1);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.schedule-grid thead th:first-child { text-align: left; padding-left: 16px; }
-.schedule-grid thead th:last-child { border-right: none; }
-.schedule-grid tbody td {
-  padding: 6px;
-  border-bottom: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
-  vertical-align: top;
-  min-width: 130px;
-  height: 68px;
-  position: relative;
-}
-.schedule-grid tbody td:last-child { border-right: none; }
-.schedule-grid tbody tr:last-child td { border-bottom: none; }
-.schedule-grid tbody td:first-child {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  min-width: 100px;
-  background: #FAFBFC;
-  vertical-align: middle;
-  padding-left: 16px;
-}
-.schedule-grid tbody td.drop-zone {
-  transition: background var(--transition);
-}
-.schedule-grid tbody td.drop-zone.drag-over {
-  background: #EEF1F7;
-  outline: 2px dashed var(--accent-primary);
-  outline-offset: -3px;
-}
-
-/* Schedule blocks */
-.schedule-block {
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  line-height: 1.35;
-  cursor: grab;
-  transition: all var(--transition);
-  position: relative;
-  border-left: 3px solid;
-  user-select: none;
-}
-.schedule-block:active { cursor: grabbing; }
-.schedule-block:hover { transform: scale(1.02); z-index: 5; }
-.schedule-block.ai-generated {
-  background: #EEF1F7;
-  border-left-color: var(--accent-primary);
+.export-dropdown-menu a:hover {
+  background: #F8FAFD;
   color: var(--accent-primary);
 }
-.schedule-block.manual-override {
-  background: var(--warning-bg);
-  border-left-color: var(--warning);
-  color: #7A5A1A;
-}
-.schedule-block.conflict {
-  background: var(--danger-bg);
-  border-left-color: var(--danger);
-  color: var(--danger);
-  animation: conflict-pulse 2s ease-in-out infinite;
-}
-.schedule-block .block-subject { font-weight: 700; font-size: 11.5px; }
-.schedule-block .block-meta { font-size: 10px; opacity: 0.8; margin-top: 2px; }
-.schedule-block.dragging { opacity: 0.4; transform: rotate(2deg); }
 
-@keyframes conflict-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0); }
-  50% { box-shadow: 0 0 0 4px rgba(192, 57, 43, 0.12); }
+/* ─── Section Timetable Sheet Card ─── */
+.timetable-sheet-card {
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: var(--shadow-float);
+  margin-bottom: 24px;
+}
+
+/* ─── Sheet Header ─── */
+.timetable-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 2.5px solid #1C3664;
+}
+.sheet-header-left {
+  display: flex;
+  flex-direction: column;
+}
+.section-badge-program {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.section-title-large {
+  font-size: 28px;
+  font-weight: 900;
+  color: #1C3664;
+  letter-spacing: -0.5px;
+  margin-top: 2px;
+}
+.sheet-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sheet-stat-pill {
+  background: #F8FAFD;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px 14px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 95px;
+}
+.sheet-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sheet-stat-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: #1C3664;
+}
+.sheet-stat-pill.adviser-pill {
+  min-width: 140px;
+  align-items: flex-start;
+}
+
+/* ─── Spreadsheet Table Container ─── */
+.timetable-table-container {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+/* ─── Spreadsheet Table (Thin Black Borders & Tight Rows) ─── */
+.section-spreadsheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1.5px solid #000000;
+  background: #FFFFFF;
+  table-layout: fixed;
+  font-family: inherit;
+}
+
+.section-spreadsheet-table thead th {
+  background: #1C3664;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 8px 4px;
+  text-align: center;
+  border: 1px solid #000000;
+  box-sizing: border-box;
+}
+
+.section-spreadsheet-table th.time-col-header {
+  width: 82px;
+  background: #0F1E38;
+}
+.section-spreadsheet-table th.day-col-header {
+  width: calc((100% - 82px) / 6);
+}
+
+.section-spreadsheet-table tbody tr {
+  height: 28px;
+}
+
+.section-spreadsheet-table td.time-col-cell {
+  background: #F3F4F6;
+  color: #111827;
+  font-weight: 700;
+  font-size: 11px;
+  text-align: center;
+  vertical-align: middle;
+  border: 1px solid #000000;
+  width: 82px;
+  padding: 2px 4px;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.section-spreadsheet-table td.empty-cell {
+  background: #FFFFFF;
+  border: 1px solid #000000;
+  padding: 0;
+  height: 28px;
+  box-sizing: border-box;
+}
+
+/* ─── Class Block Cell (Merged Cell with Rowspan) ─── */
+.section-spreadsheet-table td.class-block-cell {
+  border: 1px solid #000000;
+  padding: 4px 6px !important;
+  vertical-align: top;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  user-select: none;
+  box-sizing: border-box;
+  position: relative;
+  overflow: visible;
+}
+
+.section-spreadsheet-table td.class-block-cell:hover {
+  filter: brightness(0.96);
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* ─── Block Themes by Type ─── */
+.section-spreadsheet-table td.class-block-cell.type-lecture {
+  background-color: #EBF3FC !important;
+  color: #1E3A8A;
+  border-left: 4.5px solid #2563EB !important;
+}
+
+.section-spreadsheet-table td.class-block-cell.type-lab {
+  background-color: #ECFDF5 !important;
+  color: #065F46;
+  border-left: 4.5px solid #059669 !important;
+}
+
+.section-spreadsheet-table td.class-block-cell.type-special,
+.section-spreadsheet-table td.class-block-cell.type-pe {
+  background-color: #FEF3C7 !important;
+  color: #92400E;
+  border-left: 4.5px solid #D97706 !important;
+}
+
+/* ─── Conflict Highlight (Red) ─── */
+.section-spreadsheet-table td.class-block-cell.has-conflict {
+  background-color: #FEE2E2 !important;
+  color: #991B1B !important;
+  border: 2px solid #DC2626 !important;
+  border-left: 5px solid #DC2626 !important;
+  animation: conflict-border-pulse 2s infinite ease-in-out;
+}
+
+@keyframes conflict-border-pulse {
+  0%, 100% { outline: 2px solid transparent; }
+  50% { outline: 2px solid #EF4444; }
+}
+
+/* ─── Class Content Layout ─── */
+.class-cell-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  justify-content: flex-start;
+}
+.class-sec-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  opacity: 0.75;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.class-subj-title {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  word-break: break-word;
+}
+.class-meta-line {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.9;
+  word-break: break-word;
+}
+.class-units-line {
+  font-size: 9.5px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+.class-conflict-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #DC2626;
+  color: #FFFFFF;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  margin-top: 3px;
+  width: fit-content;
+}
+
+/* ─── Footer Rows ─── */
+.section-spreadsheet-table tfoot th.time-col-footer {
+  background: #E5E7EB;
+  color: #111827;
+  font-weight: 800;
+  font-size: 11px;
+  text-align: center;
+  border: 1px solid #000000;
+  padding: 6px 4px;
+}
+.section-spreadsheet-table tfoot tr.footer-hours-row td {
+  background: #F9FAFB;
+  color: #111827;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid #000000;
+  padding: 6px 4px;
+}
+.section-spreadsheet-table tfoot tr.footer-weekly-row td.weekly-total-cell {
+  background: #1C3664;
+  color: #FFFFFF;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border: 1px solid #000000;
+}
+.section-spreadsheet-table tfoot tr.footer-weekly-row strong {
+  color: #FFD400;
+  font-size: 13px;
+  margin-left: 6px;
+}
+
+/* ─── Legend Bar ─── */
+.timetable-legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.timetable-legend-bar .legend-label {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.timetable-legend-bar .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+.legend-swatch.lecture {
+  background: #EBF3FC;
+  border-left: 3.5px solid #2563EB;
+}
+.legend-swatch.lab {
+  background: #ECFDF5;
+  border-left: 3.5px solid #059669;
+}
+.legend-swatch.pe {
+  background: #FEF3C7;
+  border-left: 3.5px solid #D97706;
+}
+.legend-swatch.conflict {
+  background: #FEE2E2;
+  border: 1.5px solid #DC2626;
+}
+
+/* ─── Print Stylesheet (Strict Landscape, Crisp Borders & Colors) ─── */
+@media print {
+  @page {
+    size: landscape;
+    margin: 6mm 8mm;
+  }
+  *, *::before, *::after {
+    box-sizing: border-box !important;
+  }
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .sidebar,
+  .topbar,
+  .grid-controls,
+  .export-dropdown-menu,
+  .modal-overlay,
+  #userDropdownMenu {
+    display: none !important;
+  }
+  .app-shell,
+  .main,
+  .content,
+  .module-page {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    display: block !important;
+  }
+  .card.timetable-sheet-card {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .section-spreadsheet-table {
+    border: 1.5px solid #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .section-spreadsheet-table th,
+  .section-spreadsheet-table td {
+    border: 1px solid #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .class-block-cell {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .class-block-cell.type-lecture {
+    background-color: #EBF3FC !important;
+    border-left: 4.5px solid #2563EB !important;
+  }
+  .class-block-cell.type-lab {
+    background-color: #ECFDF5 !important;
+    border-left: 4.5px solid #059669 !important;
+  }
+  .class-block-cell.type-special,
+  .class-block-cell.type-pe {
+    background-color: #FEF3C7 !important;
+    border-left: 4.5px solid #D97706 !important;
+  }
+  .class-block-cell.has-conflict {
+    background-color: #FEE2E2 !important;
+    border: 2px solid #DC2626 !important;
+  }
 }
