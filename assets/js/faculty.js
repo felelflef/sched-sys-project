@@ -484,13 +484,20 @@ window.confirmDeleteFacultyProfile = function() {
   const facName = fac ? fac.name : null;
   FACULTY = FACULTY.filter(f => !f.email || f.email.toLowerCase() !== email.toLowerCase());
   if (facName) {
-    Object.keys(scheduleData).forEach(roomCode => {
-      Object.keys(scheduleData[roomCode]).forEach(slotIdx => {
-        if (scheduleData[roomCode][slotIdx]?.faculty === facName) {
-          delete scheduleData[roomCode][slotIdx];
-        }
+    if (typeof scheduleData !== 'undefined' && scheduleData) {
+      Object.keys(scheduleData).forEach(roomCode => {
+        Object.keys(scheduleData[roomCode]).forEach(slotIdx => {
+          if (scheduleData[roomCode][slotIdx]?.faculty === facName) {
+            delete scheduleData[roomCode][slotIdx];
+          }
+        });
       });
-    });
+    }
+    if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
+      MASTER_SCHEDULE_DATA.forEach(c => {
+        if (c.instructor === facName) c.instructor = 'TBA';
+      });
+    }
   }
   closeDeleteFacultyModal();
   renderFacultyCards();

@@ -12,29 +12,35 @@ const VALID_USERS = {
 let CURRENT_USER = null;
 
 let ROOMS = [
-  // Floor 1 (4 Computer Labs, 3 Lecture Rooms = 7 total rooms)
-  { code: 'CL-101', floor: '1F', type: 'CompLab', cap: 35, util: 92 },
-  { code: 'CL-102', floor: '1F', type: 'CompLab', cap: 35, util: 88 },
-  { code: 'CL-103', floor: '1F', type: 'CompLab', cap: 40, util: 95 },
-  { code: 'CL-104', floor: '1F', type: 'CompLab', cap: 30, util: 84 },
-  { code: 'LR-101', floor: '1F', type: 'Lecture', cap: 45, util: 82 },
-  { code: 'LR-102', floor: '1F', type: 'Lecture', cap: 45, util: 76 },
-  { code: 'LR-103', floor: '1F', type: 'Lecture', cap: 40, util: 70 },
+  // Floor 1 (4 Computer Labs, 3 Lecture Rooms, 1 Culinary Kitchen Lab)
+  { code: 'CL-101', floor: '1F', type: 'CompLab', cap: 35, util: 92, name: 'Computer Laboratory 1' },
+  { code: 'CL-102', floor: '1F', type: 'CompLab', cap: 35, util: 88, name: 'Computer Laboratory 2' },
+  { code: 'CL-103', floor: '1F', type: 'CompLab', cap: 40, util: 95, name: 'Computer Laboratory 3' },
+  { code: 'CL-104', floor: '1F', type: 'CompLab', cap: 30, util: 84, name: 'Computer Laboratory 4' },
+  { code: 'LR-101', floor: '1F', type: 'Lecture', cap: 45, util: 82, name: 'Lecture Room 101' },
+  { code: 'LR-102', floor: '1F', type: 'Lecture', cap: 45, util: 76, name: 'Lecture Room 102' },
+  { code: 'LR-103', floor: '1F', type: 'Lecture', cap: 40, util: 70, name: 'Lecture Room 103' },
+  { code: 'Kitchen Lab', floor: '1F', type: 'Special', cap: 25, util: 70, name: 'Culinary Arts Kitchen Lab' },
+
   // Floor 2 (6 Lecture Rooms)
-  { code: 'LR-201', floor: '2F', type: 'Lecture', cap: 45, util: 88 },
-  { code: 'LR-202', floor: '2F', type: 'Lecture', cap: 45, util: 82 },
-  { code: 'LR-203', floor: '2F', type: 'Lecture', cap: 40, util: 76 },
-  { code: 'LR-204', floor: '2F', type: 'Lecture', cap: 40, util: 91 },
-  { code: 'LR-205', floor: '2F', type: 'Lecture', cap: 50, util: 84 },
-  { code: 'LR-206', floor: '2F', type: 'Lecture', cap: 45, util: 68 },
-  // Floor 3 (6 Lecture Rooms)
-  { code: 'LR-301', floor: '3F', type: 'Lecture', cap: 50, util: 70 },
-  { code: 'LR-302', floor: '3F', type: 'Lecture', cap: 50, util: 65 },
-  { code: 'LR-303', floor: '3F', type: 'Lecture', cap: 45, util: 78 },
-  { code: 'LR-304', floor: '3F', type: 'Lecture', cap: 45, util: 72 },
-  { code: 'LR-305', floor: '3F', type: 'Lecture', cap: 40, util: 68 },
-  { code: 'LR-306', floor: '3F', type: 'Lecture', cap: 45, util: 62 },
+  { code: 'LR-201', floor: '2F', type: 'Lecture', cap: 45, util: 88, name: 'Lecture Room 201' },
+  { code: 'LR-202', floor: '2F', type: 'Lecture', cap: 45, util: 82, name: 'Lecture Room 202' },
+  { code: 'LR-203', floor: '2F', type: 'Lecture', cap: 40, util: 76, name: 'Lecture Room 203' },
+  { code: 'LR-204', floor: '2F', type: 'Lecture', cap: 40, util: 91, name: 'Lecture Room 204' },
+  { code: 'LR-205', floor: '2F', type: 'Lecture', cap: 50, util: 84, name: 'Lecture Room 205' },
+  { code: 'LR-206', floor: '2F', type: 'Lecture', cap: 45, util: 68, name: 'Lecture Room 206' },
+
+  // Floor 3 (6 Lecture Rooms, 1 Tourism Lab)
+  { code: 'LR-301', floor: '3F', type: 'Lecture', cap: 50, util: 70, name: 'Lecture Room 301' },
+  { code: 'LR-302', floor: '3F', type: 'Lecture', cap: 50, util: 65, name: 'Lecture Room 302' },
+  { code: 'LR-303', floor: '3F', type: 'Lecture', cap: 45, util: 78, name: 'Lecture Room 303' },
+  { code: 'LR-304', floor: '3F', type: 'Lecture', cap: 45, util: 72, name: 'Lecture Room 304' },
+  { code: 'LR-305', floor: '3F', type: 'Lecture', cap: 40, util: 68, name: 'Lecture Room 305' },
+  { code: 'LR-306', floor: '3F', type: 'Lecture', cap: 45, util: 62, name: 'Lecture Room 306' },
+  { code: 'Tourism Lab', floor: '3F', type: 'Special', cap: 30, util: 68, name: 'Tourism & Hospitality Mock Center' }
 ];
+
+let scheduleData = {};
 
 let SUBJECTS = [
   { code: 'ITE 101', title: 'Introduction to Computing', dept: 'IT / CS', itOnly: true, units: 3 },
@@ -78,7 +84,7 @@ const TIME_SLOTS = ['7:00–8:30','8:30–10:00','10:00–11:30','11:30–1:00',
 const MODULE_TITLES = {
   schedule: { title: 'Interactive Schedule Management Dashboard', sub: '1st Semester AY 2026–2027 · 342 sections across 19 rooms' },
   minimap:  { title: 'AI Integrated Campus Map & Utilization', sub: 'Real-time room availability across 3 floors' },
-  rooms:    { title: 'Room Information', sub: '15 lecture rooms · 4 computer labs · 835 total capacity' },
+  rooms:    { title: 'Room Information', sub: '15 lecture rooms · 4 computer labs · 2 specialized labs' },
   faculty:  { title: 'Faculty & Resource Profiling', sub: 'Time availability, teaching loads & MAQ certifications' },
   subjects: { title: 'Subject Catalog & Specialization', sub: 'Course codes, department specialization & teaching eligibility' },
   ai:       { title: 'AI Space & Schedule Optimization', sub: 'Powered by Google Gemini API · Automated room utilization and timetable analytics' },

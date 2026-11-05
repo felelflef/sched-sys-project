@@ -15,17 +15,29 @@ function renderRoomTable() {
 
   ROOMS.forEach(room => {
     const tr = document.createElement('tr');
-    const typeBadge = room.type === 'CompLab' ? 'badge-lab' : 'badge-lecture';
+    let typeBadge = 'badge-lecture';
+    let typeLabel = '📚 Lecture Room';
+
+    if (room.type === 'CompLab' || room.code.startsWith('CL-')) {
+      typeBadge = 'badge-lab';
+      typeLabel = '💻 Computer Lab';
+    } else if (room.type === 'Special' || room.code.includes('Lab')) {
+      typeBadge = 'badge-warning';
+      if (room.code === 'Kitchen Lab') typeLabel = '🍳 Culinary Lab';
+      else if (room.code === 'Tourism Lab') typeLabel = '✈️ Tourism Lab';
+      else typeLabel = '🏛️ Special Facility';
+    }
 
     const actionButtons = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditRoomModal('${room.code}')">Edit</button>
+      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="viewRoomOnCampusMap('${room.code}')">View on Map</button>
+         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditRoomModal('${room.code}')">Edit</button>
          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteRoom('${room.code}')">Remove</button>`
-      : `<span style="font-size:11px; color:var(--text-secondary);">&mdash;</span>`;
+      : `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px;" onclick="viewRoomOnCampusMap('${room.code}')">View on Map</button>`;
 
     tr.innerHTML = `
       <td style="font-weight:700;">${room.code}</td>
       <td>${room.floor}</td>
-      <td><span class="badge ${typeBadge}">${room.type === 'CompLab' ? '💻 Computer Lab' : '📚 Lecture Room'}</span></td>
+      <td><span class="badge ${typeBadge}">${typeLabel}</span></td>
       <td>${room.cap} seats</td>
       <td style="text-align:right;">
         ${actionButtons}
@@ -143,8 +155,13 @@ window.confirmDeleteRoom = function() {
   }
   const code = document.getElementById('deleteRoomTargetCode').value;
   ROOMS = ROOMS.filter(r => r.code !== code);
-  if (scheduleData[code]) {
+  if (typeof scheduleData !== 'undefined' && scheduleData && scheduleData[code]) {
     delete scheduleData[code];
+  }
+  if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
+    MASTER_SCHEDULE_DATA.forEach(c => {
+      if (c.room === code) c.room = 'TBA';
+    });
   }
   closeDeleteRoomModal();
   renderRoomTable();

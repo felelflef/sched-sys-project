@@ -1,914 +1,859 @@
-/* ═══════════════════════════════════════════════════
-   MODULE 1 — MASTER SCHEDULE GRID + DRAG & DROP
-   ═══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════
+   MODULE 1 — SECTION MASTER TIMETABLE CONTROLLER (SPREADSHEET-LIKE ARCHITECTURE)
+   ══════════════════════════════════════════════════════════════════════════ */
 
-function generateScheduleData() {
-  const data = {};
-  const programs = ['BSIT', 'BSCS', 'BSCpE', 'BSHM', 'BSTM', 'BSBA'];
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  // Initialize empty rooms
-  ROOMS.forEach(room => {
-    data[room.code] = {};
-  });
+// Section catalog and metadata
+let SECTION_METADATA = {
+  'IT701M':  { code: 'IT701M',  program: 'BSIT',  year: '1', name: 'BSIT 1A', adviser: 'Prof. Academic Head',   students: 38 },
+  'IT702M':  { code: 'IT702M',  program: 'BSIT',  year: '1', name: 'BSIT 1B', adviser: 'Prof. Faculty Member',  students: 36 },
+  'IT801M':  { code: 'IT801M',  program: 'BSIT',  year: '2', name: 'BSIT 2A', adviser: 'Prof. Program Head',    students: 35 },
+  'IT802M':  { code: 'IT802M',  program: 'BSIT',  year: '2', name: 'BSIT 2B', adviser: 'Prof. Faculty Member',  students: 34 },
+  'CS701M':  { code: 'CS701M',  program: 'BSCS',  year: '1', name: 'BSCS 1A', adviser: 'Prof. Program Head',    students: 32 },
+  'CPE701M': { code: 'CPE701M', program: 'BSCpE', year: '1', name: 'BSCpE 1A',adviser: 'Engr. Faculty Member',  students: 30 },
+  'HM701M':  { code: 'HM701M',  program: 'BSHM',  year: '1', name: 'BSHM 1A', adviser: 'Chef Faculty Member',   students: 40 },
+  'TM701M':  { code: 'TM701M',  program: 'BSTM',  year: '1', name: 'BSTM 1A', adviser: 'Prof. Academic Head',   students: 34 },
+  'BA701M':  { code: 'BA701M',  program: 'BSBA',  year: '1', name: 'BSBA 1A', adviser: 'Prof. Academic Head',   students: 35 }
+};
 
-  // Track assigned faculty and sections per time slot to prevent duplicates/overlaps
-  const bookedFacultyPerSlot = Array.from({ length: TIME_SLOTS.length }, () => new Set());
-  const bookedSectionsPerSlot = Array.from({ length: TIME_SLOTS.length }, () => new Set());
+// Global schedule repository
+let MASTER_SCHEDULE_DATA = [];
+let currentSelectedSection = 'IT701M';
 
-  // Pre-reserve demo conflict slot if LR-201 exists so Academic Head is not booked elsewhere at slot 2
-  bookedFacultyPerSlot[2].add('Academic Head');
-
-  // Distribute classes per time slot across rooms with strict 1:1 faculty availability
-  TIME_SLOTS.forEach((slot, si) => {
-    // Shuffle rooms for realistic, varied allocation
-    const shuffledRooms = [...ROOMS].sort(() => Math.random() - 0.5);
-
-    shuffledRooms.forEach(room => {
-      // Reserve slot 2 in LR-201 for the demo conflict
-      if (room.code === 'LR-201' && si === 2) return;
-
-      // ~65% target utilization
-      if (Math.random() < 0.65) {
-        // Filter strictly for faculty not yet booked anywhere at this exact time slot
-        const freeFaculty = FACULTY.filter(f => !bookedFacultyPerSlot[si].has(f.name));
-        if (freeFaculty.length === 0) return; // All faculty busy at this time frame
-
-        // Prefer technical faculty for computer labs
-        let candidateFaculty = freeFaculty;
-        if (room.type === 'CompLab') {
-          const techFaculty = freeFaculty.filter(f => f.dept === 'IT / CS' || f.dept === 'Engineering');
-          if (techFaculty.length > 0) candidateFaculty = techFaculty;
-        }
-
-        const fac = candidateFaculty[Math.floor(Math.random() * candidateFaculty.length)];
-        const subj = fac.quals && fac.quals.length > 0 
-          ? fac.quals[Math.floor(Math.random() * fac.quals.length)]
-          : (SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)]?.code || 'ITE 101');
-
-        // Derive appropriate academic program
-        let prog = 'BSIT';
-        if (fac.dept === 'Engineering') prog = 'BSCpE';
-        else if (fac.dept === 'Hospitality') prog = Math.random() < 0.5 ? 'BSHM' : 'BSTM';
-        else if (fac.dept === 'Business Admin') prog = 'BSBA';
-        else if (fac.dept === 'General Education') prog = programs[Math.floor(Math.random() * programs.length)];
-        else prog = Math.random() < 0.5 ? 'BSIT' : 'BSCS';
-
-        const yr = Math.ceil(Math.random() * 4);
-        const secLetter = String.fromCharCode(65 + Math.floor(Math.random() * 3));
-        let section = `${prog} ${yr}${secLetter}`;
-
-        let attempt = 0;
-        while (bookedSectionsPerSlot[si].has(section) && attempt < 5) {
-          const altLetter = String.fromCharCode(65 + Math.floor(Math.random() * 4));
-          section = `${prog} ${yr}${altLetter}`;
-          attempt++;
-        }
-
-        const types = ['ai-generated', 'ai-generated', 'ai-generated', 'manual-override'];
-        const type = types[Math.floor(Math.random() * types.length)];
-
-        data[room.code][si] = {
-          subj,
-          faculty: fac.name,
-          section,
-          program: prog,
-          year: String(yr),
-          type,
-          id: `${room.code}-${si}`
-        };
-
-        // Lock this faculty member and section for this time slot
-        bookedFacultyPerSlot[si].add(fac.name);
-        bookedSectionsPerSlot[si].add(section);
-      }
-    });
-  });
-
-  // Force demo conflict in LR-201 at slot 2
-  if (data['LR-201']) {
-    data['LR-201'][2] = {
-      subj: 'ITE 101',
-      faculty: 'Academic Head',
-      section: 'BSIT 1A',
-      program: 'BSIT',
-      year: '1',
-      type: 'conflict',
-      id: 'LR-201-2'
-    };
-  }
-
-  return data;
+/* ─── Helpers: Time Parsing & Formatting ─── */
+function timeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(':');
+  return parseInt(parts[0], 10) * 60 + parseInt(parts[1] || '0', 10);
 }
 
-let scheduleData = generateScheduleData();
-let draggedBlock = null;
-let dragSourceCell = null;
+function minutesToTime(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
 
+function formatTime12(timeStr) {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/* ─── Baseline Schedule Generator ─── */
+function generateBaselineSchedules() {
+  const list = [
+    // ─── IT701M (1st Year BSIT) ───
+    {
+      id: 'SCH-101',
+      section: 'IT701M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'ITE 101',
+      subjectTitle: 'Introduction to Computing',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-101',
+      instructor: 'Academic Head',
+      day: 'Mon',
+      startTime: '08:00',
+      endTime: '10:00'
+    },
+    {
+      id: 'SCH-102',
+      section: 'IT701M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'ITE 101 Lab',
+      subjectTitle: 'Intro to Computing Lab',
+      type: 'lab',
+      units: 1,
+      room: 'CL-101',
+      instructor: 'Academic Head',
+      day: 'Mon',
+      startTime: '10:00',
+      endTime: '12:00'
+    },
+    {
+      id: 'SCH-103',
+      section: 'IT701M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'GE 201',
+      subjectTitle: 'Purposive Communication',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-201',
+      instructor: 'Faculty Member',
+      day: 'Tue',
+      startTime: '09:00',
+      endTime: '11:30'
+    },
+    {
+      id: 'SCH-104',
+      section: 'IT701M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'CC 103',
+      subjectTitle: 'Computer Programming 1',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-102',
+      instructor: 'Academic Head',
+      day: 'Wed',
+      startTime: '08:00',
+      endTime: '10:00'
+    },
+    {
+      id: 'SCH-105',
+      section: 'IT701M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'CC 103 Lab',
+      subjectTitle: 'Computer Programming 1 Lab',
+      type: 'lab',
+      units: 1,
+      room: 'CL-102',
+      instructor: 'Academic Head',
+      day: 'Wed',
+      startTime: '10:00',
+      endTime: '12:00'
+    },
+    {
+      id: 'SCH-106',
+      section: 'IT701M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'PE 102',
+      subjectTitle: 'Physical Fitness',
+      type: 'pe',
+      units: 2,
+      room: 'LR-103',
+      instructor: 'Faculty Member',
+      day: 'Thu',
+      startTime: '13:00',
+      endTime: '15:00'
+    },
+    {
+      id: 'SCH-107',
+      section: 'IT701M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'GE 107',
+      subjectTitle: 'Ethics',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-202',
+      instructor: 'Faculty Member',
+      day: 'Fri',
+      startTime: '08:30',
+      endTime: '11:00'
+    },
+    {
+      id: 'SCH-108',
+      section: 'IT701M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'NSTP 1',
+      subjectTitle: 'National Service Training Program',
+      type: 'special',
+      units: 3,
+      room: 'LR-103',
+      instructor: 'Faculty Member',
+      day: 'Sat',
+      startTime: '08:00',
+      endTime: '11:00'
+    },
+
+    // ─── IT702M (1st Year BSIT 1B) ───
+    {
+      id: 'SCH-201',
+      section: 'IT702M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'CC 103',
+      subjectTitle: 'Computer Programming 1',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-101',
+      instructor: 'Program Head',
+      day: 'Tue',
+      startTime: '08:00',
+      endTime: '10:00'
+    },
+    {
+      id: 'SCH-202',
+      section: 'IT702M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'CC 103 Lab',
+      subjectTitle: 'Computer Programming 1 Lab',
+      type: 'lab',
+      units: 1,
+      room: 'CL-103',
+      instructor: 'Program Head',
+      day: 'Tue',
+      startTime: '10:00',
+      endTime: '12:00'
+    },
+    {
+      id: 'SCH-203',
+      section: 'IT702M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'ITE 101',
+      subjectTitle: 'Introduction to Computing',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-102',
+      instructor: 'Faculty Member',
+      day: 'Thu',
+      startTime: '08:30',
+      endTime: '10:30'
+    },
+    {
+      id: 'SCH-204',
+      section: 'IT702M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'ITE 101 Lab',
+      subjectTitle: 'Intro to Computing Lab',
+      type: 'lab',
+      units: 1,
+      room: 'CL-104',
+      instructor: 'Faculty Member',
+      day: 'Thu',
+      startTime: '10:30',
+      endTime: '12:30'
+    },
+    {
+      id: 'SCH-205',
+      section: 'IT702M',
+      program: 'BSIT',
+      year: '1',
+      subjectCode: 'GE 201',
+      subjectTitle: 'Purposive Communication',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-203',
+      instructor: 'Faculty Member',
+      day: 'Fri',
+      startTime: '13:00',
+      endTime: '15:30'
+    },
+
+    // ─── IT801M (2nd Year BSIT 2A) — Includes a deliberate conflict to demonstrate red warning! ───
+    {
+      id: 'SCH-301',
+      section: 'IT801M',
+      program: 'BSIT',
+      year: '2',
+      subjectCode: 'ITE 301',
+      subjectTitle: 'Data Structures & Algorithms',
+      type: 'lab',
+      units: 3,
+      room: 'CL-101', // Concurrently booked with IT701M Mon 08:00–10:00!
+      instructor: 'Program Head',
+      day: 'Mon',
+      startTime: '08:00',
+      endTime: '10:00'
+    },
+    {
+      id: 'SCH-302',
+      section: 'IT801M',
+      program: 'BSIT',
+      year: '2',
+      subjectCode: 'IM 101',
+      subjectTitle: 'Database Management Systems',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-204',
+      instructor: 'Program Head',
+      day: 'Tue',
+      startTime: '13:00',
+      endTime: '15:00'
+    },
+    {
+      id: 'SCH-303',
+      section: 'IT801M',
+      program: 'BSIT',
+      year: '2',
+      subjectCode: 'IM 101 Lab',
+      subjectTitle: 'Database Systems Lab',
+      type: 'lab',
+      units: 1,
+      room: 'CL-102',
+      instructor: 'Program Head',
+      day: 'Wed',
+      startTime: '13:00',
+      endTime: '15:30'
+    },
+    {
+      id: 'SCH-304',
+      section: 'IT801M',
+      program: 'BSIT',
+      year: '2',
+      subjectCode: 'CS 201',
+      subjectTitle: 'Discrete Mathematics',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-205',
+      instructor: 'Faculty Member',
+      day: 'Thu',
+      startTime: '09:00',
+      endTime: '11:30'
+    },
+
+    // ─── CS701M (1st Year BSCS) ───
+    {
+      id: 'SCH-401',
+      section: 'CS701M',
+      program: 'BSCS',
+      year: '1',
+      subjectCode: 'CS 201',
+      subjectTitle: 'Discrete Mathematics',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-201',
+      instructor: 'Program Head',
+      day: 'Mon',
+      startTime: '13:00',
+      endTime: '15:30'
+    },
+    {
+      id: 'SCH-402',
+      section: 'CS701M',
+      program: 'BSCS',
+      year: '1',
+      subjectCode: 'CC 103',
+      subjectTitle: 'Computer Programming 1',
+      type: 'lab',
+      units: 3,
+      room: 'CL-103',
+      instructor: 'Academic Head',
+      day: 'Wed',
+      startTime: '08:30',
+      endTime: '11:30'
+    },
+
+    // ─── HM701M (1st Year BSHM) ───
+    {
+      id: 'SCH-501',
+      section: 'HM701M',
+      program: 'BSHM',
+      year: '1',
+      subjectCode: 'HM 201',
+      subjectTitle: 'Food & Beverage Service',
+      type: 'lab',
+      units: 3,
+      room: 'Kitchen Lab',
+      instructor: 'Faculty Member',
+      day: 'Wed',
+      startTime: '13:00',
+      endTime: '16:00'
+    },
+    {
+      id: 'SCH-502',
+      section: 'HM701M',
+      program: 'BSHM',
+      year: '1',
+      subjectCode: 'GE 107',
+      subjectTitle: 'Ethics',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-101',
+      instructor: 'Faculty Member',
+      day: 'Thu',
+      startTime: '09:00',
+      endTime: '11:30'
+    },
+
+    // ─── TM701M (1st Year BSTM) ───
+    {
+      id: 'SCH-601',
+      section: 'TM701M',
+      program: 'BSTM',
+      year: '1',
+      subjectCode: 'TM 301',
+      subjectTitle: 'Tourism Planning & Development',
+      type: 'lecture',
+      units: 3,
+      room: 'Tourism Lab',
+      instructor: 'Faculty Member',
+      day: 'Tue',
+      startTime: '09:00',
+      endTime: '12:00'
+    },
+
+    // ─── BA701M (1st Year BSBA) ───
+    {
+      id: 'SCH-701',
+      section: 'BA701M',
+      program: 'BSBA',
+      year: '1',
+      subjectCode: 'BA 101',
+      subjectTitle: 'Principles of Management',
+      type: 'lecture',
+      units: 3,
+      room: 'LR-202',
+      instructor: 'Academic Head',
+      day: 'Mon',
+      startTime: '13:00',
+      endTime: '15:30'
+    }
+  ];
+
+  return list;
+}
+
+/* ─── Conflict Detection Engine ─── */
+function timesOverlap(classA, classB) {
+  const startA = timeToMinutes(classA.startTime);
+  const endA = timeToMinutes(classA.endTime);
+  const startB = timeToMinutes(classB.startTime);
+  const endB = timeToMinutes(classB.endTime);
+  return startA < endB && endA > startB;
+}
+
+function detectConflicts(classItem) {
+  const conflicts = [];
+
+  for (const other of MASTER_SCHEDULE_DATA) {
+    if (other.id === classItem.id) continue;
+    if (other.day !== classItem.day) continue;
+    if (!timesOverlap(classItem, other)) continue;
+
+    // 1. Room Double-Booking Conflict
+    if (other.room && classItem.room && other.room.toLowerCase() === classItem.room.toLowerCase()) {
+      conflicts.push(`Room Double-Booking: ${classItem.room} is simultaneously booked by section ${other.section} (${other.subjectCode}).`);
+    }
+
+    // 2. Instructor Overlap Conflict
+    if (other.instructor && classItem.instructor && other.instructor.toLowerCase() === classItem.instructor.toLowerCase()) {
+      conflicts.push(`Instructor Overlap: ${classItem.instructor} is concurrently assigned to section ${other.section} in ${other.room}.`);
+    }
+
+    // 3. Section Overlapping Class Conflict
+    if (other.section && classItem.section && other.section.toLowerCase() === classItem.section.toLowerCase()) {
+      conflicts.push(`Section Overlap: This section already has class ${other.subjectCode} scheduled at this time.`);
+    }
+  }
+
+  return {
+    hasConflict: conflicts.length > 0,
+    reasons: conflicts
+  };
+}
+
+/* ─── Populate Section Dropdown based on Program & Year Filters ─── */
+function updateSectionDropdown() {
+  const progFilter = document.getElementById('programFilter')?.value || 'all';
+  const yrFilter = document.getElementById('yearFilter')?.value || 'all';
+  const sectionSelect = document.getElementById('sectionSelect');
+  if (!sectionSelect) return;
+
+  const prevValue = sectionSelect.value;
+  sectionSelect.innerHTML = '';
+
+  const matchingSections = Object.values(SECTION_METADATA).filter(sec => {
+    const matchProg = progFilter === 'all' || sec.program === progFilter;
+    const matchYr = yrFilter === 'all' || sec.year === yrFilter;
+    return matchProg && matchYr;
+  });
+
+  if (matchingSections.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No matching sections';
+    sectionSelect.appendChild(opt);
+    currentSelectedSection = '';
+    renderGrid();
+    return;
+  }
+
+  matchingSections.forEach(sec => {
+    const opt = document.createElement('option');
+    opt.value = sec.code;
+    opt.textContent = `${sec.code} (${sec.name || sec.program})`;
+    sectionSelect.appendChild(opt);
+  });
+
+  // Keep prior selection if still valid, otherwise default to first
+  if (matchingSections.some(s => s.code === prevValue)) {
+    sectionSelect.value = prevValue;
+    currentSelectedSection = prevValue;
+  } else {
+    sectionSelect.value = matchingSections[0].code;
+    currentSelectedSection = matchingSections[0].code;
+  }
+
+  renderGrid();
+}
+
+/* ─── Main Render Function: Section Spreadsheet Timetable ─── */
 function renderGrid() {
-  const tbody = document.getElementById('gridBody');
+  const tbody = document.getElementById('sectionGridBody');
   if (!tbody) return;
   tbody.innerHTML = '';
 
   const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
 
-  // Restrict "Generate Baseline" button to admins
+  // Toggle Generate Baseline button access
   const btnGen = document.getElementById('btnGenerate');
   if (btnGen) {
     btnGen.style.display = isAdmin ? 'inline-flex' : 'none';
   }
 
-  // Show/remove Read-Only status badge in grid controls
-  let roBadge = document.getElementById('schedReadOnlyBadge');
-  const controlsContainer = document.querySelector('.grid-controls');
-  if (!isAdmin) {
-    if (!roBadge && controlsContainer) {
-      roBadge = document.createElement('div');
-      roBadge.id = 'schedReadOnlyBadge';
-      roBadge.style.cssText = 'background:#F1F5F9; color:#475569; border:1px solid #CBD5E1; font-size:11.5px; padding:5px 11px; border-radius:6px; font-weight:600; display:inline-flex; align-items:center; gap:6px;';
-      roBadge.innerHTML = '<span>🔒</span> Read-Only (System Admin edits only)';
-      controlsContainer.insertBefore(roBadge, controlsContainer.children[2] || null);
-    }
-  } else if (roBadge) {
-    roBadge.remove();
+  // Active section verification
+  const sectionSelect = document.getElementById('sectionSelect');
+  if (sectionSelect && sectionSelect.value) {
+    currentSelectedSection = sectionSelect.value;
   }
 
-  const progFilter = document.getElementById('programFilter')?.value || 'all';
-  const yrFilter = document.getElementById('yearFilter')?.value || 'all';
+  const meta = SECTION_METADATA[currentSelectedSection] || {
+    code: currentSelectedSection || '—',
+    program: 'General',
+    year: '1',
+    name: currentSelectedSection || '—',
+    adviser: 'Academic Head',
+    students: 35
+  };
 
-  Object.entries(scheduleData).forEach(([room, slots]) => {
+  const sectionClasses = MASTER_SCHEDULE_DATA.filter(c => c.section === currentSelectedSection);
+
+  // 1. Update Header Metadata
+  const sheetTitle = document.getElementById('sheetSectionTitle');
+  if (sheetTitle) sheetTitle.textContent = meta.code;
+
+  const sheetProgram = document.getElementById('sheetProgramYear');
+  if (sheetProgram) sheetProgram.textContent = `${meta.program} · Year ${meta.year} (${meta.name})`;
+
+  const totalUnits = sectionClasses.reduce((sum, c) => sum + (Number(c.units) || 0), 0);
+  const sheetUnits = document.getElementById('sheetTotalUnits');
+  if (sheetUnits) sheetUnits.textContent = `${totalUnits} Units`;
+
+  const sheetStudents = document.getElementById('sheetStudentsCount');
+  if (sheetStudents) sheetStudents.textContent = `${meta.students} Students`;
+
+  const sheetAdviser = document.getElementById('sheetAdviser');
+  if (sheetAdviser) sheetAdviser.textContent = meta.adviser;
+
+  // 2. Auto-Trim Range: Determine earliest start & latest end times
+  let minMinutes = 8 * 60;   // Default 8:00 AM
+  let maxMinutes = 17 * 60;  // Default 5:00 PM
+
+  if (sectionClasses.length > 0) {
+    let earliest = 24 * 60;
+    let latest = 0;
+    sectionClasses.forEach(c => {
+      const s = timeToMinutes(c.startTime);
+      const e = timeToMinutes(c.endTime);
+      if (s < earliest) earliest = s;
+      if (e > latest) latest = e;
+    });
+
+    // Round earliest down to nearest 30 min, latest up to nearest 30 min
+    minMinutes = Math.floor(earliest / 30) * 30;
+    maxMinutes = Math.ceil(latest / 30) * 30;
+
+    // Provide at least 1 hr buffer or keep snug
+    if (minMinutes > 7 * 60) minMinutes = Math.max(7 * 60, minMinutes);
+    if (maxMinutes < 12 * 60) maxMinutes = 12 * 60;
+  }
+
+  // Generate 30-minute intervals
+  const timeSlots = [];
+  for (let m = minMinutes; m < maxMinutes; m += 30) {
+    timeSlots.push(minutesToTime(m));
+  }
+
+  // 3. Matrix to track rowspan occupancy: covered[day][slotIndex]
+  const covered = {};
+  DAYS.forEach(d => { covered[d] = new Array(timeSlots.length).fill(false); });
+
+  // Daily hours tracker for footer
+  const dailyMinutes = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0 };
+
+  // 4. Build Table Body Rows
+  timeSlots.forEach((slotTime, slotIdx) => {
     const tr = document.createElement('tr');
 
-    // Room label
-    const roomTd = document.createElement('td');
-    const roomInfo = ROOMS.find(r => r.code === room);
-    roomTd.innerHTML = `<div>${room}</div><div style="font-size:10px;color:var(--text-secondary);font-weight:400;">${roomInfo?.type === 'CompLab' ? 'Lab' : 'Lecture'} · ${roomInfo?.cap || 40} seats</div>`;
-    tr.appendChild(roomTd);
+    // Time Column
+    const timeTd = document.createElement('td');
+    timeTd.className = 'time-col-cell';
+    timeTd.textContent = formatTime12(slotTime);
+    tr.appendChild(timeTd);
 
-    // Time slots
-    TIME_SLOTS.forEach((_, si) => {
-      const td = document.createElement('td');
-      td.className = 'drop-zone';
-      td.dataset.room = room;
-      td.dataset.slot = si;
+    // Days Columns (MON-SAT)
+    DAYS.forEach(day => {
+      // If cell is already covered by a previous rowspan, skip rendering <td>
+      if (covered[day][slotIdx]) {
+        return;
+      }
 
-      if (slots[si]) {
-        const blockData = slots[si];
-        const matchProg = progFilter === 'all' || blockData.program === progFilter;
-        const matchYr = yrFilter === 'all' || blockData.year === yrFilter;
-        if (matchProg && matchYr) {
-          const block = createBlock(blockData);
-          td.appendChild(block);
+      // Check if a class starts in this time slot for this day
+      const classItem = sectionClasses.find(c => c.day === day && c.startTime === slotTime);
+
+      if (classItem) {
+        const durationMins = timeToMinutes(classItem.endTime) - timeToMinutes(classItem.startTime);
+        const rowspan = Math.max(1, Math.round(durationMins / 30));
+
+        // Mark covered slots
+        for (let r = 0; r < rowspan; r++) {
+          if (slotIdx + r < timeSlots.length) {
+            covered[day][slotIdx + r] = true;
+          }
         }
+
+        dailyMinutes[day] += durationMins;
+
+        const conflictInfo = detectConflicts(classItem);
+        const typeClass = `type-${classItem.type || 'lecture'}`;
+
+        const classTd = document.createElement('td');
+        classTd.rowSpan = rowspan;
+        classTd.className = `class-block-cell ${typeClass} ${conflictInfo.hasConflict ? 'has-conflict' : ''}`;
+        classTd.dataset.id = classItem.id;
+
+        // Hover tooltip with full details
+        let tooltip = `${classItem.section} · ${classItem.subjectCode} (${classItem.subjectTitle || ''})\n` +
+                      `Room: ${classItem.room} | Instructor: ${classItem.instructor}\n` +
+                      `Time: ${formatTime12(classItem.startTime)} – ${formatTime12(classItem.endTime)} (${classItem.units} Units)`;
+        classTd.title = tooltip;
+
+        classTd.innerHTML = `
+          <div class="class-cell-inner">
+            <div class="class-sec-badge">${escapeHtml(classItem.section)}</div>
+            <div class="class-subj-title">${escapeHtml(classItem.subjectCode)}</div>
+            <div class="class-meta-line">${escapeHtml(classItem.room)} · ${escapeHtml(classItem.instructor)}</div>
+            <div class="class-units-line">${escapeHtml(String(classItem.units))} Units</div>
+          </div>
+        `;
+
+        classTd.addEventListener('click', () => {
+          showClassDetails(classItem.id);
+        });
+
+        tr.appendChild(classTd);
+
+      } else {
+        // Empty cell
+        const emptyTd = document.createElement('td');
+        emptyTd.className = 'empty-cell';
+        tr.appendChild(emptyTd);
       }
-
-      // Drop zone events (only active if admin)
-      if (isAdmin) {
-        td.addEventListener('dragover', handleDragOver);
-        td.addEventListener('dragenter', handleDragEnter);
-        td.addEventListener('dragleave', handleDragLeave);
-        td.addEventListener('drop', handleDrop);
-      }
-
-      // Right-click context menu (Add / Remove / Change Professor or Read-only view)
-      td.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        openScheduleContextMenu(e, room, si);
-      });
-
-      tr.appendChild(td);
     });
 
     tbody.appendChild(tr);
   });
-}
 
-// Grid filters change listeners
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('programFilter')?.addEventListener('change', renderGrid);
-  document.getElementById('yearFilter')?.addEventListener('change', renderGrid);
-});
-
-function createBlock(data) {
-  const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
-  const block = document.createElement('div');
-  block.className = `schedule-block ${data.type}`;
-  block.draggable = isAdmin;
-  if (!isAdmin) {
-    block.style.cursor = 'default';
-  }
-  block.dataset.id = data.id;
-  block.title = isAdmin
-    ? 'Right-click to remove or change professor · Drag to move'
-    : `${data.subj} · ${data.faculty} (${data.section}) [Read-Only: System Admin edits only]`;
-  block.innerHTML = `
-    <div class="block-subject">${data.subj}</div>
-    <div class="block-meta">${data.faculty.split(' ').slice(-1)[0]} · ${data.section}</div>
-  `;
-
-  if (isAdmin) {
-    block.addEventListener('dragstart', handleDragStart);
-    block.addEventListener('dragend', handleDragEnd);
-  }
-
-  // Right-click context menu directly on block
-  block.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const parentTd = block.closest('.drop-zone');
-    if (parentTd) {
-      openScheduleContextMenu(e, parentTd.dataset.room, parseInt(parentTd.dataset.slot, 10));
-    }
+  // 5. Update Footer Row (# of Hrs per day + Weekly Total)
+  let weeklyTotalMins = 0;
+  DAYS.forEach(day => {
+    const hrsEl = document.getElementById(`hrs-${day}`);
+    const hrs = (dailyMinutes[day] / 60).toFixed(1);
+    if (hrsEl) hrsEl.textContent = `${hrs} hrs`;
+    weeklyTotalMins += dailyMinutes[day];
   });
 
-  return block;
-}
-
-function handleDragStart(e) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    e.preventDefault();
-    return false;
-  }
-  draggedBlock = e.target;
-  dragSourceCell = e.target.closest('.drop-zone');
-  e.target.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', e.target.dataset.id);
-
-  const aiStatus = document.getElementById('aiStatus');
-  if (aiStatus) {
-    aiStatus.className = 'ai-status processing';
-    aiStatus.innerHTML = '<span class="ai-dot"></span> Monitoring Swap…';
+  const weeklyEl = document.getElementById('weeklyTotalHours');
+  if (weeklyEl) {
+    const totalWeeklyHrs = (weeklyTotalMins / 60).toFixed(1);
+    weeklyEl.textContent = `${totalWeeklyHrs} hrs / week`;
   }
 }
 
-function handleDragEnd(e) {
-  e.target.classList.remove('dragging');
-  document.querySelectorAll('.drop-zone.drag-over').forEach(el => el.classList.remove('drag-over'));
+/* ─── Class Details Modal & Diagnostic ─── */
+function showClassDetails(classId) {
+  const item = MASTER_SCHEDULE_DATA.find(c => c.id === classId);
+  if (!item) return;
 
-  const aiStatus = document.getElementById('aiStatus');
-  if (aiStatus) {
-    aiStatus.className = 'ai-status active';
-    aiStatus.innerHTML = '<span class="ai-dot"></span> AI Engine Active';
-  }
-}
+  const modal = document.getElementById('classDetailModal');
+  const modalBody = document.getElementById('detailModalBody');
+  const modalTitle = document.getElementById('detailModalTitle');
+  if (!modal || !modalBody) return;
 
-function handleDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-}
+  const conflictInfo = detectConflicts(item);
 
-function handleDragEnter(e) {
-  e.preventDefault();
-  const cell = e.target.closest('.drop-zone');
-  if (cell) cell.classList.add('drag-over');
-}
-
-function handleDragLeave(e) {
-  const cell = e.target.closest('.drop-zone');
-  if (cell && !cell.contains(e.relatedTarget)) {
-    cell.classList.remove('drag-over');
-  }
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') return;
-  const targetCell = e.target.closest('.drop-zone');
-  if (!targetCell || !draggedBlock) return;
-
-  targetCell.classList.remove('drag-over');
-
-  const sourceRoom = dragSourceCell.dataset.room;
-  const sourceSlot = parseInt(dragSourceCell.dataset.slot);
-  const targetRoom = targetCell.dataset.room;
-  const targetSlot = parseInt(targetCell.dataset.slot);
-
-  // Check if target already has a block — trigger conflict alert
-  const existingBlock = targetCell.querySelector('.schedule-block');
-  if (existingBlock && existingBlock !== draggedBlock) {
-    triggerConflictAlert(sourceRoom, sourceSlot, targetRoom, targetSlot);
-    return;
+  if (modalTitle) {
+    modalTitle.textContent = `${item.section} · ${item.subjectCode}`;
   }
 
-  const sourceData = scheduleData[sourceRoom]?.[sourceSlot];
-  if (!sourceData) return;
+  const durationHrs = ((timeToMinutes(item.endTime) - timeToMinutes(item.startTime)) / 60).toFixed(1);
 
-  // Check if the instructor is already teaching in another room at targetSlot
-  let overlappingRoom = null;
-  for (const roomCode of Object.keys(scheduleData)) {
-    if (roomCode !== sourceRoom && scheduleData[roomCode]?.[targetSlot]?.faculty === sourceData.faculty) {
-      overlappingRoom = roomCode;
-      break;
-    }
-  }
+  modalBody.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:12px;">
+      <div>
+        <div style="font-size:18px; font-weight:800; color:var(--accent-primary);">${escapeHtml(item.subjectCode)}</div>
+        <div style="font-size:13.5px; color:var(--text-secondary); margin-top:2px;">${escapeHtml(item.subjectTitle || 'No title available')}</div>
+      </div>
+      <span class="badge" style="background:#EEF1F7; color:var(--accent-primary); font-weight:700; font-size:11.5px; text-transform:uppercase;">
+        ${escapeHtml(item.type || 'Lecture')}
+      </span>
+    </div>
 
-  if (overlappingRoom) {
-    triggerFacultyOverlapAlert(sourceData.faculty, overlappingRoom, targetSlot, targetRoom);
-    return;
-  }
-
-  // Check if the section is already attending class in another room at targetSlot
-  let overlappingSecRoom = null;
-  for (const roomCode of Object.keys(scheduleData)) {
-    if (roomCode !== sourceRoom && scheduleData[roomCode]?.[targetSlot]?.section === sourceData.section) {
-      overlappingSecRoom = roomCode;
-      break;
-    }
-  }
-
-  if (overlappingSecRoom) {
-    triggerSectionOverlapAlert(sourceData.section, overlappingSecRoom, targetSlot, targetRoom);
-    return;
-  }
-
-  // Perform schedule relocation
-  if (!scheduleData[targetRoom]) scheduleData[targetRoom] = {};
-  sourceData.type = 'manual-override';
-  sourceData.id = `${targetRoom}-${targetSlot}`;
-  scheduleData[targetRoom][targetSlot] = sourceData;
-  delete scheduleData[sourceRoom][sourceSlot];
-
-  renderGrid();
-
-  const aiStatus = document.getElementById('aiStatus');
-  if (aiStatus) {
-    aiStatus.className = 'ai-status processing';
-    aiStatus.innerHTML = '<span class="ai-dot"></span> Validating constraints…';
-    setTimeout(() => {
-      aiStatus.className = 'ai-status active';
-      aiStatus.innerHTML = '<span class="ai-dot"></span> AI Engine Active';
-    }, 1200);
-  }
-}
-
-function triggerConflictAlert(srcRoom, srcSlot, tgtRoom, tgtSlot) {
-  const srcData = scheduleData[srcRoom]?.[srcSlot];
-  const tgtData = scheduleData[tgtRoom]?.[tgtSlot];
-
-  if (srcData && tgtData) {
-    const toast = document.getElementById('conflictToast');
-    const toastTitle = document.getElementById('toastTitle');
-    const toastMsg = document.getElementById('toastMsg');
-    if (toast && toastTitle && toastMsg) {
-      toastTitle.textContent = 'Room Conflict Detected';
-      toastMsg.textContent =
-        `Room ${tgtRoom} at ${TIME_SLOTS[tgtSlot]} is occupied by ${tgtData.faculty} (${tgtData.subj}). Cannot place ${srcData.faculty} (${srcData.subj}) into the same room.`;
-      toast.classList.add('show');
-    }
-  }
-}
-
-function triggerFacultyOverlapAlert(facName, bookedRoom, tgtSlot, attemptedRoom) {
-  const toast = document.getElementById('conflictToast');
-  const toastTitle = document.getElementById('toastTitle');
-  const toastMsg = document.getElementById('toastMsg');
-  if (toast && toastTitle && toastMsg) {
-    toastTitle.textContent = 'Faculty Overlap Prevented';
-    toastMsg.textContent =
-      `Cannot assign ${facName} to ${attemptedRoom} at ${TIME_SLOTS[tgtSlot]} — this professor is already teaching in Room ${bookedRoom} during this time frame. Overlapping faculty schedules are not permitted.`;
-    toast.classList.add('show');
-  }
-}
-
-function triggerSectionOverlapAlert(secName, bookedRoom, tgtSlot, attemptedRoom) {
-  const toast = document.getElementById('conflictToast');
-  const toastTitle = document.getElementById('toastTitle');
-  const toastMsg = document.getElementById('toastMsg');
-  if (toast && toastTitle && toastMsg) {
-    toastTitle.textContent = 'Section Overlap Prevented';
-    toastMsg.textContent =
-      `Cannot schedule section ${secName} to ${attemptedRoom} at ${TIME_SLOTS[tgtSlot]} — this section is already attending class in Room ${bookedRoom} during this time frame.`;
-    toast.classList.add('show');
-  }
-}
-
-function hideConflictToast() {
-  const toast = document.getElementById('conflictToast');
-  if (toast) toast.classList.remove('show');
-}
-
-function resolveConflict() {
-  const aiStatus = document.getElementById('aiStatus');
-  if (aiStatus) {
-    aiStatus.className = 'ai-status processing';
-    aiStatus.innerHTML = '<span class="ai-dot"></span> AI resolving conflict…';
-  }
-
-  hideConflictToast();
-
-  setTimeout(() => {
-    if (scheduleData['LR-201']?.[2]?.type === 'conflict') {
-      scheduleData['LR-201'][2].type = 'ai-generated';
-      renderGrid();
-    }
-    if (aiStatus) {
-      aiStatus.className = 'ai-status active';
-      aiStatus.innerHTML = '<span class="ai-dot"></span> AI Engine Active';
-    }
-  }, 1200);
-}
-
-/* ═══════════════════════════════════════════════════
-   SCHEDULE CONTEXT MENU & RIGHT-CLICK PROFESSOR ASSIGN/REMOVE
-   ═══════════════════════════════════════════════════ */
-let ctxTargetRoom = null;
-let ctxTargetSlot = null;
-
-function openScheduleContextMenu(e, room, slotIdx) {
-  if (e) e.preventDefault();
-  ctxTargetRoom = room;
-  ctxTargetSlot = slotIdx;
-
-  const menu = document.getElementById('scheduleContextMenu');
-  if (!menu) return;
-
-  const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
-  const slotData = scheduleData[room]?.[slotIdx];
-  const roomSlotText = `${room} · ${TIME_SLOTS[slotIdx]}`;
-  document.getElementById('ctxMenuRoomSlot').textContent = roomSlotText;
-
-  const btnAdd = document.getElementById('ctxBtnAdd');
-  const btnEdit = document.getElementById('ctxBtnEdit');
-  const btnRemove = document.getElementById('ctxBtnRemove');
-  const detailsEl = document.getElementById('ctxMenuDetails');
-
-  let roNotice = document.getElementById('ctxReadOnlyNotice');
-
-  if (!isAdmin) {
-    if (slotData) {
-      detailsEl.textContent = `${slotData.faculty} (${slotData.subj} · ${slotData.section})`;
-    } else {
-      detailsEl.textContent = '(Vacant Slot)';
-    }
-    btnAdd.style.display = 'none';
-    btnEdit.style.display = 'none';
-    btnRemove.style.display = 'none';
-
-    if (!roNotice) {
-      roNotice = document.createElement('div');
-      roNotice.id = 'ctxReadOnlyNotice';
-      roNotice.style.cssText = 'padding:9px 14px; font-size:11.5px; color:var(--text-secondary); background:var(--bg-primary); border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:6px; font-weight:500;';
-      roNotice.innerHTML = '<span>🔒</span> Only System Admins can modify schedule';
-      menu.appendChild(roNotice);
-    } else {
-      roNotice.style.display = 'flex';
-    }
-  } else {
-    if (roNotice) roNotice.style.display = 'none';
-
-    if (slotData) {
-      detailsEl.textContent = `${slotData.faculty} (${slotData.subj} · ${slotData.section})`;
-      btnAdd.style.display = 'none';
-      btnEdit.style.display = 'flex';
-      btnRemove.style.display = 'flex';
-    } else {
-      detailsEl.textContent = '(Vacant Slot)';
-      btnAdd.style.display = 'flex';
-      btnEdit.style.display = 'none';
-      btnRemove.style.display = 'none';
-    }
-  }
-
-  menu.style.display = 'block';
-  const menuWidth = 240;
-  const menuHeight = 160;
-  const posX = Math.min(e.clientX, window.innerWidth - menuWidth - 12);
-  const posY = Math.min(e.clientY, window.innerHeight - menuHeight - 12);
-  menu.style.left = `${Math.max(10, posX)}px`;
-  menu.style.top = `${Math.max(10, posY)}px`;
-}
-
-function closeScheduleContextMenu() {
-  const menu = document.getElementById('scheduleContextMenu');
-  if (menu) menu.style.display = 'none';
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  document.addEventListener('click', (e) => {
-    const menu = document.getElementById('scheduleContextMenu');
-    if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
-      closeScheduleContextMenu();
-    }
-  });
-
-  // Baseline & Export buttons in Master Schedule
-  document.getElementById('btnGenerate')?.addEventListener('click', () => {
-    if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-      alert('Access Denied: Only system administrators are authorized to generate or overwrite the master schedule.');
-      return;
-    }
-    const aiStatus = document.getElementById('aiStatus');
-    if (aiStatus) {
-      aiStatus.className = 'ai-status processing';
-      aiStatus.innerHTML = '<span class="ai-dot"></span> Generating baseline timetable…';
-    }
-
-    setTimeout(() => {
-      scheduleData = generateScheduleData();
-      renderGrid();
-      if (aiStatus) {
-        aiStatus.className = 'ai-status active';
-        aiStatus.innerHTML = '<span class="ai-dot"></span> AI Engine Active';
-      }
-    }, 1500);
-  });
-
-  document.getElementById('btnExport')?.addEventListener('click', () => {
-    exportMasterSchedulePDF();
-  });
-});
-
-function exportMasterSchedulePDF() {
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert('Please allow popups for this site to export the schedule as PDF.');
-    return;
-  }
-
-  const now = new Date();
-  const dateFormatted = now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
-  const timeFormatted = now.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
-
-  const slotsHeaderHtml = TIME_SLOTS.map(s => `<th>${s}</th>`).join('');
-
-  const rowsHtml = ROOMS.map(r => {
-    const slotCells = TIME_SLOTS.map((s, si) => {
-      const a = scheduleData[r.code]?.[si];
-      if (a) {
-        return `
-          <td>
-            <div class="block">
-              <div class="block-subj">${a.subj || '—'}</div>
-              <div class="block-fac">${a.faculty || ''}</div>
-              <div class="block-sec">${a.section || ''}</div>
-            </div>
-          </td>`;
-      }
-      return `<td><span class="vacant">—</span></td>`;
-    }).join('');
-
-    return `
-      <tr>
-        <td class="room-col">
-          <strong>${r.code}</strong>
-          <div class="room-sub">${r.type} · Cap: ${r.cap}</div>
-        </td>
-        ${slotCells}
-      </tr>`;
-  }).join('');
-
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>STI Marikina · Master Classroom Schedule</title>
-  <style>
-    @page {
-      size: landscape;
-      margin: 10mm 8mm;
-    }
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      color: #2C303A;
-      background: #FFFFFF;
-      margin: 0;
-      padding: 12px;
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid #25447A;
-      padding-bottom: 10px;
-      margin-bottom: 12px;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .logo {
-      background: #25447A;
-      color: #FFFFFF;
-      font-weight: 800;
-      font-size: 16px;
-      padding: 6px 12px;
-      border-radius: 6px;
-      letter-spacing: 1px;
-    }
-    .title h1 {
-      margin: 0;
-      font-size: 16px;
-      color: #25447A;
-      font-weight: 700;
-    }
-    .title p {
-      margin: 2px 0 0;
-      font-size: 11px;
-      color: #5C6375;
-    }
-    .meta {
-      font-size: 11px;
-      text-align: right;
-      color: #5C6375;
-      line-height: 1.4;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 9.5px;
-      table-layout: fixed;
-    }
-    th, td {
-      border: 1px solid #D9DCE2;
-      padding: 4px;
-      text-align: center;
-      vertical-align: middle;
-      word-wrap: break-word;
-    }
-    th {
-      background: #F1F4F9;
-      color: #25447A;
-      font-weight: 700;
-      font-size: 9.5px;
-      padding: 6px 4px;
-    }
-    .room-col {
-      width: 85px;
-      text-align: left;
-      padding-left: 6px;
-      background: #FAFBFD;
-    }
-    .room-sub {
-      font-size: 8px;
-      color: #717A8C;
-      margin-top: 2px;
-    }
-    .block {
-      background: #EEF1F7;
-      border: 1px solid #25447A;
-      border-radius: 4px;
-      padding: 3px 2px;
-      line-height: 1.25;
-    }
-    .block-subj {
-      font-weight: 700;
-      color: #25447A;
-      font-size: 9px;
-    }
-    .block-fac {
-      font-size: 8.5px;
-      color: #2C303A;
-      margin-top: 1px;
-    }
-    .block-sec {
-      font-size: 8px;
-      color: #5C6375;
-    }
-    .vacant {
-      color: #B0B5C1;
-      font-size: 10px;
-    }
-    @media print {
-      body {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="brand">
-      <div class="logo">STI</div>
-      <div class="title">
-        <h1>STI College Marikina · Master Academic Schedule</h1>
-        <p>1st Semester AY 2026-2027 · AI-Assisted Classroom Scheduling System</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">
+      <div>
+        <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Section</div>
+        <div style="font-weight:700; color:var(--text-primary); margin-top:2px;">${escapeHtml(item.section)}</div>
+      </div>
+      <div>
+        <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Academic Units</div>
+        <div style="font-weight:700; color:var(--text-primary); margin-top:2px;">${escapeHtml(String(item.units))} Units</div>
+      </div>
+      <div>
+        <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Classroom</div>
+        <div style="font-weight:700; color:var(--text-primary); margin-top:2px; display:flex; align-items:center; gap:6px;">
+          <span>${escapeHtml(item.room)}</span>
+          <button class="btn btn-outline" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px; font-weight:600;" onclick="viewRoomOnCampusMap('${escapeHtml(item.room)}')">
+            📍 Map ↗
+          </button>
+        </div>
+      </div>
+      <div>
+        <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Instructor</div>
+        <div style="font-weight:700; color:var(--text-primary); margin-top:2px;">${escapeHtml(item.instructor)}</div>
+      </div>
+      <div style="grid-column: span 2;">
+        <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Schedule</div>
+        <div style="font-weight:700; color:var(--text-primary); margin-top:2px;">
+          ${escapeHtml(item.day)} · ${formatTime12(item.startTime)} – ${formatTime12(item.endTime)} (${durationHrs} hrs)
+        </div>
       </div>
     </div>
-    <div class="meta">
-      <strong>Generated:</strong> ${dateFormatted} at ${timeFormatted}<br />
-      <strong>Classrooms:</strong> ${ROOMS.length} Rooms Across 3 Floors
-    </div>
-  </div>
+  `;
 
-  <table>
-    <thead>
-      <tr>
-        <th class="room-col">Room</th>
-        ${slotsHeaderHtml}
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml}
-    </tbody>
-  </table>
-
-  <script>
-    window.onload = function() {
-      setTimeout(function() {
-        window.print();
-      }, 350);
-    };
-  <\/script>
-</body>
-</html>`;
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
+  modal.style.display = 'flex';
 }
 
-window.triggerCtxRemove = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to modify the master schedule.');
-    closeScheduleContextMenu();
+function closeClassDetailModal() {
+  const modal = document.getElementById('classDetailModal');
+  if (modal) modal.style.display = 'none';
+}
+
+/* ─── Export Timetable Handlers ─── */
+function toggleExportMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('exportDropdownMenu');
+  if (menu) {
+    menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+  }
+}
+
+function exportTimetablePDF() {
+  const menu = document.getElementById('exportDropdownMenu');
+  if (menu) menu.style.display = 'none';
+
+  // Set document title temporarily to section name for PDF filename
+  const originalTitle = document.title;
+  document.title = `${currentSelectedSection}_STI_Classroom_Timetable`;
+
+  window.print();
+
+  setTimeout(() => {
+    document.title = originalTitle;
+  }, 1000);
+}
+
+async function exportTimetablePNG() {
+  const menu = document.getElementById('exportDropdownMenu');
+  if (menu) menu.style.display = 'none';
+
+  const card = document.getElementById('sectionTimetableCard');
+  if (!card) {
+    alert('Timetable sheet not found.');
     return;
   }
-  if (!ctxTargetRoom || ctxTargetSlot === null) return;
-  const slotData = scheduleData[ctxTargetRoom]?.[ctxTargetSlot];
-  if (slotData) {
-    const facName = slotData.faculty;
-    delete scheduleData[ctxTargetRoom][ctxTargetSlot];
-    renderGrid();
 
-    const toastTitle = document.getElementById('toastTitle');
-    const toastMsg = document.getElementById('toastMsg');
-    const toast = document.getElementById('conflictToast');
-    if (toast && toastTitle && toastMsg) {
-      toastTitle.textContent = 'Professor Removed';
-      toastMsg.textContent = `Removed ${facName} from ${ctxTargetRoom} at ${TIME_SLOTS[ctxTargetSlot]}. Slot is now vacant.`;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3500);
-    }
-  }
-  closeScheduleContextMenu();
-};
-
-window.triggerCtxAdd = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to modify the master schedule.');
-    closeScheduleContextMenu();
+  if (typeof html2canvas === 'undefined') {
+    alert('html2canvas library is loading. Please check your internet connection or use Export as PDF.');
     return;
   }
-  openSlotModal(ctxTargetRoom, ctxTargetSlot, false);
-  closeScheduleContextMenu();
-};
 
-window.triggerCtxEdit = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to modify the master schedule.');
-    closeScheduleContextMenu();
-    return;
+  try {
+    const canvas = await html2canvas(card, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#FFFFFF',
+      logging: false
+    });
+
+    const link = document.createElement('a');
+    link.download = `${currentSelectedSection}_Timetable.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } catch (err) {
+    alert('Unable to generate PNG image. Please use Export as PDF.');
   }
-  openSlotModal(ctxTargetRoom, ctxTargetSlot, true);
-  closeScheduleContextMenu();
-};
+}
 
-function openSlotModal(room, slotIdx, isEdit) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to modify the master schedule.');
-    return;
+/* ─── Fetch Live Schedules from API (if backend available) ─── */
+async function syncSchedulesFromAPI() {
+  try {
+    const res = await fetch('api/gemini_suggestions.php', { method: 'GET' });
+    // Keep baseline enriched
+  } catch (e) {
+    // Standalone fallback
   }
-  document.getElementById('slotTargetRoom').value = room;
-  document.getElementById('slotTargetIdx').value = slotIdx;
-  document.getElementById('slotRoomDisplay').value = room;
-  document.getElementById('slotTimeDisplay').value = TIME_SLOTS[slotIdx];
-  document.getElementById('slotModalTitle').textContent = isEdit ? 'Change Professor / Reassign Slot' : 'Assign Professor to Slot';
+}
 
-  const errEl = document.getElementById('slotModalError');
-  if (errEl) errEl.style.display = 'none';
+/* ─── Module Initialization & Global Bindings ─── */
+document.addEventListener('DOMContentLoaded', () => {
+  MASTER_SCHEDULE_DATA = generateBaselineSchedules();
 
-  const facSelect = document.getElementById('slotFacultySelect');
-  facSelect.innerHTML = '';
+  const progFilter = document.getElementById('programFilter');
+  if (progFilter) progFilter.addEventListener('change', updateSectionDropdown);
 
-  const currentData = scheduleData[room]?.[slotIdx];
+  const yrFilter = document.getElementById('yearFilter');
+  if (yrFilter) yrFilter.addEventListener('change', updateSectionDropdown);
 
-  if (FACULTY.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'No faculty registered';
-    facSelect.appendChild(opt);
-  } else {
-    FACULTY.forEach(fac => {
-      const opt = document.createElement('option');
-      opt.value = fac.name;
-
-      // Check if faculty is already booked in another room at this exact slot
-      let isBookedElsewhere = false;
-      for (const otherRoom of Object.keys(scheduleData)) {
-        if (otherRoom !== room && scheduleData[otherRoom]?.[slotIdx]?.faculty === fac.name) {
-          isBookedElsewhere = true;
-          break;
-        }
-      }
-
-      opt.textContent = `${fac.name} (${fac.dept})${isBookedElsewhere ? ' — [Booked at this time]' : ' — Available'}`;
-      if (isBookedElsewhere && (!currentData || currentData.faculty !== fac.name)) {
-        opt.disabled = true;
-      }
-      if (currentData && currentData.faculty === fac.name) {
-        opt.selected = true;
-      }
-      facSelect.appendChild(opt);
+  const sectionSelect = document.getElementById('sectionSelect');
+  if (sectionSelect) {
+    sectionSelect.addEventListener('change', (e) => {
+      currentSelectedSection = e.target.value;
+      renderGrid();
     });
   }
 
-  if (currentData) {
-    document.getElementById('slotSubjectInput').value = currentData.subj || 'ITE 101';
-    document.getElementById('slotProgramSelect').value = currentData.program || 'BSIT';
-    document.getElementById('slotSectionInput').value = currentData.section || 'BSIT 1A';
-  } else {
-    const selectedFac = FACULTY.find(f => f.name === facSelect.value);
-    document.getElementById('slotSubjectInput').value = selectedFac?.quals?.[0] || 'ITE 101';
-    document.getElementById('slotProgramSelect').value = 'BSIT';
-    document.getElementById('slotSectionInput').value = 'BSIT 1A';
+  const btnGenerate = document.getElementById('btnGenerate');
+  if (btnGenerate) {
+    btnGenerate.addEventListener('click', () => {
+      MASTER_SCHEDULE_DATA = generateBaselineSchedules();
+      renderGrid();
+      alert('Baseline master schedule successfully generated for all sections.');
+    });
   }
 
-  document.getElementById('slotModal').style.display = 'flex';
-}
-
-window.closeSlotModal = function() {
-  const err = document.getElementById('slotModalError');
-  if (err) err.style.display = 'none';
-  document.getElementById('slotModal').style.display = 'none';
-};
-
-window.handleSlotFacultyChange = function(facultyName) {
-  const fac = FACULTY.find(f => f.name === facultyName);
-  if (fac && fac.quals && fac.quals.length > 0) {
-    document.getElementById('slotSubjectInput').value = fac.quals[0];
-  }
-};
-
-window.submitSlotAssignment = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to modify the master schedule.');
-    closeSlotModal();
-    return;
-  }
-  const room = document.getElementById('slotTargetRoom').value;
-  const slotIdx = parseInt(document.getElementById('slotTargetIdx').value, 10);
-  const faculty = document.getElementById('slotFacultySelect').value;
-  const subj = document.getElementById('slotSubjectInput').value.trim() || 'ITE 101';
-  const program = document.getElementById('slotProgramSelect').value || 'BSIT';
-  const section = document.getElementById('slotSectionInput').value.trim() || 'BSIT 1A';
-  const errEl = document.getElementById('slotModalError');
-
-  if (!faculty) {
-    if (errEl) {
-      errEl.textContent = 'Please select a faculty member.';
-      errEl.style.display = 'block';
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('exportDropdownMenu');
+    const btn = document.getElementById('btnExport');
+    if (menu && menu.style.display === 'block' && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+      menu.style.display = 'none';
     }
-    return;
-  }
+  });
 
-  // Check for faculty conflict at target time slot
-  for (const otherRoom of Object.keys(scheduleData)) {
-    if (otherRoom !== room && scheduleData[otherRoom]?.[slotIdx]?.faculty === faculty) {
-      if (errEl) {
-        errEl.textContent = `Overlap Conflict: ${faculty} is already teaching in room ${otherRoom} during ${TIME_SLOTS[slotIdx]}.`;
-        errEl.style.display = 'block';
-      }
-      return;
-    }
-  }
+  updateSectionDropdown();
+});
 
-  // Check for subject department / IT-only constraint
-  const subjMatch = SUBJECTS.find(s => s.code.toLowerCase() === subj.toLowerCase());
-  const facObj = FACULTY.find(f => f.name === faculty);
-  if (subjMatch && subjMatch.itOnly) {
-    if (facObj && facObj.dept !== 'IT / CS') {
-      if (errEl) {
-        errEl.textContent = `Department Restriction: ${subjMatch.code} (${subjMatch.title}) is restricted to IT/CS professors only. ${facObj.name} belongs to ${facObj.dept}.`;
-        errEl.style.display = 'block';
-      }
-      return;
-    }
-  }
-
-  if (!scheduleData[room]) scheduleData[room] = {};
-  scheduleData[room][slotIdx] = {
-    subj,
-    faculty,
-    section,
-    program,
-    year: section.match(/\d/)?.[0] || '1',
-    type: 'manual-override',
-    id: `${room}-${slotIdx}`
-  };
-
-  closeSlotModal();
-  renderGrid();
-};
+// Global window assignments for inline event handlers and inter-module calls
+window.renderGrid = renderGrid;
+window.updateSectionDropdown = updateSectionDropdown;
+window.showClassDetails = showClassDetails;
+window.closeClassDetailModal = closeClassDetailModal;
+window.toggleExportMenu = toggleExportMenu;
+window.exportTimetablePDF = exportTimetablePDF;
+window.exportTimetablePNG = exportTimetablePNG;
