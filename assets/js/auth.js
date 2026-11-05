@@ -32,6 +32,7 @@ window.addEventListener('storage', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  restoreUserSession();
   const btnLogin = document.getElementById('btnLogin');
   if (btnLogin) btnLogin.addEventListener('click', handleLogin);
 
@@ -43,6 +44,63 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+function restoreUserSession() {
+  try {
+    const storedUserStr = localStorage.getItem('sti_auth_user');
+    if (!storedUserStr) {
+      document.documentElement.classList.remove('has-active-session');
+      const loginPage = document.getElementById('loginPage');
+      const appShell = document.getElementById('appShell');
+      if (loginPage && appShell) {
+        loginPage.classList.remove('hidden');
+        loginPage.style.display = 'flex';
+        appShell.style.display = 'none';
+      }
+      return false;
+    }
+
+    const user = JSON.parse(storedUserStr);
+    if (!user || !user.email) return false;
+
+    CURRENT_USER = user;
+    activeSessionToken = localStorage.getItem('sti_session_token') || null;
+
+    // Refresh active instance key for this refreshed tab to maintain ownership
+    try {
+      localStorage.setItem('sti_active_instance_' + user.email.toLowerCase(), CURRENT_INSTANCE_ID);
+    } catch (e) {}
+
+    document.documentElement.classList.add('has-active-session');
+    const loginPage = document.getElementById('loginPage');
+    const appShell = document.getElementById('appShell');
+    if (loginPage && appShell) {
+      loginPage.classList.add('hidden');
+      loginPage.style.display = 'none';
+      appShell.style.display = 'flex';
+    }
+
+    const uNameEl = document.querySelector('.sidebar-footer .user-name');
+    if (uNameEl) uNameEl.textContent = user.name;
+    const avatarEl = document.querySelector('.sidebar-footer .avatar');
+    if (avatarEl) avatarEl.textContent = CURRENT_USER.initials || 'ST';
+
+    const ROLE_LABELS = {
+      'admin': 'System Administrator',
+      'academic-head': 'Academic Head',
+      'program-head': 'Program Head',
+      'faculty': 'Faculty Member'
+    };
+    const uRoleEl = document.querySelector('.sidebar-footer .user-role');
+    if (uRoleEl) uRoleEl.textContent = ROLE_LABELS[user.role] || 'User';
+
+    startSessionHeartbeat();
+    return true;
+  } catch (e) {
+    console.warn('Failed to restore user session:', e);
+    return false;
+  }
+}
+
 function startSessionHeartbeat() {
   stopSessionHeartbeat();
   sessionHeartbeatTimer = setInterval(async () => {
@@ -51,7 +109,7 @@ function startSessionHeartbeat() {
       return;
     }
     try {
-      const res = await fetch('/api/auth.php?check=1', {
+      const res = await fetch('api/auth.php?check=1', {
         headers: { 'Accept': 'application/json' }
       });
       if (res.ok) {
@@ -80,6 +138,13 @@ function stopSessionHeartbeat() {
 
 function handleSessionTerminated(noticeText) {
   stopSessionHeartbeat();
+
+  document.documentElement.classList.remove('has-active-session');
+  try {
+    localStorage.removeItem('sti_auth_user');
+    localStorage.removeItem('sti_session_token');
+    localStorage.removeItem('sti_active_page');
+  } catch (e) {}
 
   const menu = document.getElementById('userDropdownMenu');
   if (menu) menu.style.display = 'none';
@@ -110,11 +175,11 @@ function handleSessionTerminated(noticeText) {
     errorEl.classList.add('show');
   }
 
-  renderGrid();
-  renderRoomTable();
-  renderFacultyCards();
-  renderSubjectTable();
-  renderUserTable();
+  try { if (typeof renderGrid === 'function') renderGrid(); } catch (e) { console.warn('renderGrid err:', e); }
+  try { if (typeof renderRoomTable === 'function') renderRoomTable(); } catch (e) {}
+  try { if (typeof renderFacultyCards === 'function') renderFacultyCards(); } catch (e) {}
+  try { if (typeof renderSubjectTable === 'function') renderSubjectTable(); } catch (e) {}
+  try { if (typeof renderUserTable === 'function') renderUserTable(); } catch (e) {}
 }
 
 function completeLoginTransition(user, normalizedEmail, sessionToken) {
@@ -125,6 +190,16 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
     initials: user.initials || (user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST')
   };
   activeSessionToken = sessionToken || null;
+
+  // Persist authenticated user session to localStorage
+  try {
+    localStorage.setItem('sti_auth_user', JSON.stringify(CURRENT_USER));
+    if (activeSessionToken) localStorage.setItem('sti_session_token', activeSessionToken);
+    document.documentElement.classList.add('has-active-session');
+    if (!localStorage.getItem('sti_active_page')) {
+      localStorage.setItem('sti_active_page', 'schedule');
+    }
+  } catch (e) {}
 
   // Track active instance for this user account
   try {
@@ -141,8 +216,10 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
   // Start polling to detect if another instance (e.g. phone) logs in
   startSessionHeartbeat();
 
-  document.querySelector('.sidebar-footer .user-name').textContent = user.name;
-  document.querySelector('.sidebar-footer .avatar').textContent = CURRENT_USER.initials;
+  const uNameEl = document.querySelector('.sidebar-footer .user-name');
+  if (uNameEl) uNameEl.textContent = user.name;
+  const avatarEl = document.querySelector('.sidebar-footer .avatar');
+  if (avatarEl) avatarEl.textContent = CURRENT_USER.initials;
 
   const ROLE_LABELS = {
     'admin': 'System Administrator',
@@ -150,15 +227,16 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
     'program-head': 'Program Head',
     'faculty': 'Faculty Member'
   };
-  document.querySelector('.sidebar-footer .user-role').textContent = ROLE_LABELS[user.role] || 'User';
+  const uRoleEl = document.querySelector('.sidebar-footer .user-role');
+  if (uRoleEl) uRoleEl.textContent = ROLE_LABELS[user.role] || 'User';
 
   // Refresh all role-dependent modules according to CURRENT_USER permissions
-  renderGrid();
-  renderRoomTable();
-  renderFacultyCards();
-  renderSubjectTable();
-  renderUserTable();
-  renderSubjectDatalist();
+  try { if (typeof renderGrid === 'function') renderGrid(); } catch (e) { console.warn('renderGrid err:', e); }
+  try { if (typeof renderRoomTable === 'function') renderRoomTable(); } catch (e) {}
+  try { if (typeof renderFacultyCards === 'function') renderFacultyCards(); } catch (e) {}
+  try { if (typeof renderSubjectTable === 'function') renderSubjectTable(); } catch (e) {}
+  try { if (typeof renderUserTable === 'function') renderUserTable(); } catch (e) {}
+  try { if (typeof renderSubjectDatalist === 'function') renderSubjectDatalist(); } catch (e) {}
 
   // Transition: fade out login, reveal dashboard
   const loginPage = document.getElementById('loginPage');
@@ -174,7 +252,7 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
 
 async function syncUsersFromDB() {
   try {
-    const res = await fetch('/api/users.php');
+    const res = await fetch('api/users.php');
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.data) && data.data.length > 0) {
@@ -228,8 +306,8 @@ async function syncUsersFromDB() {
             }
           }
         });
-        renderUserTable();
-        renderFacultyCards();
+        try { if (typeof renderUserTable === 'function') renderUserTable(); } catch (e) {}
+        try { if (typeof renderFacultyCards === 'function') renderFacultyCards(); } catch (e) {}
       }
     }
   } catch (err) {
@@ -259,7 +337,7 @@ async function handleLogin() {
 
   // 1. Try real database authentication via API
   try {
-    const res = await fetch('/api/auth.php', {
+    const res = await fetch('api/auth.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: normalizedEmail, password })
@@ -316,6 +394,13 @@ async function handleLogin() {
 window.logoutUser = function() {
   stopSessionHeartbeat();
 
+  document.documentElement.classList.remove('has-active-session');
+  try {
+    localStorage.removeItem('sti_auth_user');
+    localStorage.removeItem('sti_session_token');
+    localStorage.removeItem('sti_active_page');
+  } catch (e) {}
+
   const menu = document.getElementById('userDropdownMenu');
   if (menu) menu.style.display = 'none';
 
@@ -331,7 +416,7 @@ window.logoutUser = function() {
 
   // Invalidate session on server
   try {
-    fetch('/api/auth.php', {
+    fetch('api/auth.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'logout' })
@@ -347,9 +432,9 @@ window.logoutUser = function() {
   // Reset state and re-render safe defaults
   CURRENT_USER = null;
   activeSessionToken = null;
-  renderGrid();
-  renderRoomTable();
-  renderFacultyCards();
-  renderSubjectTable();
-  renderUserTable();
+  try { if (typeof renderGrid === 'function') renderGrid(); } catch (e) { console.warn('renderGrid err:', e); }
+  try { if (typeof renderRoomTable === 'function') renderRoomTable(); } catch (e) {}
+  try { if (typeof renderFacultyCards === 'function') renderFacultyCards(); } catch (e) {}
+  try { if (typeof renderSubjectTable === 'function') renderSubjectTable(); } catch (e) {}
+  try { if (typeof renderUserTable === 'function') renderUserTable(); } catch (e) {}
 };

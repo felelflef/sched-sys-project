@@ -232,7 +232,7 @@ window.promptDeleteSubject = function(code) {
 
   document.getElementById('deleteSubjectTargetCode').value = subj.code;
   document.getElementById('deleteSubjectCodeDisplay').textContent = subj.code;
-  document.getElementById('deleteSubjectTitleDisplay').textContent = `${subj.title} · ${subj.dept} (${subj.itOnly ? 'IT/CS Only' : 'Other Dept'})`;
+  document.getElementById('deleteSubjectTitleDisplay').textContent = `${subj.title} \u2022 ${subj.dept} (${subj.itOnly ? 'IT/CS Only' : 'Other Dept'})`;
   document.getElementById('deleteSubjectModal').style.display = 'flex';
 };
 

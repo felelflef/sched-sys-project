@@ -1,3 +1,13 @@
+/* ─────────── ACTIVE SESSION RESTORATION OVERRIDES ─────────── */
+html.has-active-session #loginPage,
+html.has-active-session .login-page {
+  display: none !important;
+}
+html.has-active-session #appShell,
+html.has-active-session .app {
+  display: flex !important;
+}
+
 /* ─────────── LOGIN PAGE ─────────── */
 .login-page {
   position: fixed;
@@ -323,7 +333,8 @@
 /* ─── MAIN AREA ─── */
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-/* ─── TOP HEADER ─── */
+/* ─── TOP HEADER (REMOVED) ─── */
+header, .header { display: none !important; }
 .header {
   height: var(--header-h);
   min-height: var(--header-h);

@@ -16,9 +16,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update header
       const info = MODULE_TITLES[mod];
       if (info) {
-        document.getElementById('headerTitle').textContent = info.title;
-        document.getElementById('headerSubtitle').textContent = info.sub;
+        const hTitle = document.getElementById('headerTitle');
+        if (hTitle) hTitle.textContent = info.title;
+        const hSub = document.getElementById('headerSubtitle');
+        if (hSub) hSub.textContent = info.sub;
       }
+      try {
+        localStorage.setItem('sti_active_page', mod);
+      } catch (e) {}
 
       // Freshly evaluate and render modules based on active role
       if (mod === 'rooms') renderRoomTable();
@@ -33,6 +38,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (mod === 'ai' && typeof initAiModule === 'function') initAiModule();
     });
   });
+
+  // Restore saved active page on page load / refresh
+  try {
+    const savedPage = localStorage.getItem('sti_active_page');
+    if (savedPage) {
+      window.switchPage(savedPage);
+    }
+  } catch (e) {}
 
   document.addEventListener('click', function(e) {
     const menu = document.getElementById('userDropdownMenu');

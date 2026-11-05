@@ -1,7 +1,7 @@
 ## High-Level Mindset
 - Deliver complete, production-ready solutions. Never leave half-finished code or suggest "tabling it for later."
 - Understand the code before calling it done. Be able to explain failure modes and edge cases.
-- Use code/scripts for deterministic tasks (math, conversions, formatting) instead of raw LLM reasoning.
+- Do math, conversions, and formatting yourself or inline. Never create .ps1 or other helper scripts.
 
 ## Non-Negotiable Permission & Change Protocol
 - **Permission First:** Ask for explicit user permission before applying any changes to files. This applies to:
@@ -10,7 +10,12 @@
   - Deleting any files or records
 - **Minimal & Precise Changes:** Touch only what is strictly necessary. Keep edits surgical and scoped directly to the problem—do not refactor unrelated code or add bloat.
 - **Detailed Explanation:** Clearly explain what needs to be changed, why it is necessary, and specify the exact file names and line numbers before and after modifications.
-- **Post-Implementation Build & Test:** Verify every change with a post-implementation test/syntax check immediately after editing. Do not consider a task complete without proving 0 errors.
+- **Post-Implementation Build & Test:** Run only checks relevant to the files you changed. Do not repeat one-time checks I requested earlier, unless I ask again. Report results in one line, not a full checklist.
+
+## No Helper Scripts
+- Edit files with your edit tools only. Never write .ps1/.bat/.sh scripts to modify files.
+- If a script is truly unavoidable, ask permission first and name its purpose.
+- Delete any temp files you create before reporting DONE.
 
 ## Tech Stack & Architecture
 - **Language:** PHP 8.x (vanilla, procedural/clean modular architecture)
@@ -36,3 +41,4 @@
   - `DONE` (Ready, verified, and 0 errors confirmed)
   - `DONE_WITH_CONCERNS` (Works, but has known risks/trade-offs)
   - `BLOCKED` (Requires external input or missing credentials)
+
