@@ -37,17 +37,12 @@ function updateAiStatusPill() {
   const dot = document.getElementById('aiStatusDot');
   const text = document.getElementById('aiStatusText');
   const btnText = document.getElementById('btnConfigureAiKeyText');
-  const key = getStoredGeminiApiKey();
+  if (!dot && !text && !btnText) return;
 
-  if (key) {
-    if (dot) dot.style.background = '#10B981';
-    if (text) text.textContent = 'Connected: Google Gemini API';
-    if (btnText) btnText.textContent = 'API Key Configured ✓';
-  } else {
-    if (dot) dot.style.background = '#F59E0B';
-    if (text) text.textContent = 'API Key Required (Click to connect)';
-    if (btnText) btnText.textContent = 'Configure API Key';
-  }
+  const key = getStoredGeminiApiKey();
+  if (dot) dot.style.background = '#10B981';
+  if (text) text.textContent = key ? 'Connected: Google Gemini API' : 'Connected (System API Key)';
+  if (btnText) btnText.textContent = 'API Key Configured ✓';
 }
 
 /* ─── API Key Configuration Modal ─── */
@@ -309,12 +304,6 @@ async function runAiAnalysis(action = 'full_audit', customQuestion = '') {
 
   const apiKey = getStoredGeminiApiKey();
 
-  // If no API key is stored, prompt user to enter one
-  if (!apiKey) {
-    openGeminiKeyModal('Please enter your Google Gemini API key to activate AI schedule optimization.');
-    return;
-  }
-
   const resultsCard = document.getElementById('aiResultsCard');
   const resultsContainer = document.getElementById('aiResultsContainer');
   const loadingIndicator = document.getElementById('aiLoadingIndicator');
@@ -341,18 +330,12 @@ async function runAiAnalysis(action = 'full_audit', customQuestion = '') {
   if (querySummary) querySummary.textContent = actionLabels[action] || 'Schedule Analysis';
 
   try {
-    // 1. First attempt: Direct Google Gemini API execution with user key
-    let outputText = '';
-    try {
-      outputText = await callGeminiDirect(apiKey, action, customQuestion);
-    } catch (directErr) {
-      // 2. If direct browser call encounters an error, try backend proxy if available
+        let outputText = '';
+    if (apiKey) {
       try {
-        const payload = {
-          action: action,
-          question: customQuestion,
-          apiKey: apiKey
-        };
+        outputText = await callGeminiDirect(apiKey, action, customQuestion);
+      } catch (directErr) {
+        const payload = { action, question: customQuestion, apiKey };
         const res = await fetch('api/gemini_suggestions.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -364,8 +347,20 @@ async function runAiAnalysis(action = 'full_audit', customQuestion = '') {
         } else {
           throw new Error(backendData.error || directErr.message);
         }
-      } catch (backendErr) {
-        throw directErr; // Rethrow original direct API error with specific message
+      }
+    } else {
+      // Use system-configured server Gemini API key
+      const payload = { action, question: customQuestion };
+      const res = await fetch('api/gemini_suggestions.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const backendData = await res.json();
+      if (backendData.success && backendData.data) {
+        outputText = backendData.data;
+      } else {
+        throw new Error(backendData.error || 'AI scheduling service returned an error.');
       }
     }
 
@@ -375,10 +370,7 @@ async function runAiAnalysis(action = 'full_audit', customQuestion = '') {
     }
   } catch (err) {
     const msg = err.message || '';
-    if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid') || msg.includes('key')) {
-      renderAiError(`Invalid API Key: ${msg}. Please click "Configure API Key" to update your key.`);
-      openGeminiKeyModal(`Invalid API Key. Please update your key from Google AI Studio.`);
-    } else if (msg.includes('quota') || msg.includes('ResourceExhausted')) {
+    if (msg.includes('quota') || msg.includes('ResourceExhausted')) {
       renderAiError('Gemini API quota exceeded for this key. Please wait a moment or try another API key from Google AI Studio.');
     } else {
       renderAiError(`AI Service Notice: ${msg}`);
@@ -490,11 +482,6 @@ function renderAiError(message) {
       <div style="flex:1;">
         <div style="font-weight:700; font-size:14px; margin-bottom:4px;">AI Request Notice</div>
         <div style="font-size:13px; line-height:1.45;">${escapeAiHtml(message)}</div>
-        <div style="margin-top:10px;">
-          <button class="btn btn-outline" onclick="openGeminiKeyModal()" style="font-size:11.5px; padding:4px 12px; background:#fff; border-color:#FEB2B2; color:#C53030; font-weight:700;">
-            🔑 Configure Gemini API Key
-          </button>
-        </div>
       </div>
     </div>
   `;

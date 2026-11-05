@@ -14,25 +14,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Check authorization: valid PHP session OR explicit API key supplied
+// Check authorization: valid PHP session, client key, or server-configured key
 $hasSession = !empty($_SESSION['user_id']);
 $clientKey = trim($input['apiKey'] ?? ($_SERVER['HTTP_X_GEMINI_API_KEY'] ?? ''));
+$serverKey = (defined('GEMINI_API_KEY') && GEMINI_API_KEY !== 'your_gemini_api_key_here') ? GEMINI_API_KEY : getenv('GEMINI_API_KEY');
+$apiKey = !empty($clientKey) ? $clientKey : $serverKey;
 
-if (!$hasSession && empty($clientKey)) {
-    // If neither session nor client key is present, require authentication
+if (!$hasSession && empty($clientKey) && empty($serverKey)) {
+    // If neither session nor client key nor server key is present, require authentication
     jsonResponse(['success' => false, 'code' => 'AUTH_REQUIRED', 'error' => 'Authentication or API key required.'], 401);
 }
-
-// Resolve Gemini API key
-$apiKey = !empty($clientKey) 
-    ? $clientKey 
-    : ((defined('GEMINI_API_KEY') && GEMINI_API_KEY !== 'your_gemini_api_key_here') ? GEMINI_API_KEY : getenv('GEMINI_API_KEY'));
 
 if (empty($apiKey)) {
     jsonResponse([
         'success' => false,
         'code' => 'KEY_REQUIRED',
-        'error' => 'Gemini API key is not configured. Please enter your API key in the AI Assistant settings or configure GEMINI_API_KEY in your server environment.'
+        'error' => 'Gemini API key is not configured. Please configure GEMINI_API_KEY in your server environment.'
     ], 400);
 }
 

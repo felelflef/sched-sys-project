@@ -65,7 +65,14 @@ function renderFacultyCards() {
       </div>`;
     }).join('');
 
-    const qualsHtml = (fac.quals || []).map(q => `<span class="qual-tag locked">${q}</span>`).join('');
+    const mainList = fac.mainQuals && fac.mainQuals.length > 0 ? fac.mainQuals : (fac.quals ? fac.quals.slice(0, 2) : []);
+    const sideList = fac.sideQuals && fac.sideQuals.length > 0 ? fac.sideQuals : (fac.quals ? fac.quals.slice(2) : []);
+    const mainQualsHtml = mainList.length > 0
+      ? mainList.map(q => `<span class="qual-tag locked" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600;" title="Main Teaching Qualification">★ ${q}</span>`).join('')
+      : `<span style="font-size:11px; color:var(--text-secondary); font-style:italic;">None</span>`;
+    const sideQualsHtml = sideList.length > 0
+      ? sideList.map(q => `<span class="qual-tag locked" style="background:#f8fafc; color:#475569; border:1px solid #cbd5e1;" title="Side / Secondary Qualification">✦ ${q}</span>`).join('')
+      : `<span style="font-size:11px; color:var(--text-secondary); font-style:italic;">None</span>`;
 
     const facultyActionBtns = isAdmin
       ? `<button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal('${fac.email}')">Edit Profile</button>
@@ -99,8 +106,11 @@ function renderFacultyCards() {
         <div class="avail-grid" style="grid-template-columns:repeat(6,1fr);">
           ${availHtml}
         </div>
-        <div class="faculty-meta-label" style="margin-top:14px; margin-bottom:6px;">MAQ Certifications</div>
-        <div class="qual-tags">${qualsHtml}</div>
+        <div class="faculty-meta-label" style="margin-top:14px; margin-bottom:4px; font-weight:700; color:#0369a1;">★ Main Qualifications</div>
+        <div class="qual-tags" style="margin-bottom:10px;">${mainQualsHtml}</div>
+        <div class="faculty-meta-label" style="margin-bottom:4px; font-weight:600; color:var(--text-secondary);">✦ Side Qualifications</div>
+        <div class="qual-tags">${sideQualsHtml}</div>
+
       </div>
     `;
     grid.appendChild(card);
@@ -208,6 +218,10 @@ window.openChangeFacultyDeptModal = function(identifier) {
   document.getElementById('changeFacultyDeptTargetEmail').value = fac.email;
   const nameInput = document.getElementById('changeFacultyNameInput');
   if (nameInput) nameInput.value = fac.name;
+  const mainInput = document.getElementById('changeFacultyMainQualsInput');
+  if (mainInput) mainInput.value = (fac.mainQuals || []).join(', ');
+  const sideInput = document.getElementById('changeFacultySideQualsInput');
+  if (sideInput) sideInput.value = (fac.sideQuals || []).join(', ');
   const nameDisplay = document.getElementById('changeFacultyDeptNameDisplay');
   if (nameDisplay) nameDisplay.textContent = fac.name;
   const emailDisplay = document.getElementById('changeFacultyDeptEmailDisplay');
@@ -256,6 +270,14 @@ window.submitChangeFacultyDept = function() {
   // 1. Update faculty profile
   fac.name = newName;
   if (newDept) fac.dept = newDept;
+  const mainQualsRaw = document.getElementById('changeFacultyMainQualsInput') ? document.getElementById('changeFacultyMainQualsInput').value.trim() : '';
+  const sideQualsRaw = document.getElementById('changeFacultySideQualsInput') ? document.getElementById('changeFacultySideQualsInput').value.trim() : '';
+  const parsedMainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+  const parsedSideQuals = sideQualsRaw ? sideQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+  fac.mainQuals = parsedMainQuals;
+  fac.sideQuals = parsedSideQuals;
+  fac.quals = [...new Set([...parsedMainQuals, ...parsedSideQuals])];
+  if (typeof saveStateToStorage === 'function') saveStateToStorage();
 
   // 2. Update registered account in USERS list
   const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -361,7 +383,8 @@ window.openAddFacultyModal = function() {
 
   document.getElementById('newFacStatus').value = 'Full-time';
   document.getElementById('newFacMaxLoad').value = '24';
-  document.getElementById('newFacQuals').value = 'ITE 101, CC 103';
+  if (document.getElementById('newFacMainQuals')) document.getElementById('newFacMainQuals').value = 'ITE 101, CC 103';
+  if (document.getElementById('newFacSideQuals')) document.getElementById('newFacSideQuals').value = 'IM 101';
 
   if (userSelect && userSelect.value) {
     window.handleFacultyUserDropdownChange(userSelect.value);
@@ -392,7 +415,8 @@ window.handleFacultyUserDropdownChange = function(email) {
     if (existingFac.dept) deptSelect.value = existingFac.dept;
     if (existingFac.status) document.getElementById('newFacStatus').value = existingFac.status;
     if (existingFac.maxLoad) document.getElementById('newFacMaxLoad').value = existingFac.maxLoad;
-    if (existingFac.quals) document.getElementById('newFacQuals').value = existingFac.quals.join(', ');
+    if (document.getElementById('newFacMainQuals')) document.getElementById('newFacMainQuals').value = (existingFac.mainQuals || existingFac.quals?.slice(0, 2) || []).join(', ');
+    if (document.getElementById('newFacSideQuals')) document.getElementById('newFacSideQuals').value = (existingFac.sideQuals || existingFac.quals?.slice(2) || []).join(', ');
   }
 };
 
@@ -417,8 +441,12 @@ window.submitAddFaculty = function() {
   const dept = document.getElementById('newFacDept').value;
   const status = document.getElementById('newFacStatus').value;
   const maxLoad = parseInt(document.getElementById('newFacMaxLoad').value, 10) || 24;
-  const qualsRaw = document.getElementById('newFacQuals').value.trim();
-  const quals = qualsRaw ? qualsRaw.split(',').map(s => s.trim()).filter(Boolean) : ['ITE 101'];
+  const mainQualsRaw = document.getElementById('newFacMainQuals')?.value.trim() || '';
+  const sideQualsRaw = document.getElementById('newFacSideQuals')?.value.trim() || '';
+  const mainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : ['ITE 101'];
+  const sideQuals = sideQualsRaw ? sideQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+  const quals = [...new Set([...mainQuals, ...sideQuals])];
+
 
   const existingFacIndex = FACULTY.findIndex(f => f.email.toLowerCase() === email.toLowerCase());
   const colors = ['#25447A', '#2E7D5B', '#6C3483', '#C27A1A', '#2980B9', '#C0392B'];
@@ -428,6 +456,8 @@ window.submitAddFaculty = function() {
     FACULTY[existingFacIndex].dept = dept;
     FACULTY[existingFacIndex].status = status;
     FACULTY[existingFacIndex].maxLoad = maxLoad;
+    FACULTY[existingFacIndex].mainQuals = mainQuals;
+    FACULTY[existingFacIndex].sideQuals = sideQuals;
     FACULTY[existingFacIndex].quals = quals;
   } else {
     // Create profile
@@ -438,6 +468,8 @@ window.submitAddFaculty = function() {
       status,
       load: Math.floor(maxLoad * 0.75),
       maxLoad,
+      mainQuals,
+      sideQuals,
       quals,
       bg: colors[Math.floor(Math.random() * colors.length)]
     });
@@ -447,6 +479,7 @@ window.submitAddFaculty = function() {
     VALID_USERS[user.email].password = 'password';
   }
 
+  if (typeof saveStateToStorage === 'function') saveStateToStorage();
   closeAddFacultyModal();
   renderFacultyCards();
   renderUserTable();

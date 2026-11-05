@@ -10,6 +10,13 @@
   <link rel="stylesheet" href="assets/css/campus_map.css" />
   <link rel="stylesheet" href="assets/css/modules.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script>
+    try {
+      if (localStorage.getItem('sti_auth_user')) {
+        document.documentElement.classList.add('has-active-session');
+      }
+    } catch (e) {}
+  </script>
 </head>
 <body>
   <!-- ═══════════════════════ LOGIN PAGE ═══════════════════════ -->
@@ -51,7 +58,7 @@
             <label class="login-remember">
               <input type="checkbox" checked /> Remember me
             </label>
-            <a class="login-forgot">Forgot password?</a>
+
           </div>
 
           <button type="submit" class="btn-login" id="btnLogin">
@@ -59,11 +66,6 @@
             <span class="btn-text">Sign In</span>
           </button>
         </form>
-      </div>
-
-      <div class="login-footer">
-        Secured with role-based access control<br/>
-        <a href="#">IT Support</a> · <a href="#">System Status</a> · v2.1.0
       </div>
     </div>
   </div>
@@ -151,24 +153,6 @@
     <!-- ═══════════════════════ MAIN ═══════════════════════ -->
     <div class="main">
 
-      <!-- ─── HEADER ─── -->
-      <header class="header">
-        <div class="header-title">
-          <h2 id="headerTitle">Interactive Schedule Management Dashboard</h2>
-          <p id="headerSubtitle">1st Semester AY 2026–2027 · 342 sections across 19 rooms</p>
-        </div>
-        <div class="header-actions">
-          <div class="ai-status active" id="aiStatus">
-            <span class="ai-dot"></span>
-            AI Engine Active
-          </div>
-          <div class="search-bar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" placeholder="Search sections..." />
-          </div>
-        </div>
-      </header>
-
       <!-- ─── CONTENT ─── -->
       <div class="content">
 
@@ -176,149 +160,594 @@
              MODULE 1: INTERACTIVE SCHEDULE MANAGEMENT
              ══════════════════════════════════════════════ -->
         <div class="module-page active" id="page-schedule">
-          <!-- Stats Row -->
-          <div class="stats-row">
-            <div class="stat-card">
-              <div class="stat-icon blue">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <!-- Lifecycle Stepper Navigation -->
+          <div class="schedule-stepper-container">
+            <div class="schedule-stepper">
+              <div class="stepper-step" id="stepBtn-1" onclick="goToScheduleStep(1)">
+                <div class="step-number" id="stepNum-1">1</div>
+                <div class="step-info">
+                  <div class="step-label">School Year</div>
+                  <div class="step-sub" id="stepSub-1">AY 2026-2027</div>
+                </div>
               </div>
-              <div>
-                <div class="stat-value">342</div>
-                <div class="stat-label">Total Sections</div>
+              <div class="stepper-divider"></div>
+
+              <div class="stepper-step" id="stepBtn-2" onclick="goToScheduleStep(2)">
+                <div class="step-number" id="stepNum-2">2</div>
+                <div class="step-info">
+                  <div class="step-label">School Term</div>
+                  <div class="step-sub" id="stepSub-2">1st Semester</div>
+                </div>
               </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon green">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <div class="stepper-divider"></div>
+
+              <div class="stepper-step" id="stepBtn-3" onclick="goToScheduleStep(3)">
+                <div class="step-number" id="stepNum-3">3</div>
+                <div class="step-info">
+                  <div class="step-label">Load Subjects</div>
+                  <div class="step-sub" id="stepSub-3">Curriculum</div>
+                </div>
               </div>
-              <div>
-                <div class="stat-value">318</div>
-                <div class="stat-label">Successfully Assigned</div>
+              <div class="stepper-divider"></div>
+
+              <div class="stepper-step" id="stepBtn-4" onclick="goToScheduleStep(4)">
+                <div class="step-number" id="stepNum-4">4</div>
+                <div class="step-info">
+                  <div class="step-label">Validate Resources</div>
+                  <div class="step-sub" id="stepSub-4">Rooms & Teachers</div>
+                </div>
+              </div>
+              <div class="stepper-divider"></div>
+
+              <div class="stepper-step" id="stepBtn-5" onclick="goToScheduleStep(5)">
+                <div class="step-number" id="stepNum-5">5</div>
+                <div class="step-info">
+                  <div class="step-label">Create Sections</div>
+                  <div class="step-sub" id="stepSub-5">Enrollment Setup</div>
+                </div>
+              </div>
+              <div class="stepper-divider"></div>
+
+              <div class="stepper-step active" id="stepBtn-6" onclick="goToScheduleStep(6)">
+                <div class="step-number" id="stepNum-6">6</div>
+                <div class="step-info">
+                  <div class="step-label">Timetable & Schedule</div>
+                  <div class="step-sub" id="stepSub-6">Master Grid</div>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Grid Controls -->
-          <div class="grid-controls">
-            <div class="filter-group">
-              <label>Program:</label>
-              <select id="programFilter">
-                <option value="all">All Programs</option>
-                <option value="BSIT">BSIT</option>
-                <option value="BSCS">BSCS</option>
-                <option value="BSCpE">BSCpE</option>
-                <option value="BSHM">BSHM</option>
-                <option value="BSTM">BSTM</option>
-                <option value="BSBA">BSBA</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label>Year:</label>
-              <select id="yearFilter">
-                <option value="all">All Years</option>
-                <option value="1">1st Year</option>
-                <option value="2">2nd Year</option>
-                <option value="3">3rd Year</option>
-                <option value="4">4th Year</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label>Section:</label>
-              <select id="sectionSelect" style="min-width:140px; font-weight:700;">
-                <!-- Populated dynamically via JS -->
-              </select>
-            </div>
-            <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
-              <div style="position:relative; display:inline-block;">
-                <button class="btn btn-outline" id="btnExport" onclick="toggleExportMenu(event)" style="font-size:12px; padding:6px 14px; display:inline-flex; align-items:center; gap:6px;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Export Timetable ▾
+          <!-- ==================== STEP 1: SCHOOL YEAR ==================== -->
+          <div class="step-panel" id="stepPanel-1">
+            <div class="lifecycle-card">
+              <div class="lifecycle-card-header">
+                <div>
+                  <div class="lifecycle-card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    School Year Management
+                  </div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-top:3px;">
+                    Define academic school years and specify the currently active academic cycle.
+                  </div>
+                </div>
+                <button class="btn btn-primary" onclick="openAddSchoolYearModal()" style="font-size:12px; padding:6px 14px;">
+                  + Add School Year
                 </button>
-                <div id="exportDropdownMenu" class="export-dropdown-menu" style="display:none;">
-                  <a href="javascript:void(0)" onclick="exportTimetablePDF()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    Export as PDF (Landscape)
-                  </a>
-                  <a href="javascript:void(0)" onclick="exportTimetablePNG()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none; border-top:1px solid var(--border-subtle);">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    Export as PNG (High-Res Image)
-                  </a>
-                </div>
               </div>
-              <button class="btn btn-primary" id="btnGenerate" style="font-size:12px; padding:6px 14px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                Generate Baseline
-              </button>
+
+              <div style="overflow-x:auto;">
+                <table class="lifecycle-table">
+                  <thead>
+                    <tr>
+                      <th>Academic Year Code</th>
+                      <th>Status</th>
+                      <th>Terms Configured</th>
+                      <th>Created Date</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schoolYearTableBody">
+                    <!-- Populated via JS -->
+                  </tbody>
+                </table>
+              </div>
+
+              <div style="margin-top:20px; display:flex; justify-content:flex-end;">
+                <button class="btn btn-primary" onclick="goToScheduleStep(2)">Proceed to Step 2: School Term &rarr;</button>
+              </div>
             </div>
           </div>
 
-          <!-- Section Timetable Sheet Card (Spreadsheet-like) -->
-          <div class="card timetable-sheet-card" id="sectionTimetableCard">
-            <!-- Sheet Header -->
-            <div class="timetable-sheet-header">
-              <div class="sheet-header-left">
-                <div class="section-badge-program" id="sheetProgramYear">BS in Information Technology · 1st Year</div>
-                <div class="section-title-large" id="sheetSectionTitle">IT701M</div>
+          <!-- ==================== STEP 2: SCHOOL TERM ==================== -->
+          <div class="step-panel" id="stepPanel-2">
+            <div class="lifecycle-card">
+              <div class="lifecycle-card-header">
+                <div>
+                  <div class="lifecycle-card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Academic Terms for <span id="termActiveSyLabel" style="color:var(--accent-primary); margin-left:4px;">AY 2026-2027</span>
+                  </div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-top:3px;">
+                    Manage semester timelines and lifecycle statuses (Draft, Active, Closed).
+                  </div>
+                </div>
               </div>
-              <div class="sheet-header-right">
-                <div class="sheet-stat-pill">
-                  <span class="sheet-stat-label">Total Units</span>
-                  <span class="sheet-stat-value" id="sheetTotalUnits">0</span>
+
+              <div style="overflow-x:auto;">
+                <table class="lifecycle-table">
+                  <thead>
+                    <tr>
+                      <th>Term Name</th>
+                      <th>Start Date</th>
+                      <th>End Date</th>
+                      <th>Status</th>
+                      <th>Active Cycle</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schoolTermTableBody">
+                    <!-- Populated via JS -->
+                  </tbody>
+                </table>
+              </div>
+
+              <div style="margin-top:20px; display:flex; justify-content:space-between;">
+                <button class="btn btn-outline" onclick="goToScheduleStep(1)">&larr; Back to Step 1</button>
+                <button class="btn btn-primary" onclick="goToScheduleStep(3)">Proceed to Step 3: Load Subjects &rarr;</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== STEP 3: LOAD SUBJECTS ==================== -->
+          <div class="step-panel" id="stepPanel-3">
+            <div class="lifecycle-card">
+              <div class="lifecycle-card-header">
+                <div>
+                  <div class="lifecycle-card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    Offered Subjects & Curriculum
+                  </div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-top:3px;">
+                    Auto-load subjects offered for the semester. Toggle inclusion or add custom course offerings.
+                  </div>
                 </div>
-                <div class="sheet-stat-pill">
-                  <span class="sheet-stat-label"># of Students</span>
-                  <span class="sheet-stat-value" id="sheetStudentsCount">0</span>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn btn-outline" onclick="toggleAllSubjectInclusion(true)" style="font-size:12px; padding:6px 12px;">Include All</button>
+                  <button class="btn btn-outline" onclick="toggleAllSubjectInclusion(false)" style="font-size:12px; padding:6px 12px;">Exclude All</button>
+                  <button class="btn btn-primary" onclick="openAddSubjectModal()" style="font-size:12px; padding:6px 14px;">+ Add Subject</button>
                 </div>
-                <div class="sheet-stat-pill adviser-pill">
-                  <span class="sheet-stat-label">Adviser</span>
-                  <span class="sheet-stat-value" id="sheetAdviser">—</span>
+              </div>
+
+              <!-- Filter Bar for Subjects -->
+              <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; background:#F8FAFD; padding:12px; border-radius:8px; border:1px solid var(--border-subtle);">
+                <div class="filter-group">
+                  <label>Term:</label>
+                  <select id="curriculumTermFilter" onchange="renderSubjectOfferingTable()">
+                    <option value="all">All Terms</option>
+                    <option value="1" selected>1st Semester</option>
+                    <option value="2">2nd Semester</option>
+                    <option value="3">Summer</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label>Program:</label>
+                  <select id="curriculumProgFilter" onchange="renderSubjectOfferingTable()">
+                    <option value="all">All Programs</option>
+                    <option value="BSIT">BSIT</option>
+                    <option value="BSCS">BSCS</option>
+                    <option value="BSCpE">BSCpE</option>
+                    <option value="BSHM">BSHM</option>
+                    <option value="BSTM">BSTM</option>
+                    <option value="BSBA">BSBA</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label>Year Level:</label>
+                  <select id="curriculumYearFilter" onchange="renderSubjectOfferingTable()">
+                    <option value="all">All Years</option>
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label>Curriculum:</label>
+                  <select id="curriculumRevisionFilter" onchange="renderSubjectOfferingTable()">
+                    <option value="all">All Curriculums</option>
+                    <option value="2024 Revised">2024 Revised</option>
+                    <option value="2022">2022 Baseline</option>
+                  </select>
+                </div>
+                <div style="margin-left:auto; display:flex; align-items:center; font-size:12px; font-weight:700; color:var(--text-secondary);" id="subjectOfferingCountLabel">
+                  Loading subjects...
+                </div>
+              </div>
+
+              <div style="overflow-x:auto;">
+                <table class="lifecycle-table">
+                  <thead>
+                    <tr>
+                      <th style="width:50px; text-align:center;">Include</th>
+                      <th>Code</th>
+                      <th>Subject Name</th>
+                      <th>Units</th>
+                      <th>Type</th>
+                      <th>Lec Hrs</th>
+                      <th>Lab Hrs</th>
+                      <th>Program</th>
+                      <th>Year</th>
+
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="subjectOfferingTableBody">
+                    <!-- Populated via JS -->
+                  </tbody>
+                </table>
+              </div>
+
+              <div style="margin-top:20px; display:flex; justify-content:space-between;">
+                <button class="btn btn-outline" onclick="goToScheduleStep(2)">&larr; Back to Step 2</button>
+                <button class="btn btn-primary" onclick="goToScheduleStep(4)">Proceed to Step 4: Validate Resources &rarr;</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== STEP 4: VALIDATE RESOURCES ==================== -->
+          <div class="step-panel" id="stepPanel-4">
+            <div class="lifecycle-card">
+              <div class="lifecycle-card-header">
+                <div>
+                  <div class="lifecycle-card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    Resource Validation & Readiness Audit
+                  </div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-top:3px;">
+                    Audit classrooms, specialized labs, and faculty availability against curriculum demand.
+                  </div>
+                </div>
+                <div id="readinessStatusBadge">
+                  <!-- Populated via JS -->
+                </div>
+              </div>
+
+              <!-- Top KPI Stats for Resources -->
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:18px;">
+                <div style="background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; padding:12px 16px;">
+                  <div style="font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Lecture Rooms Available</div>
+                  <div style="font-size:22px; font-weight:800; color:#1C3664; margin-top:2px;" id="valLecRoomsCount">15 Rooms</div>
+                  <div style="font-size:11.5px; color:#10B981; margin-top:2px;">Capacity: 40-50 students/room</div>
+                </div>
+                <div style="background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; padding:12px 16px;">
+                  <div style="font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Computer & Special Labs</div>
+                  <div style="font-size:22px; font-weight:800; color:#1C3664; margin-top:2px;" id="valLabRoomsCount">6 Labs</div>
+                  <div style="font-size:11.5px; color:#2563EB; margin-top:2px;">4 CompLabs &bull; 1 Kitchen &bull; 1 Tourism</div>
+                </div>
+                <div style="background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; padding:12px 16px;">
+                  <div style="font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Faculty Teaching Capacity</div>
+                  <div style="font-size:22px; font-weight:800; color:#1C3664; margin-top:2px;" id="valFacultyCapacity">72 Units Max</div>
+                  <div style="font-size:11.5px; color:#6B7280; margin-top:2px;">3 Active Teaching Faculty</div>
+                </div>
+              </div>
+
+              <!-- Two Column Detailed Audit -->
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                <!-- Room Inventory Audit -->
+                <div style="border:1px solid var(--border-subtle); border-radius:8px; padding:14px; background:#FFFFFF;">
+                  <div style="font-size:13px; font-weight:800; color:#1C3664; margin-bottom:10px; display:flex; justify-content:space-between;">
+                    <span>Classroom Inventory & Capacity</span>
+                    <span style="font-size:11px; color:var(--text-secondary);">21 Campus Rooms</span>
+                  </div>
+                  <div style="max-height:260px; overflow-y:auto;">
+                    <table class="lifecycle-table" style="font-size:11.5px;">
+                      <thead>
+                        <tr>
+                          <th>Room</th>
+                          <th>Type</th>
+                          <th>Cap</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody id="valRoomTableBody">
+                        <!-- Populated via JS -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Faculty Specialization Audit -->
+                <div style="border:1px solid var(--border-subtle); border-radius:8px; padding:14px; background:#FFFFFF;">
+                  <div style="font-size:13px; font-weight:800; color:#1C3664; margin-bottom:10px; display:flex; justify-content:space-between;">
+                    <span>Faculty Availability & Qualifications</span>
+                    <span style="font-size:11px; color:var(--text-secondary);">Load & Certifications</span>
+                  </div>
+                  <div style="max-height:260px; overflow-y:auto;">
+                    <table class="lifecycle-table" style="font-size:11.5px;">
+                      <thead>
+                        <tr>
+                          <th>Faculty Name</th>
+                          <th>Specialization</th>
+                          <th>Current Load</th>
+                          <th>Max</th>
+                        </tr>
+                      </thead>
+                      <tbody id="valFacultyTableBody">
+                        <!-- Populated via JS -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Readiness Checklist -->
+              <div class="readiness-box" style="margin-top:16px;">
+                <div style="font-weight:800; font-size:13px; color:#1C3664; margin-bottom:6px;">Pre-Scheduling Readiness Checklist</div>
+                <div id="readinessChecklistContainer">
+                  <!-- Populated via JS -->
+                </div>
+              </div>
+
+              <div style="margin-top:20px; display:flex; justify-content:space-between;">
+                <button class="btn btn-outline" onclick="goToScheduleStep(3)">&larr; Back to Step 3</button>
+                <button class="btn btn-primary" id="btnProceedToStep5" onclick="goToScheduleStep(5)">Proceed to Step 5: Create Sections &rarr;</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== STEP 5: CREATE SECTIONS ==================== -->
+          <div class="step-panel" id="stepPanel-5">
+            <div class="lifecycle-card">
+              <div class="lifecycle-card-header">
+                <div>
+                  <div class="lifecycle-card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Academic Sections Configuration
+                  </div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-top:3px;">
+                    Configure, merge, and split academic sections for the semester.
+                  </div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn btn-primary" onclick="openAddSectionModal()" style="font-size:12px; padding:6px 14px;">+ Add Section</button>
+
+                </div>
+              </div>
+
+
+              <div style="display:none;" id="quickSecGenContainer">
+                <div style="font-size:12.5px; font-weight:700; color:#1C3664;">Quick Section Generator:</div>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <label style="font-size:12px; font-weight:600;">Program:</label>
+                  <select id="quickSecProg" style="padding:4px 8px; font-size:12px;">
+                    <option value="BSIT">BSIT</option>
+                    <option value="BSCS">BSCS</option>
+                    <option value="BSCpE">BSCpE</option>
+                    <option value="BSHM">BSHM</option>
+                    <option value="BSTM">BSTM</option>
+                    <option value="BSBA">BSBA</option>
+                  </select>
+                </div>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <label style="font-size:12px; font-weight:600;">Year:</label>
+                  <select id="quickSecYear" style="padding:4px 8px; font-size:12px;">
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
+                  </select>
+                </div>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <label style="font-size:12px; font-weight:600;">Sections Count:</label>
+                  <input type="number" id="quickSecCount" value="2" min="1" max="10" style="width:60px; padding:4px 8px; font-size:12px;" />
+                </div>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <label style="font-size:12px; font-weight:600;">Students/Sec:</label>
+                  <input type="number" id="quickSecStudents" value="38" min="15" max="50" style="width:60px; padding:4px 8px; font-size:12px;" />
+                </div>
+                <!-- Generate button removed per request -->
+              </div>
+
+              <!-- Sections Table -->
+              <div style="overflow-x:auto;">
+                <table class="lifecycle-table">
+                  <thead>
+                    <tr>
+                      <th>Section Code</th>
+                      <th>Section Name</th>
+                      <th>Program</th>
+                      <th>Year</th>
+
+                      <th>Shift</th>
+                      <th>Student Count</th>
+                      <th>Attached Subjects</th>
+                      <th>Adviser</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sectionsTableBody">
+                    <!-- Populated via JS -->
+                  </tbody>
+                </table>
+              </div>
+
+              <div style="margin-top:20px; display:flex; justify-content:space-between;">
+                <button class="btn btn-outline" onclick="goToScheduleStep(4)">&larr; Back to Step 4</button>
+                <button class="btn btn-primary" onclick="goToScheduleStep(6)">Proceed to Step 6: Master Schedule &amp; Timetable &rarr;</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== STEP 6: SCHEDULE MANAGEMENT & TIMETABLE VIEW ==================== -->
+          <div class="step-panel active" id="stepPanel-6">
+            <!-- Stats Row -->
+            <div class="stats-row">
+              <div class="stat-card">
+                <div class="stat-icon blue">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </div>
+                <div>
+                  <div class="stat-value" id="statTotalSections">342</div>
+                  <div class="stat-label">Total Sections</div>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon green">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div>
+                  <div class="stat-value" id="statAssignedSections">318</div>
+                  <div class="stat-label">Successfully Assigned</div>
                 </div>
               </div>
             </div>
 
-            <!-- Spreadsheet Grid Container -->
-            <div class="timetable-table-container">
-              <table class="section-spreadsheet-table" id="sectionScheduleTable">
-                <thead>
-                  <tr>
-                    <th class="time-col-header">TIME</th>
-                    <th class="day-col-header">MON</th>
-                    <th class="day-col-header">TUE</th>
-                    <th class="day-col-header">WED</th>
-                    <th class="day-col-header">THU</th>
-                    <th class="day-col-header">FRI</th>
-                    <th class="day-col-header">SAT</th>
-                  </tr>
-                </thead>
-                <tbody id="sectionGridBody">
-                  <!-- Populated by JS with tight 30-min rows and merged class cells -->
-                </tbody>
-                <tfoot>
-                  <tr class="footer-hours-row">
-                    <th class="time-col-footer"># of Hrs</th>
-                    <td id="hrs-Mon">0.0 hrs</td>
-                    <td id="hrs-Tue">0.0 hrs</td>
-                    <td id="hrs-Wed">0.0 hrs</td>
-                    <td id="hrs-Thu">0.0 hrs</td>
-                    <td id="hrs-Fri">0.0 hrs</td>
-                    <td id="hrs-Sat">0.0 hrs</td>
-                  </tr>
-                  <tr class="footer-weekly-row">
-                    <td colspan="7" class="weekly-total-cell">
-                      <span>Weekly Schedule Total:</span>
-                      <strong id="weeklyTotalHours">0.0 hrs / week</strong>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+            <!-- Diagnostics: Unassigned Classes Alert Banner -->
+            <div class="unassigned-banner" id="unassignedBanner">
+              <div class="unassigned-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>Unassigned Classes & Diagnostic Warning</span>
+              </div>
+              <div style="font-size:12.5px;">The following courses could not be automatically placed during baseline generation:</div>
+              <ul class="unassigned-list" id="unassignedList">
+                <!-- Populated if any item unassigned -->
+              </ul>
             </div>
 
-            <!-- Legend Bar -->
-            <div class="timetable-legend-bar">
-              <span class="legend-label">Class Types:</span>
-              <div class="legend-item"><span class="legend-swatch lecture"></span> Lecture</div>
-              <div class="legend-item"><span class="legend-swatch lab"></span> Laboratory</div>
-              <div class="legend-item"><span class="legend-swatch pe"></span> PE / Special / NSTP</div>
+            <!-- Grid Controls & Toolbar -->
+            <div class="grid-controls">
+              <!-- Single Master View: Section Filters -->
+              <div id="filterGroupSection" class="filter-group" style="display:flex;">
+                <label>Program:</label>
+                <select id="programFilter">
+                  <option value="all">All Programs</option>
+                  <option value="BSIT">BSIT</option>
+                  <option value="BSCS">BSCS</option>
+                  <option value="BSCpE">BSCpE</option>
+                  <option value="BSHM">BSHM</option>
+                  <option value="BSTM">BSTM</option>
+                  <option value="BSBA">BSBA</option>
+                </select>
+                <label style="margin-left:4px;">Year:</label>
+                <select id="yearFilter">
+                  <option value="all">All Years</option>
+                  <option value="1">1st Year</option>
+                  <option value="2">2nd Year</option>
+                  <option value="3">3rd Year</option>
+                  <option value="4">4th Year</option>
+                </select>
+                <label style="margin-left:4px;">Section:</label>
+                <select id="sectionSelect" style="min-width:130px; font-weight:700;">
+                  <!-- Populated dynamically -->
+                </select>
+                <input type="search" id="sectionSearchInput" placeholder="Search section..." oninput="handleSectionSearch(this.value)" style="padding:4px 8px; font-size:12px; border:1px solid var(--border-subtle); border-radius:6px; width:130px; margin-left:6px;" />
+              </div>
+
+              <!-- Internal Hidden Selects for DOM Compatibility -->
+              <div style="display:none;">
+                <select id="roomSelect"></select>
+                <select id="teacherSelect"></select>
+              </div>
+
+              <!-- Action Buttons -->
+              <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
+                <div style="position:relative; display:inline-block;">
+                  <button class="btn btn-outline" id="btnExport" onclick="toggleExportMenu(event)" style="font-size:12px; padding:6px 14px; display:inline-flex; align-items:center; gap:6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Export Timetable &#9662;
+                  </button>
+                  <div id="exportDropdownMenu" class="export-dropdown-menu" style="display:none;">
+                    <a href="javascript:void(0)" onclick="exportTimetablePDF()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      Export as PDF (Landscape)
+                    </a>
+                    <a href="javascript:void(0)" onclick="exportTimetablePNG()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none; border-top:1px solid var(--border-subtle);">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      Export as PNG (High-Res)
+                    </a>
+                    <a href="javascript:void(0)" onclick="exportAllSectionsBatchPDF()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none; border-top:1px solid var(--border-subtle);">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                      Export All Sections (Batch PDF)
+                    </a>
+                  </div>
+                </div>
+
+                <button class="btn btn-primary" id="btnGenerate" onclick="openConfirmRegenerateModal()" style="font-size:12px; padding:6px 14px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  Generate Schedule
+                </button>
+              </div>
+            </div>
+
+            <!-- Section Timetable Sheet Card (Spreadsheet-like) -->
+            <div class="card timetable-sheet-card" id="sectionTimetableCard">
+              <!-- Sheet Header -->
+              <div class="timetable-sheet-header">
+                <div class="sheet-header-left">
+                  <div class="section-badge-program" id="sheetProgramYear">BS in Information Technology &bull; 1st Year</div>
+                  <div class="section-title-large" id="sheetSectionTitle">IT701M</div>
+                </div>
+                <div class="sheet-header-right">
+                  <div class="sheet-stat-pill">
+                    <span class="sheet-stat-label" id="sheetStatLabel1">Total Units</span>
+                    <span class="sheet-stat-value" id="sheetTotalUnits">0</span>
+                  </div>
+                  <div class="sheet-stat-pill">
+                    <span class="sheet-stat-label" id="sheetStatLabel2"># of Students</span>
+                    <span class="sheet-stat-value" id="sheetStudentsCount">0</span>
+                  </div>
+                  <div class="sheet-stat-pill adviser-pill">
+                    <span class="sheet-stat-label" id="sheetStatLabel3">Adviser</span>
+                    <span class="sheet-stat-value" id="sheetAdviser">&mdash;</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Spreadsheet Grid Container -->
+              <div class="timetable-table-container">
+                <table class="section-spreadsheet-table" id="sectionScheduleTable">
+                  <thead>
+                    <tr>
+                      <th class="time-col-header">TIME</th>
+                      <th class="day-col-header">MON</th>
+                      <th class="day-col-header">TUE</th>
+                      <th class="day-col-header">WED</th>
+                      <th class="day-col-header">THU</th>
+                      <th class="day-col-header">FRI</th>
+                      <th class="day-col-header">SAT</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sectionGridBody">
+                    <!-- Populated by JS with tight 30-min rows and merged class cells -->
+                  </tbody>
+                  <tfoot>
+                    <tr class="footer-hours-row">
+                      <th class="time-col-footer"># of Hrs</th>
+                      <td id="hrs-Mon">0.0 hrs</td>
+                      <td id="hrs-Tue">0.0 hrs</td>
+                      <td id="hrs-Wed">0.0 hrs</td>
+                      <td id="hrs-Thu">0.0 hrs</td>
+                      <td id="hrs-Fri">0.0 hrs</td>
+                      <td id="hrs-Sat">0.0 hrs</td>
+                    </tr>
+                    <tr class="footer-weekly-row">
+                      <td colspan="7" class="weekly-total-cell">
+                        <span>Weekly Schedule Total:</span>
+                        <strong id="weeklyTotalHours">0.0 hrs / week</strong>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <!-- Legend Bar -->
+              <div class="timetable-legend-bar">
+                <span class="legend-label">Class Types:</span>
+                <div class="legend-item"><span class="legend-swatch lecture"></span> Lecture</div>
+                <div class="legend-item"><span class="legend-swatch lab"></span> Laboratory</div>
+                <div class="legend-item"><span class="legend-swatch pe"></span> PE / Special / NSTP</div>
+              </div>
             </div>
           </div>
         </div>
@@ -643,164 +1072,13 @@
             </div>
           </div>
 
-          <!-- Access Control Matrix -->
-          <div class="card">
-            <div class="card-header">
-              <div><h3>Role-Based Access Matrix</h3><p>Permission controls per system module</p></div>
-            </div>
-            <div class="card-body" style="padding:0 22px 22px;">
-              <table class="access-matrix">
-                <thead>
-                  <tr>
-                    <th style="width:40%;">Module</th>
-                    <th>Admin</th>
-                    <th>Academic Head</th>
-                    <th>Program Head / Faculty</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Master Schedule (Modifications & Drag-Drop)</td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-deny">—</span></td>
-                    <td><span class="access-deny">—</span></td>
-                  </tr>
-                  <tr>
-                    <td>Master Schedule (Read-Only Timetable View)</td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-check">✓</span></td>
-                  </tr>
-                  <tr>
-                    <td>AI Engine Configuration</td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-deny">—</span></td>
-                  </tr>
-                  <tr>
-                    <td>Room & Facility Management (Add/Edit/Remove)</td>
-                    <td><span class="access-check">&#10003;</span></td>
-                    <td><span class="access-deny">&mdash;</span></td>
-                    <td><span class="access-deny">&mdash;</span></td>
-                  </tr>
-                  <tr>
-                    <td>Faculty & Department Profiling (Add/Edit/Remove)</td>
-                    <td><span class="access-check">&#10003;</span></td>
-                    <td><span class="access-deny">&mdash;</span></td>
-                    <td><span class="access-deny">&mdash;</span></td>
-                  </tr>
-                  <tr>
-                    <td>Room, Department & Faculty (Read-Only View)</td>
-                    <td><span class="access-check">&#10003;</span></td>
-                    <td><span class="access-check">&#10003;</span></td>
-                    <td><span class="access-check">&#10003;</span></td>
-                  </tr>
-                  <tr>
-                    <td>Subject Catalog & Specialization (Add/Edit/Remove)</td>
-                    <td><span class="access-check">&#10003;</span></td>
-                    <td><span class="access-deny">&mdash;</span></td>
-                    <td><span class="access-deny">&mdash;</span></td>
-                  </tr>
-                  <tr>
-                    <td>Subject Catalog (Read-Only View)</td>
-                    <td><span class="access-check">&#10003;</span></td>
-                    <td><span class="access-check">&#10003;</span></td>
-                    <td><span class="access-check">&#10003;</span></td>
-                  </tr>
-                  <tr>
-                    <td>Campus Map & Utilization</td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-check">✓</span></td>
-                  </tr>
-                  <tr>
-                    <td>User Management</td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-deny">—</span></td>
-                    <td><span class="access-deny">—</span></td>
-                  </tr>
-                  <tr>
-                    <td>Audit Logs</td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-check">✓</span></td>
-                    <td><span class="access-deny">—</span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+
         </div>
 
         <!-- ══════════════════════════════════════════════════════════════
              PAGE: AI SCHEDULE & SPACE OPTIMIZATION
              ══════════════════════════════════════════════════════════════ -->
         <div class="module-page" id="page-ai">
-          <!-- Hero Banner -->
-          <div class="ai-hero-banner">
-            <div>
-              <div class="ai-hero-title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:24px; height:24px; color:#FFD400;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>
-                AI Campus Space & Timetable Analyst
-              </div>
-              <div class="ai-hero-desc">
-                Automated room utilization analytics, bottleneck detection, and conflict-free timetable suggestions for STI College Marikina. Grounded directly in live campus schedule and classroom session data.
-              </div>
-            </div>
-            <div class="ai-badge-group">
-              <div class="ai-model-pill" id="aiStatusPill" onclick="openGeminiKeyModal()" style="cursor:pointer;" title="Click to configure Gemini API Key">
-                <span class="ai-dot" id="aiStatusDot" style="background:#F59E0B;"></span>
-                <span id="aiStatusText">Checking API Connection...</span>
-              </div>
-              <button class="btn btn-outline" id="btnConfigureAiKey" onclick="openGeminiKeyModal()" style="font-size:11.5px; padding:4px 12px; background:#FFFFFF; border-color:#CBD5E1; color:var(--text-primary); display:inline-flex; align-items:center; gap:5px; font-weight:600; border-radius:20px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-                <span>🔑</span>
-                <span id="btnConfigureAiKeyText">Configure API Key</span>
-              </button>
-              <div class="ai-guardrail-pill">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                Domain Guardrail Active: Scheduling & Space Only
-              </div>
-            </div>
-          </div>
-
-          <!-- Quick Action Cards Grid -->
-          <div class="ai-actions-grid">
-            <div class="ai-card">
-              <div class="ai-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px; height:20px;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-              </div>
-              <div class="ai-card-title">Full Space & Schedule Audit</div>
-              <div class="ai-card-desc">Comprehensive analysis of current classroom assignments, room fill rates, and 3-5 high-impact scheduling recommendations.</div>
-              <button class="btn btn-primary ai-action-btn" onclick="runAiAnalysis('full_audit')">Run Full Audit</button>
-            </div>
-
-            <div class="ai-card">
-              <div class="ai-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px; height:20px;"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-              </div>
-              <div class="ai-card-title">Room Underutilization</div>
-              <div class="ai-card-desc">Identify vacant rooms and empty time slots to optimize room assignment across Floors 1, 2, and 3.</div>
-              <button class="btn btn-secondary ai-action-btn" onclick="runAiAnalysis('underutilized')">Check Vacancies</button>
-            </div>
-
-            <div class="ai-card">
-              <div class="ai-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px; height:20px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              </div>
-              <div class="ai-card-title">Peak Hours & Congestion</div>
-              <div class="ai-card-desc">Detect peak traffic hours, computer laboratory contention, and floor-level bottlenecks to balance student flow.</div>
-              <button class="btn btn-secondary ai-action-btn" onclick="runAiAnalysis('peak_hours')">Analyze Congestion</button>
-            </div>
-
-            <div class="ai-card">
-              <div class="ai-card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px; height:20px;"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              </div>
-              <div class="ai-card-title">Conflict & Phantom Check</div>
-              <div class="ai-card-desc">Find discrepancies between scheduled classes and actual session logs (phantom occupancy) and capacity mismatches.</div>
-              <button class="btn btn-secondary ai-action-btn" onclick="runAiAnalysis('conflicts')">Run Conflict Check</button>
-            </div>
-          </div>
-
           <!-- Interactive Custom Query Prompt Box -->
           <div class="ai-prompt-container">
             <div class="ai-prompt-header">
@@ -903,8 +1181,14 @@
           </div>
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label">Qualified Subjects / MAQ (comma-separated)</label>
-          <input type="text" id="newFacQuals" class="form-input" placeholder="e.g. ITE 101, CC 103" />
+          <label class="form-label" style="font-weight:600; font-size:12.5px;">Main Qualifications / Primary (comma-separated)</label>
+          <input type="text" id="newFacMainQuals" class="form-input" placeholder="e.g. ITE 101, CC 103" />
+          <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">Primary teaching specialization course codes</span>
+        </div>
+        <div class="form-group" style="margin-top:12px; margin-bottom:0;">
+          <label class="form-label" style="font-weight:600; font-size:12.5px;">Side Qualifications / Secondary (comma-separated)</label>
+          <input type="text" id="newFacSideQuals" class="form-input" placeholder="e.g. IM 101, GE 201" />
+          <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">Secondary / elective teaching course codes</span>
         </div>
       </div>
       <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
@@ -1123,6 +1407,16 @@
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label" style="font-weight:600; font-size:13px; margin-bottom:6px; display:block;">Registered Account Name</label>
           <input type="text" id="changeFacultyNameInput" class="form-input" placeholder="e.g. Prof. Maria Santos" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--border-subtle); font-size:13px;" />
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" style="font-weight:600; font-size:13px; margin-bottom:6px; display:block;">Main Qualifications / Primary (comma-separated)</label>
+          <input type="text" id="changeFacultyMainQualsInput" class="form-input" placeholder="e.g. ITE 101, CC 103" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--border-subtle); font-size:13px;" />
+          <span style="font-size:11px; color:var(--text-secondary); margin-top:3px; display:block;">Primary teaching specialization course codes</span>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" style="font-weight:600; font-size:13px; margin-bottom:6px; display:block;">Side Qualifications / Secondary (comma-separated)</label>
+          <input type="text" id="changeFacultySideQualsInput" class="form-input" placeholder="e.g. IM 101, GE 201" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--border-subtle); font-size:13px;" />
+          <span style="font-size:11px; color:var(--text-secondary); margin-top:3px; display:block;">Secondary / elective teaching course codes</span>
         </div>
         <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600; font-size:13px; margin-bottom:6px; display:block;">Academic Department</label>
@@ -1356,8 +1650,387 @@
       <div style="padding:22px;" id="detailModalBody">
         <!-- Populated on click -->
       </div>
-      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end;">
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end;" id="detailModalFooter">
         <button class="btn btn-secondary" onclick="closeClassDetailModal()" style="padding:6px 16px;">Close</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- ==================== SCHOOL YEAR MODAL ==================== -->
+  <div class="modal-overlay" id="schoolYearModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);" id="syModalTitle">Add School Year</h3>
+        <button onclick="closeSchoolYearModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:22px;">
+        <input type="hidden" id="syEditId" value="" />
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Academic Year Code</label>
+          <input type="text" id="syCodeInput" class="form-input" placeholder="e.g. AY 2026-2027" style="width:100%;" />
+        </div>
+        <div class="form-group" style="margin-bottom:0; display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="syIsActiveInput" style="width:16px; height:16px;" />
+          <label for="syIsActiveInput" style="font-size:13px; font-weight:600; cursor:pointer;">Set as Active School Year</label>
+        </div>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeSchoolYearModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitSchoolYearModal()">Save Year</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SCHOOL TERM MODAL ==================== -->
+  <div class="modal-overlay" id="termModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);" id="termModalTitle">Configure Academic Term</h3>
+        <button onclick="closeTermModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:22px;">
+        <input type="hidden" id="termEditId" value="" />
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Term Name</label>
+          <select id="termNameSelect" style="width:100%;">
+            <option value="1st Sem">1st Sem</option>
+            <option value="2nd Sem">2nd Sem</option>
+            <option value="Summer">Summer</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Start Date</label>
+          <input type="date" id="termStartDateInput" style="width:100%;" />
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">End Date</label>
+          <input type="date" id="termEndDateInput" style="width:100%;" />
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Term Status</label>
+          <select id="termStatusSelect" style="width:100%;">
+            <option value="draft">Draft (Planning)</option>
+            <option value="active">Active (Enrolling & Live)</option>
+            <option value="closed">Closed (Completed)</option>
+          </select>
+        </div>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeTermModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitTermModal()">Save Term</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== CURRICULUM SUBJECT MODAL ==================== -->
+  <div class="modal-overlay" id="manualSubjectModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);" id="curricSubjModalTitle">Add Curriculum Subject</h3>
+        <button onclick="closeAddSubjectModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:22px;">
+        <input type="hidden" id="curricSubjEditId" value="" />
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Subject Code</label>
+            <input type="text" id="curricSubjCode" placeholder="e.g. ITE 101" style="width:100%;" />
+          </div>
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Subject Type</label>
+            <select id="curricSubjType" style="width:100%;">
+              <option value="lecture">Lecture</option>
+              <option value="lab">Laboratory</option>
+              <option value="pe">PE</option>
+              <option value="special">Special / NSTP</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Subject Name</label>
+          <input type="text" id="curricSubjName" placeholder="e.g. Introduction to Computing" style="width:100%;" />
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:12px;">
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Units</label>
+            <input type="number" id="curricSubjUnits" value="3" min="1" max="6" style="width:100%;" />
+          </div>
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Lec Hours</label>
+            <input type="number" id="curricSubjLecHrs" value="3" min="0" max="6" step="0.5" style="width:100%;" />
+          </div>
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Lab Hours</label>
+            <input type="number" id="curricSubjLabHrs" value="0" min="0" max="6" step="0.5" style="width:100%;" />
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:0;">
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Program</label>
+            <select id="curricSubjProgram" style="width:100%;">
+              <option value="BSIT">BSIT</option>
+              <option value="BSCS">BSCS</option>
+              <option value="BSCpE">BSCpE</option>
+              <option value="BSHM">BSHM</option>
+              <option value="BSTM">BSTM</option>
+              <option value="BSBA">BSBA</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Year Level</label>
+            <select id="curricSubjYear" style="width:100%;">
+              <option value="1">1st Year</option>
+              <option value="2">2nd Year</option>
+              <option value="3">3rd Year</option>
+              <option value="4">4th Year</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeAddSubjectModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddSubjectModal()">Save Subject</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SECTION MODAL ==================== -->
+  <div class="modal-overlay" id="sectionModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);" id="secModalTitle">Configure Section</h3>
+        <button onclick="closeSectionModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:22px;">
+        <input type="hidden" id="secEditId" value="" />
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Section Code</label>
+            <input type="text" id="secCodeInput" placeholder="e.g. IT703M" style="width:100%;" />
+          </div>
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Section Name</label>
+            <input type="text" id="secNameInput" placeholder="e.g. BSIT 1C" style="width:100%;" />
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Program</label>
+            <select id="secProgramInput" style="width:100%;">
+              <option value="BSIT">BSIT</option>
+              <option value="BSCS">BSCS</option>
+              <option value="BSCpE">BSCpE</option>
+              <option value="BSHM">BSHM</option>
+              <option value="BSTM">BSTM</option>
+              <option value="BSBA">BSBA</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">Year Level</label>
+            <select id="secYearInput" style="width:100%;">
+              <option value="1">1st Year</option>
+              <option value="2">2nd Year</option>
+              <option value="3">3rd Year</option>
+              <option value="4">4th Year</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Student Count</label>
+          <input type="number" id="secStudentsInput" value="35" min="1" max="60" style="width:100%;" />
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Class Shift</label>
+          <select id="secShiftInput" style="width:100%; padding:8px 10px; border:1px solid var(--border-subtle); border-radius:6px; font-size:13px; background:#fff;">
+            <option value="AM">AM Shift (Morning: 7:00 AM – 12:00 PM)</option>
+            <option value="MIDSHIFT">MIDSHIFT (Midday: 10:00 AM – 4:00 PM)</option>
+            <option value="PM">PM Shift (Afternoon: 1:00 PM – 7:00 PM)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Section Adviser</label>
+          <select id="secAdviserInput" style="width:100%; padding:8px 10px; border:1px solid var(--border-subtle); border-radius:6px; font-size:13px; background:#fff;"></select>
+        </div>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeSectionModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitSectionModal()">Save Section</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SECTION MODAL ==================== -->
+  <div class="modal-overlay" id="splitSectionModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);">Split Section</h3>
+        <button onclick="closeSplitSectionModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:22px;">
+        <input type="hidden" id="splitTargetSectionId" value="" />
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;" id="splitPromptDesc">
+          Split students from this section into a new section.
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Students to Move to New Section</label>
+          <input type="number" id="splitStudentsCount" value="18" min="1" max="50" style="width:100%;" />
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">New Section Code</label>
+            <input type="text" id="splitNewCode" placeholder="e.g. IT703M" style="width:100%;" />
+          </div>
+          <div>
+            <label class="form-label" style="font-weight:700; font-size:12px;">New Section Name</label>
+            <input type="text" id="splitNewName" placeholder="e.g. BSIT 1C" style="width:100%;" />
+          </div>
+        </div>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeSplitSectionModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitSplitSection()">Confirm Split</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MERGE SECTIONS MODAL ==================== -->
+  <div class="modal-overlay" id="mergeSectionsModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);">Merge Sections</h3>
+        <button onclick="closeMergeSectionsModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:22px;">
+        <input type="hidden" id="mergePrimarySectionId" value="" />
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;" id="mergePromptDesc">
+          Select another section to merge into this one. Combined student counts and schedules will be unified.
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Select Section to Merge</label>
+          <select id="mergeSecondarySectionSelect" style="width:100%;">
+            <!-- Populated via JS -->
+          </select>
+        </div>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeMergeSectionsModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitMergeSections()">Confirm Merge</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== CONFIRM REGENERATE MODAL ==================== -->
+  <div class="modal-overlay" id="confirmRegenerateModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFFBEB;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <h3 style="margin:0; font-size:16px; font-weight:800; color:#92400E;">Generate Master Schedule?</h3>
+        </div>
+        <button onclick="closeConfirmRegenerateModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:22px; font-size:13px; color:var(--text-primary); line-height:1.6;">
+        <p>This action will auto-assign day, time, room, and teacher per section, honoring room type, capacity, faculty qualification, and zero overlap constraints.</p>
+        <p style="margin-top:10px; font-weight:700; color:#B45309;">&#9888; Please note: This will overwrite any existing baseline schedules for this semester.</p>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeConfirmRegenerateModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="executeGenerateBaseline()" style="background:#25447A; border-color:#25447A;">Yes, Generate Schedule</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ AUTO-GENERATE SECTIONS MODAL ═══ -->
+  <div class="modal-overlay" id="autoGenerateSectionsModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);">Auto-Generate Academic Sections</h3>
+        </div>
+        <button onclick="closeAutoGenerateSectionsModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:22px;">
+        <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" style="font-weight:700; font-size:12px;">Program</label>
+            <select id="autoGenProgram" style="width:100%;">
+              <option value="all">All Programs</option>
+              <option value="BSIT">BSIT</option>
+              <option value="BSCS">BSCS</option>
+              <option value="BSCpE">BSCpE</option>
+              <option value="BSHM">BSHM</option>
+              <option value="BSTM">BSTM</option>
+              <option value="BSBA">BSBA</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" style="font-weight:700; font-size:12px;">Year Level</label>
+            <select id="autoGenYear" style="width:100%;">
+              <option value="all">All Year Levels</option>
+              <option value="1">1st Year</option>
+              <option value="2">2nd Year</option>
+              <option value="3">3rd Year</option>
+              <option value="4">4th Year</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" style="font-weight:700; font-size:12px;">Generation Method</label>
+          <div style="display:flex; gap:16px; margin-top:4px;">
+            <label style="font-size:12.5px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="radio" name="autoGenMode" id="autoGenModeProj" value="projection" checked onchange="toggleAutoGenModeUI()" />
+              By Projected Enrollment
+            </label>
+            <label style="font-size:12.5px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="radio" name="autoGenMode" id="autoGenModeCount" value="count" onchange="toggleAutoGenModeUI()" />
+              By Section Count
+            </label>
+          </div>
+        </div>
+
+        <!-- Mode A: Projected Enrollment -->
+        <div id="autoGenProjectionFields" class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" style="font-weight:700; font-size:12px;">Projected Enrollment</label>
+            <input type="number" id="autoGenTotalStudents" value="150" min="15" max="1000" style="width:100%;" oninput="calculateAutoGenPreview()" />
+            <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">Total expected students</span>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" style="font-weight:700; font-size:12px;">Target Students / Sec</label>
+            <input type="number" id="autoGenMaxStudentsPerSec" value="38" min="20" max="60" style="width:100%;" oninput="calculateAutoGenPreview()" />
+            <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">Average section capacity</span>
+          </div>
+        </div>
+
+        <!-- Mode B: Direct Count -->
+        <div id="autoGenCountFields" class="form-row" style="display:none; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" style="font-weight:700; font-size:12px;">Sections to Create</label>
+            <input type="number" id="autoGenDirectCount" value="3" min="1" max="10" style="width:100%;" oninput="calculateAutoGenPreview()" />
+            <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">Count per program/year</span>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" style="font-weight:700; font-size:12px;">Students / Sec</label>
+            <input type="number" id="autoGenDirectStudents" value="35" min="15" max="60" style="width:100%;" oninput="calculateAutoGenPreview()" />
+            <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">Capacity per section</span>
+          </div>
+        </div>
+
+        <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:10px 14px; margin-bottom:14px;">
+          <div style="font-size:12px; font-weight:700; color:#166534;" id="autoGenPreviewLabel">
+            Preview: Will generate ~4 sections (38 students each) per selected program & year.
+          </div>
+          <label style="font-size:12px; color:#15803D; display:flex; align-items:center; gap:6px; margin-top:6px; cursor:pointer;">
+            <input type="checkbox" id="autoGenAttachSubjects" checked style="width:15px; height:15px;" />
+            Auto-attach active curriculum subjects from Step 3
+          </label>
+        </div>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeAutoGenerateSectionsModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAutoGenerateSections()">Generate Sections</button>
       </div>
     </div>
   </div>

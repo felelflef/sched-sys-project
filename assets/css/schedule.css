@@ -1,13 +1,241 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   MODULE 1 — SECTION MASTER TIMETABLE (SPREADSHEET-LIKE ARCHITECTURE)
+   MODULE 1 — ACADEMIC SCHEDULING LIFECYCLE & MASTER TIMETABLE ARCHITECTURE
    ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Lifecycle Stepper Bar ─── */
+.schedule-stepper-container {
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+}
+
+.schedule-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
+  overflow-x: auto;
+}
+
+.stepper-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  user-select: none;
+  flex: 1;
+  min-width: 130px;
+  border: 1px solid transparent;
+}
+
+.stepper-step:hover {
+  background: #F3F4F6;
+}
+
+.stepper-step.active {
+  background: #EFF6FF;
+  border-color: #BFDBFE;
+}
+
+.stepper-step.completed .step-number {
+  background: #10B981;
+  color: #FFFFFF;
+}
+
+.stepper-step .step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #E5E7EB;
+  color: #4B5563;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.stepper-step.active .step-number {
+  background: #1C3664;
+  color: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(28, 54, 100, 0.2);
+}
+
+.step-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1F2937;
+  white-space: nowrap;
+}
+
+.stepper-step.active .step-label {
+  color: #1C3664;
+}
+
+.step-sub {
+  font-size: 10.5px;
+  color: #6B7280;
+  white-space: nowrap;
+}
+
+.stepper-step.active .step-sub {
+  color: #2563EB;
+  font-weight: 600;
+}
+
+.stepper-step.locked {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+.stepper-step.locked:hover {
+  background: transparent !important;
+}
+.stepper-step.locked .step-number {
+  background: #F3F4F6 !important;
+  color: #9CA3AF !important;
+  border: 1px dashed #D1D5DB !important;
+  box-shadow: none !important;
+}
+.stepper-step.locked .step-label {
+  color: #9CA3AF !important;
+}
+.stepper-step.locked .step-sub {
+  color: #D97706 !important;
+}
+
+.stepper-divider {
+  width: 20px;
+  height: 2px;
+  background: #E5E7EB;
+  flex-shrink: 0;
+}
+
+/* ─── Step Panels ─── */
+.step-panel {
+  display: none;
+}
+
+.step-panel.active {
+  display: block;
+  animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Lifecycle Cards & Tables ─── */
+.lifecycle-card {
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-float);
+}
+
+.lifecycle-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lifecycle-card-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #1C3664;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lifecycle-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.lifecycle-table th {
+  background: #F8FAFD;
+  color: #374151;
+  font-weight: 700;
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--border-subtle);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lifecycle-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: #1F2937;
+  vertical-align: middle;
+}
+
+.lifecycle-table tbody tr:hover {
+  background: #F9FAFB;
+}
+
+/* ─── View Toggle Group (Segmented Controls) ─── */
+.view-toggle-group {
+  display: inline-flex;
+  background: #E5E7EB;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.view-toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4B5563;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.view-toggle-btn:hover {
+  color: #111827;
+}
+
+.view-toggle-btn.active {
+  background: #FFFFFF;
+  color: #1C3664;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
 
 /* ─── Grid Controls ─── */
 .grid-controls {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   flex-wrap: wrap;
 }
 .filter-group {
@@ -20,7 +248,7 @@
   font-weight: 700;
   color: var(--text-secondary);
 }
-select, input[type="text"], input[type="search"] {
+select, input[type="text"], input[type="search"], input[type="number"], input[type="date"] {
   padding: 7px 12px;
   border: 1.5px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -45,12 +273,39 @@ select:focus, input:focus {
   border-radius: 8px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
   z-index: 100;
-  min-width: 220px;
+  min-width: 230px;
   overflow: hidden;
 }
 .export-dropdown-menu a:hover {
   background: #F8FAFD;
   color: var(--accent-primary);
+}
+
+/* ─── Diagnostic Unassigned Classes Banner ─── */
+.unassigned-banner {
+  background: #FFFBEB;
+  border: 1.5px solid #F59E0B;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  color: #92400E;
+  display: none;
+}
+.unassigned-banner.show {
+  display: block;
+}
+.unassigned-title {
+  font-weight: 800;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.unassigned-list {
+  margin: 6px 0 0 18px;
+  line-height: 1.6;
 }
 
 /* ─── Section Timetable Sheet Card ─── */
@@ -61,6 +316,60 @@ select:focus, input:focus {
   padding: 22px;
   box-shadow: var(--shadow-float);
   margin-bottom: 24px;
+  transition: all 0.2s ease;
+}
+
+/* Plain Print-Like Style Option */
+.timetable-sheet-card.plain-print-style {
+  background: #FFFFFF !important;
+  border: 1px solid #000000 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 14px !important;
+}
+
+.timetable-sheet-card.plain-print-style .timetable-sheet-header {
+  border-bottom: 1.5px solid #000000 !important;
+  padding-bottom: 8px !important;
+  margin-bottom: 10px !important;
+}
+
+.timetable-sheet-card.plain-print-style .section-title-large {
+  font-family: Arial, Calibri, sans-serif !important;
+  font-size: 20px !important;
+  color: #000000 !important;
+}
+
+.timetable-sheet-card.plain-print-style .sheet-stat-pill {
+  background: #FFFFFF !important;
+  border: 1px solid #000000 !important;
+  border-radius: 0 !important;
+  padding: 3px 8px !important;
+}
+
+.timetable-sheet-card.plain-print-style .section-spreadsheet-table {
+  font-family: Arial, Calibri, sans-serif !important;
+  font-size: 8.5px !important;
+}
+
+.timetable-sheet-card.plain-print-style .class-subj-name {
+  font-size: 8px !important;
+  font-weight: 500 !important;
+}
+
+.timetable-sheet-card.plain-print-style .cell-quick-edit-btn {
+  display: none !important;
+}
+
+.timetable-sheet-card.plain-print-style .class-subj-title {
+  font-size: 9.5px !important;
+  font-weight: bold !important;
+}
+
+.timetable-sheet-card.plain-print-style .class-meta-line,
+.timetable-sheet-card.plain-print-style .class-units-line,
+.timetable-sheet-card.plain-print-style .class-sec-badge {
+  font-size: 8.5px !important;
 }
 
 /* ─── Sheet Header ─── */
@@ -186,6 +495,15 @@ select:focus, input:focus {
   padding: 0;
   height: 28px;
   box-sizing: border-box;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.section-spreadsheet-table td.empty-cell:hover {
+  background: #F1F5F9;
+}
+.section-spreadsheet-table td.empty-cell.drag-over {
+  background: #DBEAFE !important;
+  outline: 2px dashed #2563EB;
 }
 
 /* ─── Class Block Cell (Merged Cell with Rowspan) ─── */
@@ -193,12 +511,15 @@ select:focus, input:focus {
   border: 1px solid #000000;
   padding: 4px 6px !important;
   vertical-align: top;
-  cursor: pointer;
+  cursor: grab;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
   user-select: none;
   box-sizing: border-box;
   position: relative;
   overflow: visible;
+}
+.section-spreadsheet-table td.class-block-cell:active {
+  cursor: grabbing;
 }
 
 .section-spreadsheet-table td.class-block-cell:hover {
@@ -261,6 +582,29 @@ select:focus, input:focus {
   font-weight: 800;
   line-height: 1.25;
   word-break: break-word;
+}
+.class-subj-name {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.95;
+  line-height: 1.25;
+  margin-top: 1px;
+  word-break: break-word;
+}
+.cell-quick-edit-btn {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  cursor: pointer;
+  line-height: 1.2;
+  transition: all 0.15s ease;
+}
+.cell-quick-edit-btn:hover {
+  background: #FFFFFF;
+  border-color: var(--accent-primary);
+  transform: scale(1.1);
 }
 .class-meta-line {
   font-size: 10px;
@@ -362,9 +706,47 @@ select:focus, input:focus {
   background: #FEF3C7;
   border-left: 3.5px solid #D97706;
 }
-.legend-swatch.conflict {
-  background: #FEE2E2;
-  border: 1.5px solid #DC2626;
+
+/* ─── Readiness Checklist & Badges ─── */
+.readiness-box {
+  background: #F8FAFD;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 16px;
+}
+.readiness-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #E5E7EB;
+}
+.readiness-item:last-child {
+  border-bottom: none;
+}
+.readiness-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.readiness-icon.pass {
+  background: #DEF7EC;
+  color: #03543F;
+}
+.readiness-icon.warning {
+  background: #FEF08A;
+  color: #854D0E;
+}
+.readiness-icon.critical {
+  background: #FDE8E8;
+  color: #9B1C1C;
 }
 
 /* ─── Print Stylesheet (Strict Landscape, Crisp Borders & Colors) ─── */
@@ -387,13 +769,17 @@ select:focus, input:focus {
   .grid-controls,
   .export-dropdown-menu,
   .modal-overlay,
+  .schedule-stepper-container,
+  .view-toggle-group,
+  .btn,
   #userDropdownMenu {
     display: none !important;
   }
   .app-shell,
   .main,
   .content,
-  .module-page {
+  .module-page,
+  .step-panel.active {
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
