@@ -2,14 +2,40 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+
 requireLogin();
-requireRole('admin');
+
+// Allow authenticated roles to access schedule optimization insights
+$allowedRoles = ['admin', 'academic-head', 'program-head', 'faculty'];
+if (!in_array($_SESSION['role'] ?? '', $allowedRoles, true)) {
+    jsonResponse(['success' => false, 'error' => 'Forbidden: You do not have access to the AI Schedule Assistant.'], 403);
+}
 
 header('Content-Type: application/json');
+
+if (empty(GEMINI_API_KEY) || GEMINI_API_KEY === 'your_gemini_api_key_here') {
+    jsonResponse([
+        'success' => false,
+        'error' => 'Gemini API key is not configured. Please set the GEMINI_API_KEY environment variable in your server configuration (e.g., in Render dashboard or .env).'
+    ], 400);
+}
+
 $db = getDB();
 
 try {
-    // Fetch last 7 days of session logs
+    // Read request body for POST requests or query parameters for GET
+    $input = [];
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $raw = file_get_contents('php://input');
+        if (!empty($raw)) {
+            $input = json_decode($raw, true) ?: [];
+        }
+    }
+
+    $action = $input['action'] ?? ($_GET['action'] ?? 'full_audit');
+    $userQuestion = trim($input['question'] ?? ($_GET['question'] ?? ''));
+
+    // 1. Fetch last 7 days of actual classroom session logs
     $stmtLogs = $db->prepare("
         SELECT c.room_name_number, u.first_name, u.last_name, sl.session_date, sl.actual_start_time, sl.actual_end_time 
         FROM session_logs sl 
@@ -27,7 +53,7 @@ try {
         $logsText .= "Room {$log['room_name_number']} | Faculty: {$log['first_name']} {$log['last_name']} | Date: {$log['session_date']} | Start: {$log['actual_start_time']} | End: {$endTime}\n";
     }
 
-    // Fetch all schedules
+    // 2. Fetch all current scheduled classes
     $stmtSched = $db->prepare("
         SELECT c.room_name_number, s.day_of_week, s.start_time, s.end_time, s.subject_code, s.section_name, u.first_name, u.last_name 
         FROM schedules s 
@@ -43,31 +69,67 @@ try {
         $schedText .= "Room {$sched['room_name_number']} | Day: {$sched['day_of_week']} | Time: {$sched['start_time']}-{$sched['end_time']} | Subject: {$sched['subject_code']} | Section: {$sched['section_name']} | Faculty: {$sched['first_name']} {$sched['last_name']}\n";
     }
 
-    if (empty($logsText) && empty($schedText)) {
-        jsonResponse(['success' => true, 'data' => 'No schedule or session data available yet. Add schedules and start logging sessions to receive AI-powered utilization insights.']);
+    // 3. Fetch campus classroom inventory
+    $stmtRooms = $db->query("SELECT room_name_number, room_type, capacity, floor_level FROM classrooms ORDER BY floor_level, room_name_number");
+    $rooms = $stmtRooms->fetchAll();
+    $roomsText = "";
+    foreach ($rooms as $r) {
+        $roomsText .= "Room {$r['room_name_number']} (Floor {$r['floor_level']}, Type: {$r['room_type']}, Capacity: {$r['capacity']})\n";
     }
 
-    $prompt = "You are an AI campus space utilization analyst for STI College Marikina. The campus has 22 rooms across 3 floors (Floor 1: 4 Labs, Kitchen, Bar; Floor 2: Rooms 201-205; Floor 3: Rooms 301-310, Tourism Lab). Analyze the following classroom usage data and provide 3-5 actionable recommendations.
+    if (empty($schedText) && empty($logsText)) {
+        jsonResponse([
+            'success' => true,
+            'data' => "### Schedule System Notice\n\nNo class schedules or session logs were found in the database. Please add classroom schedules in the **Master Schedule** tab first so that the AI can analyze your campus data."
+        ]);
+    }
 
-SCHEDULED CLASSES:
+    // Strict system guardrail instruction: Only scheduling system domain
+    $systemGuardrail = "You are the STI College Classroom & Schedule AI Optimization Assistant for STI College Marikina.
+
+CAMPUS ROOM DIRECTORY:
+{$roomsText}
+
+SCHEDULED CLASSES IN SYSTEM:
 {$schedText}
-ACTUAL SESSION LOGS (Last 7 Days):
-{$logsText}
-Provide insights on:
-1. Rooms that are consistently underutilized
-2. Peak hours and congestion patterns
-3. Discrepancies between scheduled and actual usage (phantom occupancy)
-4. Recommendations for better space allocation
 
-Format your response with clear numbered points and bold key findings using **bold** markdown.";
+RECENT ACTUAL OCCUPANCY LOGS (Last 7 Days):
+" . (!empty($logsText) ? $logsText : "No manual check-in logs recorded yet.") . "
+
+STRICT DOMAIN GUARDRAILS:
+1. You are an expert AI dedicated EXCLUSIVELY to STI College classroom scheduling, room space utilization, faculty timetable assignments, conflict detection, and academic scheduling logistics.
+2. You MUST REFUSE to answer any queries or topics unrelated to STI scheduling, room usage, timetables, faculty loads, or campus spaces (for example, general chat, coding, recipes, personal advice, weather, sports, general knowledge, etc.).
+3. If an inquiry is NOT strictly about STI scheduling or classroom operations, reply ONLY with:
+'I am an assistant dedicated solely to STI College classroom scheduling, room allocation, and space optimization. I cannot answer questions on unrelated topics. Please ask a question related to class schedules, room availability, faculty teaching loads, or campus space utilization.'
+4. When answering on-topic questions, format your response cleanly with bold key points, bullet lists, and clear headers using markdown. Be professional, direct, and actionable.";
+
+    // Select analysis prompt based on action
+    $userPrompt = "";
+    if ($action === 'underutilized') {
+        $userPrompt = "Analyze the current schedule and room inventory to identify classrooms and time slots that are consistently underutilized, empty, or have low seat occupancy. Provide specific room numbers and recommendations to balance room usage across floors.";
+    } elseif ($action === 'peak_hours') {
+        $userPrompt = "Analyze the schedule data to identify peak congestion hours across the week, bottleneck facilities (e.g. computer laboratories), and suggest time-shifting strategies to smooth out campus foot traffic.";
+    } elseif ($action === 'conflicts') {
+        $userPrompt = "Analyze the schedule data and session logs to detect any overlapping schedules, potential phantom occupancy (scheduled classes where the room was logged vacant or vice-versa), or classroom capacity mismatches.";
+    } elseif ($action === 'custom_query' || !empty($userQuestion)) {
+        $userPrompt = "User question about the STI schedule system:\n" . $userQuestion;
+    } else {
+        // Full audit
+        $userPrompt = "Perform a comprehensive space & schedule optimization audit. Provide 3-5 high-impact, actionable recommendations regarding underutilized rooms, peak bottlenecks, room capacity efficiency, and faculty timetable distribution.";
+    }
 
     $postData = [
+        'system_instruction' => [
+            'parts' => [
+                ['text' => $systemGuardrail]
+            ]
+        ],
         'contents' => [
-            ['parts' => [['text' => $prompt]]]
+            ['parts' => [['text' => $userPrompt]]]
         ],
         'generationConfig' => [
-            'temperature' => 0.7,
-            'maxOutputTokens' => 1024
+            'temperature' => 0.4,
+            'maxOutputTokens' => 1500
         ]
     ];
 
@@ -78,8 +140,9 @@ Format your response with clear numbered points and bold key findings using **bo
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 40);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -87,15 +150,31 @@ Format your response with clear numbered points and bold key findings using **bo
     curl_close($ch);
 
     if ($curlError) {
-        jsonResponse(['success' => false, 'error' => 'Connection error: ' . $curlError], 500);
+        jsonResponse(['success' => false, 'error' => 'Connection to Gemini API failed: ' . $curlError], 500);
     }
 
     if ($httpCode !== 200 || !$response) {
-        jsonResponse(['success' => false, 'error' => 'Gemini API returned HTTP ' . $httpCode . '. Check your API key in config/db.php.'], 500);
+        $errDetail = '';
+        if ($response) {
+            $errObj = json_decode($response, true);
+            $errDetail = $errObj['error']['message'] ?? ('HTTP ' . $httpCode);
+        } else {
+            $errDetail = 'HTTP ' . $httpCode;
+        }
+        jsonResponse(['success' => false, 'error' => 'Gemini API Error (' . $errDetail . '). Check your GEMINI_API_KEY and model in your environment settings.'], 500);
     }
 
     $responseData = json_decode($response, true);
-    $aiText = $responseData['candidates'][0]['content']['parts'][0]['text'] ?? 'No insights generated. The API returned an unexpected response format.';
+    $candidate = $responseData['candidates'][0] ?? null;
+    $aiText = $candidate['content']['parts'][0]['text'] ?? null;
+    if (!$aiText) {
+        $finishReason = $candidate['finishReason'] ?? 'UNKNOWN';
+        if ($finishReason === 'SAFETY') {
+            $aiText = "The response was blocked by safety filters.";
+        } else {
+            $aiText = $responseData['promptFeedback']['blockReason'] ?? 'No insights generated. The API returned an unexpected response format.';
+        }
+    }
 
     jsonResponse(['success' => true, 'data' => $aiText]);
 

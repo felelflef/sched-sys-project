@@ -68,7 +68,7 @@ function renderFacultyCards() {
     const qualsHtml = (fac.quals || []).map(q => `<span class="qual-tag locked">${q}</span>`).join('');
 
     const facultyActionBtns = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal('${fac.email}')">Edit Dept</button>
+      ? `<button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal('${fac.email}')">Edit Profile</button>
          <button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteFaculty('${fac.email}')">Remove</button>`
       : ``;
 
@@ -199,15 +199,19 @@ window.deleteDepartment = function(idx) {
 
 window.openChangeFacultyDeptModal = function(identifier) {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to edit faculty departments.');
+    alert('Access Denied: Only system administrators are authorized to edit faculty profiles.');
     return;
   }
   const fac = FACULTY.find(f => (f.email && f.email.toLowerCase() === identifier.toLowerCase()) || (f.name && f.name.toLowerCase() === identifier.toLowerCase()));
   if (!fac) return;
 
   document.getElementById('changeFacultyDeptTargetEmail').value = fac.email;
-  document.getElementById('changeFacultyDeptNameDisplay').textContent = fac.name;
-  document.getElementById('changeFacultyDeptEmailDisplay').textContent = `${fac.email} · Current: ${fac.dept}`;
+  const nameInput = document.getElementById('changeFacultyNameInput');
+  if (nameInput) nameInput.value = fac.name;
+  const nameDisplay = document.getElementById('changeFacultyDeptNameDisplay');
+  if (nameDisplay) nameDisplay.textContent = fac.name;
+  const emailDisplay = document.getElementById('changeFacultyDeptEmailDisplay');
+  if (emailDisplay) emailDisplay.textContent = `${fac.email} · Current Dept: ${fac.dept}`;
 
   const select = document.getElementById('changeFacultyDeptSelect');
   select.innerHTML = '';
@@ -228,23 +232,95 @@ window.closeChangeFacultyDeptModal = function() {
 
 window.submitChangeFacultyDept = function() {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to edit faculty departments.');
+    alert('Access Denied: Only system administrators are authorized to edit faculty profiles.');
     return;
   }
   const email = document.getElementById('changeFacultyDeptTargetEmail').value;
   const newDept = document.getElementById('changeFacultyDeptSelect').value;
-  const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
-  if (fac && newDept) {
-    fac.dept = newDept;
-    closeChangeFacultyDeptModal();
-    renderFacultyCards();
-    renderDeptList();
-    renderDeptFilterOptions();
+  const nameInput = document.getElementById('changeFacultyNameInput');
+  const newName = nameInput ? nameInput.value.trim() : '';
+
+  if (!newName) {
+    alert('Please enter a valid faculty name.');
+    return;
   }
+
+  const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
+  if (!fac) {
+    alert('Faculty profile not found.');
+    return;
+  }
+
+  const oldName = fac.name;
+
+  // 1. Update faculty profile
+  fac.name = newName;
+  if (newDept) fac.dept = newDept;
+
+  // 2. Update registered account in USERS list
+  const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (user) {
+    user.name = newName;
+  }
+
+  // 3. Update VALID_USERS cache
+  if (VALID_USERS[email.toLowerCase()]) {
+    VALID_USERS[email.toLowerCase()].name = newName;
+    VALID_USERS[email.toLowerCase()].initials = newName.split(' ').filter(w => w.length > 0).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+  }
+
+  // 4. Update assigned timetable slots if name changed
+  if (oldName !== newName && typeof scheduleData !== 'undefined') {
+    Object.keys(scheduleData).forEach(roomCode => {
+      Object.keys(scheduleData[roomCode]).forEach(slotIdx => {
+        if (scheduleData[roomCode][slotIdx]?.faculty === oldName) {
+          scheduleData[roomCode][slotIdx].faculty = newName;
+        }
+      });
+    });
+  }
+
+  // 5. Update CURRENT_USER if admin edited their own account
+  if (CURRENT_USER && CURRENT_USER.email.toLowerCase() === email.toLowerCase()) {
+    CURRENT_USER.name = newName;
+    CURRENT_USER.initials = newName.split(' ').filter(w => w.length > 0).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+    const sidebarName = document.querySelector('.sidebar-footer .user-name');
+    if (sidebarName) sidebarName.textContent = newName;
+    const sidebarAvatar = document.querySelector('.sidebar-footer .avatar');
+    if (sidebarAvatar) sidebarAvatar.textContent = CURRENT_USER.initials;
+  }
+
+  // 6. Persist name and subject_role to MySQL via API
+  const nameParts = newName.split(' ');
+  const firstName = nameParts[0];
+  const lastName = nameParts.slice(1).join(' ') || nameParts[0];
+
+  fetch('/api/users.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'edit_user',
+      email: email,
+      first_name: firstName,
+      last_name: lastName,
+      subject_role: newDept
+    })
+  }).catch(err => {
+    console.log('[Database update offline/standalone mode]:', err);
+  });
+
+  closeChangeFacultyDeptModal();
+  renderFacultyCards();
+  renderUserTable();
+  renderGrid();
+  renderDeptList();
+  renderDeptFilterOptions();
 };
 
-// Backward-compatible alias
+// Backward-compatible aliases
 window.changeFacultyDept = window.openChangeFacultyDeptModal;
+window.openEditFacultyModal = window.openChangeFacultyDeptModal;
+window.submitChangeFacultyProfile = window.submitChangeFacultyDept;
 
 // Add Faculty Modal Functions
 window.openAddFacultyModal = function() {

@@ -1,4 +1,4 @@
--- ─────────────────────────────────────────────────────────────
+﻿-- ─────────────────────────────────────────────────────────────
 -- Scheduling System — Database Schema
 -- Import this into your Aiven MySQL database via the Aiven
 -- web console (Query Editor) or via mysql CLI:
@@ -28,6 +28,7 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('admin', 'academic-head', 'program-head', 'faculty') NOT NULL,
     subject_role VARCHAR(50) DEFAULT 'IT',
+    active_session_token VARCHAR(255) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

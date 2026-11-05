@@ -6,13 +6,25 @@ require_once __DIR__ . '/../includes/functions.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    if (isLoggedIn()) {
+    // If user is currently flagged as logged in in PHP session, check if active token in DB is valid
+    if (isset($_SESSION['user_id'])) {
+        if (!validateActiveSession()) {
+            jsonResponse([
+                'success' => false,
+                'logged_in' => false,
+                'code' => 'SESSION_SUPERSEDED',
+                'message' => 'Your account was logged in from another device/instance (e.g. phone). This session has been terminated.',
+                'csrf_token' => generateCSRF()
+            ]);
+        }
+
         $user = currentUser();
         $initials = strtoupper(substr($user['first_name'] ?? '', 0, 1) . substr($user['last_name'] ?? '', 0, 1));
         if (empty($initials)) $initials = 'ST';
         jsonResponse([
             'success' => true,
             'logged_in' => true,
+            'session_token' => $_SESSION['session_token'] ?? null,
             'user' => [
                 'user_id' => $user['user_id'],
                 'first_name' => $user['first_name'],
@@ -42,6 +54,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $input['action'] ?? 'login';
 
     if ($action === 'logout') {
+        try {
+            if (isset($_SESSION['user_id'])) {
+                $db = getDB();
+                $clearStmt = $db->prepare("UPDATE users SET active_session_token = NULL WHERE user_id = ?");
+                $clearStmt->execute([$_SESSION['user_id']]);
+            }
+        } catch (\Throwable $e) {
+            // Ignore DB errors during logout cleanup
+        }
+
         $_SESSION = [];
         if (ini_get("session.use_cookies")) {
             $params = session_get_cookie_params();
@@ -68,7 +90,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password_hash'])) {
+            // Generate a fresh unique session token for this new login instance
+            $sessionToken = bin2hex(random_bytes(32));
+
+            // Set this session token in MySQL as the single active instance.
+            // Any prior active instance (e.g. desktop) will now fail validation and log out.
+            $updateTokenStmt = $db->prepare("UPDATE users SET active_session_token = ? WHERE user_id = ?");
+            $updateTokenStmt->execute([$sessionToken, $user['user_id']]);
+
             $_SESSION['user_id'] = $user['user_id'];
+            $_SESSION['session_token'] = $sessionToken;
             $_SESSION['role'] = $user['role'];
             $_SESSION['first_name'] = $user['first_name'];
             $_SESSION['last_name'] = $user['last_name'];
@@ -81,6 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             jsonResponse([
                 'success' => true,
                 'message' => 'Authentication successful',
+                'session_token' => $sessionToken,
                 'user' => [
                     'user_id' => $user['user_id'],
                     'first_name' => $user['first_name'],

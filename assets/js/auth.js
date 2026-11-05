@@ -2,6 +2,35 @@
    AUTHENTICATION & USER SESSION HANDLERS
    ═══════════════════════════════════════════════════ */
 
+// Unique ID for this specific browser instance/tab
+const CURRENT_INSTANCE_ID = 'inst_' + Math.random().toString(36).substring(2, 12) + '_' + Date.now();
+let sessionHeartbeatTimer = null;
+let activeSessionToken = null;
+
+// Cross-tab broadcast channel for local multi-instance coordination
+const sessionChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('sti_session_channel') : null;
+
+if (sessionChannel) {
+  sessionChannel.onmessage = (event) => {
+    const data = event.data;
+    if (data && data.type === 'NEW_LOGIN' && CURRENT_USER) {
+      if (data.email.toLowerCase() === CURRENT_USER.email.toLowerCase() && data.instanceId !== CURRENT_INSTANCE_ID) {
+        handleSessionTerminated('Your account was logged into from another window or tab.');
+      }
+    }
+  };
+}
+
+// Storage event listener for cross-tab session displacement
+window.addEventListener('storage', (e) => {
+  if (e.key && e.key.startsWith('sti_active_instance_') && CURRENT_USER) {
+    const userKey = 'sti_active_instance_' + CURRENT_USER.email.toLowerCase();
+    if (e.key === userKey && e.newValue && e.newValue !== CURRENT_INSTANCE_ID) {
+      handleSessionTerminated('Your account was logged into from another device or window.');
+    }
+  }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   const btnLogin = document.getElementById('btnLogin');
   if (btnLogin) btnLogin.addEventListener('click', handleLogin);
@@ -14,13 +43,103 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-function completeLoginTransition(user, normalizedEmail) {
+function startSessionHeartbeat() {
+  stopSessionHeartbeat();
+  sessionHeartbeatTimer = setInterval(async () => {
+    if (!CURRENT_USER) {
+      stopSessionHeartbeat();
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth.php?check=1', {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.code === 'SESSION_SUPERSEDED' || (data.logged_in === false && data.code)) {
+          handleSessionTerminated(data.message || 'Your account was logged into from another device (e.g. phone). You have been logged out.');
+        }
+      } else if (res.status === 401) {
+        const data = await res.json().catch(() => ({}));
+        if (data.code === 'SESSION_SUPERSEDED') {
+          handleSessionTerminated(data.message || 'Your account was logged into from another device (e.g. phone). You have been logged out.');
+        }
+      }
+    } catch (e) {
+      // Ignore temporary network timeouts
+    }
+  }, 3500);
+}
+
+function stopSessionHeartbeat() {
+  if (sessionHeartbeatTimer) {
+    clearInterval(sessionHeartbeatTimer);
+    sessionHeartbeatTimer = null;
+  }
+}
+
+function handleSessionTerminated(noticeText) {
+  stopSessionHeartbeat();
+
+  const menu = document.getElementById('userDropdownMenu');
+  if (menu) menu.style.display = 'none';
+
+  const appShell = document.getElementById('appShell');
+  const loginPage = document.getElementById('loginPage');
+  if (appShell && loginPage) {
+    appShell.style.display = 'none';
+    loginPage.style.display = 'flex';
+    loginPage.classList.remove('hidden');
+    document.getElementById('loginPassword').value = '';
+  }
+
+  const prevEmail = CURRENT_USER?.email;
+  CURRENT_USER = null;
+  activeSessionToken = null;
+
+  if (prevEmail) {
+    try {
+      localStorage.removeItem('sti_active_instance_' + prevEmail.toLowerCase());
+    } catch (e) {}
+  }
+
+  const errorEl = document.getElementById('loginError');
+  const errorMsg = document.getElementById('loginErrorMsg');
+  if (errorEl && errorMsg) {
+    errorMsg.textContent = noticeText || 'Your account was logged in from another device/instance (e.g. phone). This session has been terminated.';
+    errorEl.classList.add('show');
+  }
+
+  renderGrid();
+  renderRoomTable();
+  renderFacultyCards();
+  renderSubjectTable();
+  renderUserTable();
+}
+
+function completeLoginTransition(user, normalizedEmail, sessionToken) {
   CURRENT_USER = {
     name: user.name,
     email: normalizedEmail,
     role: user.role,
     initials: user.initials || (user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST')
   };
+  activeSessionToken = sessionToken || null;
+
+  // Track active instance for this user account
+  try {
+    localStorage.setItem('sti_active_instance_' + normalizedEmail, CURRENT_INSTANCE_ID);
+    if (sessionChannel) {
+      sessionChannel.postMessage({
+        type: 'NEW_LOGIN',
+        email: normalizedEmail,
+        instanceId: CURRENT_INSTANCE_ID
+      });
+    }
+  } catch (e) {}
+
+  // Start polling to detect if another instance (e.g. phone) logs in
+  startSessionHeartbeat();
 
   document.querySelector('.sidebar-footer .user-name').textContent = user.name;
   document.querySelector('.sidebar-footer .avatar').textContent = CURRENT_USER.initials;
@@ -149,7 +268,7 @@ async function handleLogin() {
       const data = await res.json();
       if (data.success && data.user) {
         btn.classList.remove('loading');
-        completeLoginTransition(data.user, normalizedEmail);
+        completeLoginTransition(data.user, normalizedEmail, data.session_token);
         syncUsersFromDB();
         return;
       } else {
@@ -190,14 +309,16 @@ async function handleLogin() {
       return;
     }
 
-    completeLoginTransition(user, normalizedEmail);
+    completeLoginTransition(user, normalizedEmail, 'offline_' + CURRENT_INSTANCE_ID);
   }, 400);
 }
 
 window.logoutUser = function() {
+  stopSessionHeartbeat();
+
   const menu = document.getElementById('userDropdownMenu');
   if (menu) menu.style.display = 'none';
-  
+
   const appShell = document.getElementById('appShell');
   const loginPage = document.getElementById('loginPage');
   if (appShell && loginPage) {
@@ -208,8 +329,24 @@ window.logoutUser = function() {
     document.getElementById('loginPassword').value = '';
   }
 
+  // Invalidate session on server
+  try {
+    fetch('/api/auth.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' })
+    }).catch(() => {});
+  } catch (e) {}
+
+  if (CURRENT_USER?.email) {
+    try {
+      localStorage.removeItem('sti_active_instance_' + CURRENT_USER.email.toLowerCase());
+    } catch (e) {}
+  }
+
   // Reset state and re-render safe defaults
   CURRENT_USER = null;
+  activeSessionToken = null;
   renderGrid();
   renderRoomTable();
   renderFacultyCards();

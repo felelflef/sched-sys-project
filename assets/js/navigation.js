@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (mod === 'subjects') renderSubjectTable();
       if (mod === 'schedule') renderGrid();
       if (mod === 'users') renderUserTable();
+      if (mod === 'ai' && typeof initAiModule === 'function') initAiModule();
     });
   });
 

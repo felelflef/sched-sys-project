@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
@@ -118,6 +118,31 @@ if ($action === 'add') {
         }
 
         jsonResponse(['success' => true, 'message' => 'Subject role updated successfully']);
+    } catch (PDOException $e) {
+        jsonResponse(['success' => false, 'message' => 'Database error: ' . $e->getMessage()], 500);
+    }
+} elseif ($action === 'edit_user' || $action === 'edit_name') {
+    $email = trim($input['email'] ?? '');
+    $firstName = trim($input['first_name'] ?? '');
+    $lastName = trim($input['last_name'] ?? '');
+    $subjectRole = isset($input['subject_role']) ? trim($input['subject_role']) : null;
+
+    if (empty($email) || empty($firstName)) {
+        jsonResponse(['success' => false, 'message' => 'Email and first name are required'], 400);
+    }
+    if (empty($lastName)) {
+        $lastName = $firstName;
+    }
+
+    try {
+        if ($subjectRole !== null) {
+            $stmt = $db->prepare("UPDATE users SET first_name = ?, last_name = ?, subject_role = ? WHERE email = ?");
+            $stmt->execute([$firstName, $lastName, $subjectRole, $email]);
+        } else {
+            $stmt = $db->prepare("UPDATE users SET first_name = ?, last_name = ? WHERE email = ?");
+            $stmt->execute([$firstName, $lastName, $email]);
+        }
+        jsonResponse(['success' => true, 'message' => 'User account updated successfully']);
     } catch (PDOException $e) {
         jsonResponse(['success' => false, 'message' => 'Database error: ' . $e->getMessage()], 500);
     }

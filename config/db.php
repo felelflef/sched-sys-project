@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -57,6 +57,10 @@ function getDB(): PDO {
                     $checkRole = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
                     if ($checkRole && strpos($checkRole['Type'], 'academic-head') === false) {
                         $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'academic-head', 'program-head', 'faculty') NOT NULL");
+                    }
+                    $checkSession = $pdo->query("SHOW COLUMNS FROM users LIKE 'active_session_token'")->fetch();
+                    if (!$checkSession) {
+                        $pdo->exec("ALTER TABLE users ADD COLUMN active_session_token VARCHAR(255) DEFAULT NULL");
                     }
                 } catch (\Throwable $migErr) {
                     // Silently ignore schema check errors to avoid blocking execution if restricted

@@ -81,5 +81,6 @@ const MODULE_TITLES = {
   rooms:    { title: 'Room Information', sub: '15 lecture rooms · 4 computer labs · 835 total capacity' },
   faculty:  { title: 'Faculty & Resource Profiling', sub: 'Time availability, teaching loads & MAQ certifications' },
   subjects: { title: 'Subject Catalog & Specialization', sub: 'Course codes, department specialization & teaching eligibility' },
+  ai:       { title: 'AI Space & Schedule Optimization', sub: 'Powered by Google Gemini API · Automated room utilization and timetable analytics' },
   users:    { title: 'User Management & Security', sub: 'Role-based access control & audit trail' },
 };
