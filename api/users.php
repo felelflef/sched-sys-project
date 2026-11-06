@@ -1,8 +1,9 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 header('Content-Type: application/json');
+requireLogin();
 $db = getDB();
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -11,7 +12,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $users = $stmt->fetchAll();
         jsonResponse(['success' => true, 'data' => $users]);
     } catch (PDOException $e) {
-        jsonResponse(['success' => false, 'message' => 'Database error: ' . $e->getMessage()], 500);
+        error_log('users.php: ' . $e->getMessage());
+        jsonResponse(['success' => false, 'message' => 'A server error occurred. Please try again later.'], 500);
     }
 }
 
@@ -19,17 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'message' => 'Invalid request method'], 405);
 }
 
-requireLogin();
 requireRole('admin');
+requireCSRF();
 
 $input = json_decode(file_get_contents('php://input'), true);
 if (!$input || !isset($input['action'])) {
     jsonResponse(['success' => false, 'message' => 'Missing action parameter'], 400);
-}
-
-// Validate CSRF if session token exists
-if (isset($_SESSION['csrf_token']) && isset($input['csrf_token']) && !hash_equals($_SESSION['csrf_token'], $input['csrf_token'])) {
-    jsonResponse(['success' => false, 'message' => 'Invalid CSRF token'], 403);
 }
 
 $action = $input['action'];
@@ -38,7 +35,7 @@ if ($action === 'add') {
     $firstName = trim($input['first_name'] ?? '');
     $lastName = trim($input['last_name'] ?? '');
     $email = trim($input['email'] ?? '');
-    $password = !empty($input['password']) ? trim($input['password']) : 'password';
+    $password = trim($input['password'] ?? '');
     $role = $input['role'] ?? 'faculty';
     $subjectRole = trim($input['subject_role'] ?? 'IT');
 
@@ -93,7 +90,8 @@ if ($action === 'add') {
             'user_id' => $db->lastInsertId()
         ]);
     } catch (PDOException $e) {
-        jsonResponse(['success' => false, 'message' => 'Database error: ' . $e->getMessage()], 500);
+        error_log('users.php: ' . $e->getMessage());
+        jsonResponse(['success' => false, 'message' => 'A server error occurred. Please try again later.'], 500);
     }
 } elseif ($action === 'edit_subject_role') {
     $userId = (int)($input['user_id'] ?? 0);
@@ -119,7 +117,8 @@ if ($action === 'add') {
 
         jsonResponse(['success' => true, 'message' => 'Subject role updated successfully']);
     } catch (PDOException $e) {
-        jsonResponse(['success' => false, 'message' => 'Database error: ' . $e->getMessage()], 500);
+        error_log('users.php: ' . $e->getMessage());
+        jsonResponse(['success' => false, 'message' => 'A server error occurred. Please try again later.'], 500);
     }
 } elseif ($action === 'edit_user' || $action === 'edit_name') {
     $email = trim($input['email'] ?? '');
@@ -144,14 +143,21 @@ if ($action === 'add') {
         }
         jsonResponse(['success' => true, 'message' => 'User account updated successfully']);
     } catch (PDOException $e) {
-        jsonResponse(['success' => false, 'message' => 'Database error: ' . $e->getMessage()], 500);
+        error_log('users.php: ' . $e->getMessage());
+        jsonResponse(['success' => false, 'message' => 'A server error occurred. Please try again later.'], 500);
     }
 } elseif ($action === 'delete' || $action === 'delete_by_email') {
     $userId = (int)($input['user_id'] ?? 0);
     $email = trim($input['email'] ?? '');
     $current = currentUser();
 
-    if ($email === 'admin@sti.edu' || ($current && $email === $current['email'])) {
+    if ($userId > 0 && empty($email)) {
+        $lookup = $db->prepare("SELECT email FROM users WHERE user_id = ?");
+        $lookup->execute([$userId]);
+        $email = (string)$lookup->fetchColumn();
+    }
+
+    if (strcasecmp($email, 'admin@sti.edu') === 0 || ($current && strcasecmp($email, $current['email']) === 0)) {
         jsonResponse(['success' => false, 'message' => 'Cannot delete the primary administrator account'], 400);
     }
 
@@ -172,7 +178,8 @@ if ($action === 'add') {
 
         jsonResponse(['success' => true, 'message' => 'Account removed successfully']);
     } catch (PDOException $e) {
-        jsonResponse(['success' => false, 'message' => 'Database error: ' . $e->getMessage()], 500);
+        error_log('users.php: ' . $e->getMessage());
+        jsonResponse(['success' => false, 'message' => 'A server error occurred. Please try again later.'], 500);
     }
 } else {
     jsonResponse(['success' => false, 'message' => 'Unknown action: ' . $action], 400);

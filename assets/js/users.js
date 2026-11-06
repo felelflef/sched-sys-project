@@ -40,11 +40,11 @@ function renderUserTable() {
     }
 
     tr.innerHTML = `
-      <td style="font-weight:600;">${u.name}</td>
-      <td>${u.email}</td>
-      <td><span class="role-badge ${roleBadgeClass}">${u.roleLabel}</span></td>
-      <td style="color:var(--text-secondary);">${u.lastActive}</td>
-      <td><span class="badge" style="${empBadgeStyle} font-size:10.5px; font-weight:700;">${empStatus}</span></td>
+      <td style="font-weight:600;">${escapeHtml(u.name)}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td><span class="role-badge ${roleBadgeClass}">${escapeHtml(u.roleLabel)}</span></td>
+      <td style="color:var(--text-secondary);">${escapeHtml(u.lastActive)}</td>
+      <td><span class="badge" style="${empBadgeStyle} font-size:10.5px; font-weight:700;">${escapeHtml(empStatus)}</span></td>
       <td><span class="badge ${u.status === 'Online' ? 'badge-success' : ''}" style="${u.status === 'Offline' ? 'background:#F2F2F2; color:var(--text-secondary);' : ''}">● ${u.status}</span></td>
       <td style="text-align:right;">
         ${actionCellHtml}
@@ -127,8 +127,8 @@ window.submitAddUser = function() {
     return;
   }
 
-  // Default password to 'password' if left blank
-  if (!password) {
+  // The blank-password default only applies to the local demo mode
+  if (!password && IS_STANDALONE) {
     password = 'password';
   } else if (password.length < 6) {
     showAddUserError('Password must be at least 6 characters.');
@@ -203,7 +203,7 @@ window.submitAddUser = function() {
         status: status,
         load: status === 'Part-time' ? 12 : 18,
         maxLoad: status === 'Part-time' ? 15 : 24,
-        quals: dept === 'IT / CS' ? ['ITE 101', 'CC 103'] : dept === 'Hospitality' ? ['HM 201', 'TM 301'] : ['BA 101'],
+        mainQuals: [],
         bg: colors[Math.floor(Math.random() * colors.length)]
       });
       renderFacultyCards();

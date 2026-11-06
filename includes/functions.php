@@ -7,12 +7,19 @@ function generateCSRF(): string {
 }
 
 function validateCSRF(): bool {
-    $token = $_POST['csrf_token'] ?? null;
+    $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? null);
     if (!$token) {
         $input = json_decode(file_get_contents('php://input'), true);
         $token = $input['csrf_token'] ?? null;
     }
-    return $token && hash_equals($_SESSION['csrf_token'], $token);
+    $expected = $_SESSION['csrf_token'] ?? '';
+    return is_string($token) && $token !== '' && $expected !== '' && hash_equals($expected, $token);
+}
+
+function requireCSRF(): void {
+    if (!validateCSRF()) {
+        jsonResponse(['success' => false, 'code' => 'CSRF_INVALID', 'message' => 'Your session token is invalid. Please refresh the page and try again.'], 403);
+    }
 }
 
 function sanitize(string $str): string {

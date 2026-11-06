@@ -13,4 +13,5 @@ document.addEventListener('DOMContentLoaded', () => {
   renderSubjectTable();
   renderUserTable();
   syncUsersFromDB();
+  loadServerState();
 });

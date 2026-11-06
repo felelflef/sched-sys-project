@@ -27,7 +27,7 @@ function syncMasterScheduleRoomsWithCatalog() {
         code: roomCode,
         floor: floor,
         type: type,
-        cap: 45,
+        cap: 40,
         util: 75,
         name: roomCode
       });

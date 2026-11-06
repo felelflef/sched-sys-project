@@ -42,7 +42,7 @@
             <label for="loginEmail">Email Address</label>
             <div class="field-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              <input type="email" id="loginEmail" placeholder="you@sti.edu" value="admin@sti.edu" autocomplete="email" />
+              <input type="email" id="loginEmail" placeholder="you@sti.edu" autocomplete="email" />
             </div>
           </div>
 
@@ -50,7 +50,7 @@
             <label for="loginPassword">Password</label>
             <div class="field-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <input type="password" id="loginPassword" placeholder="Enter your password" value="password" autocomplete="current-password" />
+              <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password" />
             </div>
           </div>
 
@@ -1193,14 +1193,9 @@
           </div>
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label" style="font-weight:600; font-size:12.5px;">Main Qualifications / Primary (comma-separated)</label>
+          <label class="form-label" style="font-weight:600; font-size:12.5px;">Main Qualifications (comma-separated)</label>
           <input type="text" id="newFacMainQuals" class="form-input" placeholder="e.g. ITE 101, CC 103" />
-          <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">Primary teaching specialization course codes</span>
-        </div>
-        <div class="form-group" style="margin-top:12px; margin-bottom:0;">
-          <label class="form-label" style="font-weight:600; font-size:12.5px;">Side Qualifications / Secondary (comma-separated)</label>
-          <input type="text" id="newFacSideQuals" class="form-input" placeholder="e.g. IM 101, GE 201" />
-          <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">Secondary / elective teaching course codes</span>
+          <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">The subjects this teacher is allowed to teach</span>
         </div>
       </div>
       <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
@@ -1356,8 +1351,8 @@
           <input type="email" id="newUserEmail" class="form-input" placeholder="e.g. maria.santos@sti.edu" />
         </div>
         <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label">Account Password <span style="font-size:11px; color:var(--text-secondary); font-weight:normal;">(default: password)</span></label>
-          <input type="password" id="newUserPassword" class="form-input" placeholder="Enter password or leave blank for default 'password'" />
+          <label class="form-label">Account Password <span style="font-size:11px; color:var(--text-secondary); font-weight:normal;">(at least 6 characters)</span></label>
+          <input type="password" id="newUserPassword" class="form-input" placeholder="Enter a password for this account" />
         </div>
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Account Role</label>
@@ -1471,26 +1466,12 @@
               <select id="modalAddMainQualSelect" class="form-input" style="font-size:11.5px; padding:2px 6px; height:26px; max-width:180px;">
                 <!-- Populated from catalog -->
               </select>
-              <button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 8px; height:26px; color:#0369a1; border-color:#bae6fd;" onclick="addModalQual('main')">+ Add</button>
+              <button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 8px; height:26px; color:#0369a1; border-color:#bae6fd;" onclick="addModalQual()">+ Add</button>
             </div>
           </div>
           <div id="modalMainQualsBadgeContainer" style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; padding:6px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:4px;"></div>
           <input type="hidden" id="changeFacultyMainQualsInput" value="" />
-          <span style="font-size:11px; color:var(--text-secondary); display:block;">Primary teaching specialization courses from catalog</span>
-        </div>
-        <div class="form-group" style="margin-bottom:14px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <label class="form-label" style="font-weight:600; font-size:13px; margin:0; color:var(--text-secondary);">✦ Side Qualifications</label>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <select id="modalAddSideQualSelect" class="form-input" style="font-size:11.5px; padding:2px 6px; height:26px; max-width:180px;">
-                <!-- Populated from catalog -->
-              </select>
-              <button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 8px; height:26px;" onclick="addModalQual('side')">+ Add</button>
-            </div>
-          </div>
-          <div id="modalSideQualsBadgeContainer" style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; padding:6px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:4px;"></div>
-          <input type="hidden" id="changeFacultySideQualsInput" value="" />
-          <span style="font-size:11px; color:var(--text-secondary); display:block;">Secondary / elective teaching courses from catalog</span>
+          <span style="font-size:11px; color:var(--text-secondary); display:block;">The subjects this teacher is allowed to teach</span>
         </div>
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label" style="font-weight:600; font-size:13px; margin-bottom:6px; display:block;">Employment Status</label>
@@ -2127,6 +2108,7 @@
   <script src="assets/js/subjects.js"></script>
   <script src="assets/js/users.js"></script>
   <script src="assets/js/ai.js"></script>
+  <script src="assets/js/sync.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
 </html>

@@ -98,6 +98,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $updateTokenStmt = $db->prepare("UPDATE users SET active_session_token = ? WHERE user_id = ?");
             $updateTokenStmt->execute([$sessionToken, $user['user_id']]);
 
+            // Issue a new session ID at login to prevent session fixation.
+            session_regenerate_id(true);
+
             $_SESSION['user_id'] = $user['user_id'];
             $_SESSION['session_token'] = $sessionToken;
             $_SESSION['role'] = $user['role'];
@@ -129,7 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             jsonResponse(['success' => false, 'message' => 'Invalid email or password'], 401);
         }
     } catch (PDOException $e) {
-        jsonResponse(['success' => false, 'message' => 'Database error: ' . $e->getMessage()], 500);
+        error_log('Login failed: ' . $e->getMessage());
+        jsonResponse(['success' => false, 'message' => 'A server error occurred. Please try again later.'], 500);
     }
 }
 

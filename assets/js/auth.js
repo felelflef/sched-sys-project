@@ -6,6 +6,51 @@
 const CURRENT_INSTANCE_ID = 'inst_' + Math.random().toString(36).substring(2, 12) + '_' + Date.now();
 let sessionHeartbeatTimer = null;
 let activeSessionToken = null;
+let csrfToken = null;
+let lastApiFailureNoticeAt = 0;
+
+// The local demo login only exists when the page is opened directly from disk.
+const IS_STANDALONE = window.location.protocol === 'file:';
+const nativeFetch = window.fetch.bind(window);
+
+async function refreshCsrfToken() {
+  try {
+    const res = await nativeFetch('api/auth.php?check=1', { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    if (data.csrf_token) csrfToken = data.csrf_token;
+  } catch (e) {
+    // The heartbeat retries while the user stays signed in
+  }
+}
+
+async function reportApiWriteFailure(res) {
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    handleSessionTerminated(data.message || 'Your session has expired. Please log in again.');
+    return;
+  }
+  const now = Date.now();
+  if (now - lastApiFailureNoticeAt < 5000) return;
+  lastApiFailureNoticeAt = now;
+  alert(`The server did not save this change, so it exists only in this browser.\n\n${data.message || data.error || `HTTP ${res.status}`}`);
+}
+
+// Adds the CSRF token to API writes and makes rejected saves visible.
+window.fetch = async function(input, init = {}) {
+  const url = typeof input === 'string' ? input : (input?.url || '');
+  const method = (init.method || 'GET').toUpperCase();
+  const isApiWrite = !IS_STANDALONE && method !== 'GET' && /(^|\/)api\/(schedules|users|rooms)\.php/.test(url);
+  if (!isApiWrite) return nativeFetch(input, init);
+
+  if (!csrfToken) await refreshCsrfToken();
+  const headers = new Headers(init.headers || {});
+  if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+
+  const res = await nativeFetch(input, { ...init, headers });
+  if (!res.ok) reportApiWriteFailure(res.clone());
+  else if (typeof handleApiWriteSaved === 'function') handleApiWriteSaved(url, init.body);
+  return res;
+};
 
 // Cross-tab broadcast channel for local multi-instance coordination
 const sessionChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('sti_session_channel') : null;
@@ -93,6 +138,7 @@ function restoreUserSession() {
     const uRoleEl = document.querySelector('.sidebar-footer .user-role');
     if (uRoleEl) uRoleEl.textContent = ROLE_LABELS[user.role] || 'User';
 
+    if (!IS_STANDALONE) refreshCsrfToken();
     startSessionHeartbeat();
     return true;
   } catch (e) {
@@ -114,8 +160,9 @@ function startSessionHeartbeat() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.code === 'SESSION_SUPERSEDED' || (data.logged_in === false && data.code)) {
-          handleSessionTerminated(data.message || 'Your account was logged into from another device (e.g. phone). You have been logged out.');
+        if (data.csrf_token) csrfToken = data.csrf_token;
+        if (data.logged_in === false) {
+          handleSessionTerminated(data.message || 'Your session has expired. Please log in again.');
         }
       } else if (res.status === 401) {
         const data = await res.json().catch(() => ({}));
@@ -285,8 +332,7 @@ async function syncUsersFromDB() {
             VALID_USERS[email] = {
               name: fullName,
               role: u.role,
-              initials: initials,
-              password: 'password'
+              initials: initials
             };
           }
 
@@ -300,7 +346,7 @@ async function syncUsersFromDB() {
                 status: 'Full-time',
                 load: 18,
                 maxLoad: 24,
-                quals: [u.subject_role || 'General'],
+                mainQuals: [],
                 bg: colors[Math.floor(Math.random() * colors.length)]
               });
             }
@@ -342,25 +388,31 @@ async function handleLogin() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: normalizedEmail, password })
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.user) {
-        btn.classList.remove('loading');
-        completeLoginTransition(data.user, normalizedEmail, data.session_token);
-        syncUsersFromDB();
-        return;
-      } else {
-        btn.classList.remove('loading');
-        document.getElementById('loginErrorMsg').textContent = data.message || 'Incorrect password entered.';
-        errorEl.classList.add('show');
-        return;
-      }
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && data.success && data.user) {
+      btn.classList.remove('loading');
+      csrfToken = data.csrf_token || null;
+      completeLoginTransition(data.user, normalizedEmail, data.session_token);
+      syncUsersFromDB();
+      loadServerState();
+      return;
+    }
+    if (!IS_STANDALONE) {
+      btn.classList.remove('loading');
+      document.getElementById('loginErrorMsg').textContent = (data && data.message) || 'Unable to sign in right now. Please try again.';
+      errorEl.classList.add('show');
+      return;
     }
   } catch (apiErr) {
-    console.log('Backend auth unreachable, falling back to local credentials:', apiErr);
+    if (!IS_STANDALONE) {
+      btn.classList.remove('loading');
+      document.getElementById('loginErrorMsg').textContent = 'Unable to reach the server. Please check your connection and try again.';
+      errorEl.classList.add('show');
+      return;
+    }
   }
 
-  // 2. Fallback to local accounts (for standalone file:// mode or offline)
+  // 2. Local demo accounts, only when opened directly from disk (file://)
   setTimeout(() => {
     btn.classList.remove('loading');
 

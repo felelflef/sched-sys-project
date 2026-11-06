@@ -55,23 +55,15 @@ function renderFacultyCards() {
     const loadPct = Math.round((fac.load / fac.maxLoad) * 100);
     const loadColor = loadPct >= 100 ? 'var(--danger)' : loadPct >= 80 ? 'var(--warning)' : 'var(--success)';
 
-    const mainList = Array.isArray(fac.mainQuals) ? fac.mainQuals : (fac.quals ? fac.quals.slice(0, 2) : []);
-    const sideList = Array.isArray(fac.sideQuals) ? fac.sideQuals : (fac.quals ? fac.quals.slice(2) : []);
+    const mainList = fac.mainQuals || [];
     const safeEmailId = fac.email.replace(/[^a-zA-Z0-9]/g, '_');
 
     const mainQualsHtml = mainList.length > 0
       ? mainList.map(q => {
           const removeBtn = isAdmin ? `<span onclick="removeFacultyQual('${escapeHtml(fac.email)}', 'main', '${escapeHtml(q)}', event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(q)}">✕</span>` : '';
-          return `<span class="qual-tag locked" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center;" title="Main Teaching Qualification">★ ${escapeHtml(q)}${removeBtn}</span>`;
+          return `<span class="qual-tag locked" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center;" title="Allowed to teach this subject">★ ${escapeHtml(q)}${removeBtn}</span>`;
         }).join('')
-      : `<span style="font-size:11px; color:var(--text-secondary); font-style:italic;">None</span>`;
-
-    const sideQualsHtml = sideList.length > 0
-      ? sideList.map(q => {
-          const removeBtn = isAdmin ? `<span onclick="removeFacultyQual('${escapeHtml(fac.email)}', 'side', '${escapeHtml(q)}', event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(q)}">✕</span>` : '';
-          return `<span class="qual-tag locked" style="background:#f8fafc; color:#475569; border:1px solid #cbd5e1; display:inline-flex; align-items:center;" title="Side / Secondary Qualification">✦ ${escapeHtml(q)}${removeBtn}</span>`;
-        }).join('')
-      : `<span style="font-size:11px; color:var(--text-secondary); font-style:italic;">None</span>`;
+      : `<span style="font-size:11px; color:var(--danger); font-style:italic;">None: cannot be assigned any classes</span>`;
 
     const facultyActionBtns = isAdmin
       ? `<button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal('${fac.email}')">Edit Profile</button>
@@ -82,12 +74,12 @@ function renderFacultyCards() {
     card.className = 'faculty-card';
     card.innerHTML = `
       <div class="faculty-card-header">
-        <div class="faculty-avatar" style="background:${fac.bg};">${initials}</div>
+        <div class="faculty-avatar" style="background:${escapeHtml(fac.bg)};">${escapeHtml(initials)}</div>
         <div style="flex:1;">
-          <div class="faculty-name">${fac.name}</div>
+          <div class="faculty-name">${escapeHtml(fac.name)}</div>
           <div class="faculty-dept" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-            <span>${fac.dept} · ${fac.status}</span>
-            <span class="badge badge-success" style="font-size:10px; padding:1px 6px;">✓ Account: ${fac.email}</span>
+            <span>${escapeHtml(fac.dept)} · ${escapeHtml(fac.status)}</span>
+            <span class="badge badge-success" style="font-size:10px; padding:1px 6px;">✓ Account: ${escapeHtml(fac.email)}</span>
             ${facultyActionBtns}
           </div>
         </div>
@@ -106,15 +98,8 @@ function renderFacultyCards() {
           ${isAdmin ? `<button class="btn btn-outline" style="font-size:11px; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px; color:#0369a1; border-color:#bae6fd;" onclick="toggleAddQualDropdown('${escapeHtml(fac.email)}', 'main', event)" title="Add Subject Qualification">+ Add</button>` : ''}
         </div>
         <div id="addQualContainer-${safeEmailId}-main" style="display:none; margin-bottom:8px;"></div>
-        <div class="qual-tags" style="margin-bottom:10px;">${mainQualsHtml}</div>
-
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; margin-bottom:4px;">
-          <span class="faculty-meta-label" style="margin:0; font-weight:600; color:var(--text-secondary);">✦ Side Qualifications</span>
-          ${isAdmin ? `<button class="btn btn-outline" style="font-size:11px; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px;" onclick="toggleAddQualDropdown('${escapeHtml(fac.email)}', 'side', event)" title="Add Subject Qualification">+ Add</button>` : ''}
-        </div>
-        <div id="addQualContainer-${safeEmailId}-side" style="display:none; margin-bottom:8px;"></div>
-        <div class="qual-tags">${sideQualsHtml}</div>
-
+        <div class="qual-tags">${mainQualsHtml}</div>
+        <div style="font-size:11px; color:var(--text-secondary); margin-top:6px;">Subjects this teacher is allowed to teach</div>
       </div>
     `;
     grid.appendChild(card);
@@ -157,7 +142,7 @@ window.toggleAddQualDropdown = function(email, type, event) {
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   if (!fac) return;
 
-  const currentQuals = new Set([...(fac.mainQuals || []), ...(fac.sideQuals || [])].map(q => q.toUpperCase()));
+  const currentQuals = new Set((fac.mainQuals || []).map(q => q.toUpperCase()));
   const allSubjs = getAllCatalogSubjects();
   const availableSubjs = allSubjs.filter(s => !currentQuals.has(s.code.toUpperCase()));
 
@@ -198,21 +183,13 @@ window.confirmAddFacultyQual = function(email, type) {
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   if (!fac) return;
 
-  if (!Array.isArray(fac.mainQuals)) fac.mainQuals = Array.isArray(fac.quals) ? [...fac.quals.slice(0, 2)] : [];
-  if (!Array.isArray(fac.sideQuals)) fac.sideQuals = Array.isArray(fac.quals) ? [...fac.quals.slice(2)] : [];
-
-  if (type === 'main') {
-    if (!fac.mainQuals.some(q => q.toUpperCase() === subjCode)) {
-      fac.mainQuals.push(subjCode);
-    }
-  } else {
-    if (!fac.sideQuals.some(q => q.toUpperCase() === subjCode)) {
-      fac.sideQuals.push(subjCode);
-    }
+  if (!Array.isArray(fac.mainQuals)) fac.mainQuals = [];
+  if (!fac.mainQuals.some(q => q.toUpperCase() === subjCode)) {
+    fac.mainQuals.push(subjCode);
   }
 
-  fac.quals = [...new Set([...fac.mainQuals, ...fac.sideQuals])];
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
+  saveFacultyQualifications(fac);
 
   renderFacultyCards();
   if (typeof renderGrid === 'function') renderGrid();
@@ -224,18 +201,16 @@ window.removeFacultyQual = function(email, type, subjectCode, event) {
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   if (!fac) return;
 
-  if (!Array.isArray(fac.mainQuals)) fac.mainQuals = Array.isArray(fac.quals) ? [...fac.quals.slice(0, 2)] : [];
-  if (!Array.isArray(fac.sideQuals)) fac.sideQuals = Array.isArray(fac.quals) ? [...fac.quals.slice(2)] : [];
-
   const target = (subjectCode || '').toUpperCase();
-  if (type === 'main') {
-    fac.mainQuals = fac.mainQuals.filter(q => q.toUpperCase() !== target);
-  } else if (type === 'side') {
-    fac.sideQuals = fac.sideQuals.filter(q => q.toUpperCase() !== target);
-  }
+  fac.mainQuals = (fac.mainQuals || []).filter(q => q.toUpperCase() !== target);
 
-  fac.quals = [...new Set([...fac.mainQuals, ...fac.sideQuals])];
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
+  saveFacultyQualifications(fac);
+
+  const affected = MASTER_SCHEDULE_DATA.filter(c => c.instructor === fac.name && (c.subjectCode || '').toUpperCase() === target).length;
+  if (affected > 0) {
+    alert(`${fac.name} still has ${affected} ${target} class(es). They are marked as conflicts until reassigned, and schedule saves will be refused until then.`);
+  }
 
   renderFacultyCards();
   if (typeof renderGrid === 'function') renderGrid();
@@ -272,7 +247,7 @@ function renderDeptList() {
     row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; gap:8px;';
     row.innerHTML = `
       <div style="flex:1;">
-        <div style="font-weight:600; font-size:13px; color:var(--text-primary);">${dept}</div>
+        <div style="font-weight:600; font-size:13px; color:var(--text-primary);">${escapeHtml(dept)}</div>
         <div style="font-size:11px; color:var(--text-secondary);">${facultyCount} faculty assigned</div>
       </div>
       <div style="display:flex; gap:6px;">
@@ -300,6 +275,8 @@ window.addDepartment = function() {
   }
   DEPARTMENTS.push(name);
   input.value = '';
+  saveStateToStorage();
+  saveDepartmentsToServer();
   renderDeptList();
   renderDeptFilterOptions();
   renderFacultyCards();
@@ -325,6 +302,8 @@ window.deleteDepartment = function(idx) {
   SUBJECTS.forEach(s => {
     if (s.dept === target) s.dept = fallback;
   });
+  saveStateToStorage();
+  saveDepartmentsToServer();
   renderDeptList();
   renderDeptFilterOptions();
   renderFacultyCards();
@@ -333,13 +312,11 @@ window.deleteDepartment = function(idx) {
 };
 
 let modalCurrentMainQuals = [];
-let modalCurrentSideQuals = [];
 
-function renderModalQualBadges(type) {
-  const isMain = type === 'main';
-  const container = document.getElementById(isMain ? 'modalMainQualsBadgeContainer' : 'modalSideQualsBadgeContainer');
-  const hiddenInput = document.getElementById(isMain ? 'changeFacultyMainQualsInput' : 'changeFacultySideQualsInput');
-  const quals = isMain ? modalCurrentMainQuals : modalCurrentSideQuals;
+function renderModalQualBadges() {
+  const container = document.getElementById('modalMainQualsBadgeContainer');
+  const hiddenInput = document.getElementById('changeFacultyMainQualsInput');
+  const quals = modalCurrentMainQuals;
 
   if (hiddenInput) {
     hiddenInput.value = quals.join(', ');
@@ -348,64 +325,50 @@ function renderModalQualBadges(type) {
   if (!container) return;
 
   if (quals.length === 0) {
-    container.innerHTML = `<span style="font-size:11px; color:var(--text-secondary); font-style:italic; padding:3px 0;">No ${type} qualifications assigned</span>`;
+    container.innerHTML = `<span style="font-size:11px; color:var(--danger); font-style:italic; padding:3px 0;">No subjects: this teacher cannot be assigned any classes</span>`;
     return;
   }
 
   container.innerHTML = quals.map(q => {
-    return `<span class="qual-tag" style="background:${isMain ? '#e0f2fe' : '#f8fafc'}; color:${isMain ? '#0369a1' : '#475569'}; border:1px solid ${isMain ? '#bae6fd' : '#cbd5e1'}; font-weight:600; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px;">
-      ${isMain ? '★' : '✦'} ${escapeHtml(q)}
-      <span onclick="removeModalQual('${type}', '${escapeHtml(q)}')" style="cursor:pointer; font-weight:800; opacity:0.6; margin-left:4px;" title="Remove ${escapeHtml(q)}">✕</span>
+    return `<span class="qual-tag" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px;">
+      ★ ${escapeHtml(q)}
+      <span onclick="removeModalQual('${escapeHtml(q)}')" style="cursor:pointer; font-weight:800; opacity:0.6; margin-left:4px;" title="Remove ${escapeHtml(q)}">✕</span>
     </span>`;
   }).join('');
 }
 
 function populateModalQualSelects() {
   const allSubjs = getAllCatalogSubjects();
-  const currentAssigned = new Set([...modalCurrentMainQuals, ...modalCurrentSideQuals].map(q => q.toUpperCase()));
+  const currentAssigned = new Set(modalCurrentMainQuals.map(q => q.toUpperCase()));
   const availableSubjs = allSubjs.filter(s => !currentAssigned.has(s.code.toUpperCase()));
 
-  ['main', 'side'].forEach(type => {
-    const sel = document.getElementById(type === 'main' ? 'modalAddMainQualSelect' : 'modalAddSideQualSelect');
-    if (!sel) return;
-    sel.innerHTML = `<option value="">-- Choose Subject --</option>` +
-      availableSubjs.map(s => `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} — ${escapeHtml(s.title)}</option>`).join('');
-  });
+  const sel = document.getElementById('modalAddMainQualSelect');
+  if (!sel) return;
+  sel.innerHTML = `<option value="">-- Choose Subject --</option>` +
+    availableSubjs.map(s => `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} — ${escapeHtml(s.title)}</option>`).join('');
 }
 
-window.addModalQual = function(type) {
-  const sel = document.getElementById(type === 'main' ? 'modalAddMainQualSelect' : 'modalAddSideQualSelect');
+window.addModalQual = function() {
+  const sel = document.getElementById('modalAddMainQualSelect');
   const code = sel ? sel.value.trim().toUpperCase() : '';
   if (!code) {
     alert('Please select a subject from the catalog to add.');
     return;
   }
 
-  if (type === 'main') {
-    if (!modalCurrentMainQuals.some(q => q.toUpperCase() === code)) {
-      modalCurrentMainQuals.push(code);
-    }
-  } else {
-    if (!modalCurrentSideQuals.some(q => q.toUpperCase() === code)) {
-      modalCurrentSideQuals.push(code);
-    }
+  if (!modalCurrentMainQuals.some(q => q.toUpperCase() === code)) {
+    modalCurrentMainQuals.push(code);
   }
 
-  renderModalQualBadges('main');
-  renderModalQualBadges('side');
+  renderModalQualBadges();
   populateModalQualSelects();
 };
 
-window.removeModalQual = function(type, code) {
+window.removeModalQual = function(code) {
   const target = (code || '').toUpperCase();
-  if (type === 'main') {
-    modalCurrentMainQuals = modalCurrentMainQuals.filter(q => q.toUpperCase() !== target);
-  } else {
-    modalCurrentSideQuals = modalCurrentSideQuals.filter(q => q.toUpperCase() !== target);
-  }
+  modalCurrentMainQuals = modalCurrentMainQuals.filter(q => q.toUpperCase() !== target);
 
-  renderModalQualBadges('main');
-  renderModalQualBadges('side');
+  renderModalQualBadges();
   populateModalQualSelects();
 };
 
@@ -421,11 +384,9 @@ window.openChangeFacultyDeptModal = function(identifier) {
   const nameInput = document.getElementById('changeFacultyNameInput');
   if (nameInput) nameInput.value = fac.name;
 
-  modalCurrentMainQuals = Array.isArray(fac.mainQuals) ? [...fac.mainQuals] : (fac.quals ? [...fac.quals.slice(0, 2)] : []);
-  modalCurrentSideQuals = Array.isArray(fac.sideQuals) ? [...fac.sideQuals] : (fac.quals ? [...fac.quals.slice(2)] : []);
+  modalCurrentMainQuals = [...(fac.mainQuals || [])];
 
-  renderModalQualBadges('main');
-  renderModalQualBadges('side');
+  renderModalQualBadges();
   populateModalQualSelects();
 
   const nameDisplay = document.getElementById('changeFacultyDeptNameDisplay');
@@ -490,13 +451,9 @@ window.submitChangeFacultyDept = function() {
     fac.maxLoad = 24;
   }
   const mainQualsRaw = document.getElementById('changeFacultyMainQualsInput') ? document.getElementById('changeFacultyMainQualsInput').value.trim() : '';
-  const sideQualsRaw = document.getElementById('changeFacultySideQualsInput') ? document.getElementById('changeFacultySideQualsInput').value.trim() : '';
-  const parsedMainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
-  const parsedSideQuals = sideQualsRaw ? sideQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
-  fac.mainQuals = parsedMainQuals;
-  fac.sideQuals = parsedSideQuals;
-  fac.quals = [...new Set([...parsedMainQuals, ...parsedSideQuals])];
+  fac.mainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
+  saveFacultyQualifications(fac);
 
   // 2. Update registered account in USERS list
   const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -532,24 +489,20 @@ window.submitChangeFacultyDept = function() {
         if (typeof checkFacultySubjectConflict === 'function') {
           const conflict = checkFacultySubjectConflict(newName, c.subjectCode, c.section);
           if (conflict) {
-            // Find an eligible, qualified, or department-allowable faculty replacement
+            // Move the class to a teacher who has this subject in their qualifications
             const targetCode = (c.subjectCode || '').toUpperCase();
             const eligible = (typeof FACULTY !== 'undefined' ? FACULTY : []).filter(other => {
               if (other.name === newName) return false;
               return !checkFacultySubjectConflict(other.name, targetCode, c.section);
             });
             if (eligible.length > 0) {
-              const mainMatch = eligible.find(f => (f.mainQuals || []).some(q => q.toUpperCase() === targetCode));
-              const sideMatch = eligible.find(f => (f.sideQuals || []).some(q => q.toUpperCase() === targetCode));
-              const replacement = mainMatch || sideMatch || eligible[0];
-              if (replacement) {
-                c.instructor = replacement.name;
-              }
+              c.instructor = eligible[0].name;
             }
           }
         }
       }
     });
+    queueScheduleSave();
   }
 
   // 5. Update CURRENT_USER if admin edited their own account
@@ -635,8 +588,7 @@ window.openAddFacultyModal = function() {
 
   document.getElementById('newFacStatus').value = 'Full-time';
   document.getElementById('newFacMaxLoad').value = '24';
-  if (document.getElementById('newFacMainQuals')) document.getElementById('newFacMainQuals').value = 'ITE 101, CC 103';
-  if (document.getElementById('newFacSideQuals')) document.getElementById('newFacSideQuals').value = 'IM 101';
+  if (document.getElementById('newFacMainQuals')) document.getElementById('newFacMainQuals').value = '';
 
   if (userSelect && userSelect.value) {
     window.handleFacultyUserDropdownChange(userSelect.value);
@@ -667,8 +619,7 @@ window.handleFacultyUserDropdownChange = function(email) {
     if (existingFac.dept) deptSelect.value = existingFac.dept;
     if (existingFac.status) document.getElementById('newFacStatus').value = existingFac.status;
     if (existingFac.maxLoad) document.getElementById('newFacMaxLoad').value = existingFac.maxLoad;
-    if (document.getElementById('newFacMainQuals')) document.getElementById('newFacMainQuals').value = (existingFac.mainQuals || existingFac.quals?.slice(0, 2) || []).join(', ');
-    if (document.getElementById('newFacSideQuals')) document.getElementById('newFacSideQuals').value = (existingFac.sideQuals || existingFac.quals?.slice(2) || []).join(', ');
+    if (document.getElementById('newFacMainQuals')) document.getElementById('newFacMainQuals').value = (existingFac.mainQuals || []).join(', ');
   }
 };
 
@@ -694,11 +645,7 @@ window.submitAddFaculty = function() {
   const status = document.getElementById('newFacStatus').value;
   const maxLoad = parseInt(document.getElementById('newFacMaxLoad').value, 10) || 24;
   const mainQualsRaw = document.getElementById('newFacMainQuals')?.value.trim() || '';
-  const sideQualsRaw = document.getElementById('newFacSideQuals')?.value.trim() || '';
-  const mainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : ['ITE 101'];
-  const sideQuals = sideQualsRaw ? sideQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
-  const quals = [...new Set([...mainQuals, ...sideQuals])];
-
+  const mainQuals = [...new Set(mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean))];
 
   const existingFacIndex = FACULTY.findIndex(f => f.email.toLowerCase() === email.toLowerCase());
   const colors = ['#25447A', '#2E7D5B', '#6C3483', '#C27A1A', '#2980B9', '#C0392B'];
@@ -709,8 +656,6 @@ window.submitAddFaculty = function() {
     FACULTY[existingFacIndex].status = status;
     FACULTY[existingFacIndex].maxLoad = maxLoad;
     FACULTY[existingFacIndex].mainQuals = mainQuals;
-    FACULTY[existingFacIndex].sideQuals = sideQuals;
-    FACULTY[existingFacIndex].quals = quals;
   } else {
     // Create profile
     FACULTY.push({
@@ -721,8 +666,6 @@ window.submitAddFaculty = function() {
       load: Math.floor(maxLoad * 0.75),
       maxLoad,
       mainQuals,
-      sideQuals,
-      quals,
       bg: colors[Math.floor(Math.random() * colors.length)]
     });
   }
@@ -736,6 +679,7 @@ window.submitAddFaculty = function() {
   }
 
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
+  saveFacultyQualifications({ email: user.email, mainQuals });
   closeAddFacultyModal();
   renderFacultyCards();
   renderUserTable();
@@ -771,6 +715,12 @@ window.confirmDeleteFacultyProfile = function() {
   const email = document.getElementById('deleteFacultyTargetEmail').value;
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   const facName = fac ? fac.name : null;
+  if (!IS_STANDALONE && MASTER_SCHEDULE_DATA.some(c => c.instructor === facName)) {
+    alert(`${facName} still has scheduled classes. Reassign them before removing this profile.`);
+    closeDeleteFacultyModal();
+    return;
+  }
+  saveFacultyQualifications({ email, mainQuals: [] });
   FACULTY = FACULTY.filter(f => !f.email || f.email.toLowerCase() !== email.toLowerCase());
   if (facName) {
     if (typeof scheduleData !== 'undefined' && scheduleData) {
@@ -788,6 +738,7 @@ window.confirmDeleteFacultyProfile = function() {
       });
     }
   }
+  if (typeof saveStateToStorage === 'function') saveStateToStorage();
   closeDeleteFacultyModal();
   renderFacultyCards();
   renderGrid();
