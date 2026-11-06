@@ -56,19 +56,56 @@ function getRoomDisplayInfo(room) {
 }
 
 /**
+ * Returns class schedules filtered for the active Academic Year and Term
+ */
+function getActiveMapSchedules() {
+  const { activeSy, activeTerm } = (typeof getActiveAcademicContext === 'function')
+    ? getActiveAcademicContext()
+    : {
+        activeSy: (typeof SCHOOL_YEARS !== 'undefined' ? SCHOOL_YEARS.find(y => y.isActive) : null) || { id: 1, yearCode: 'AY 2026-2027' },
+        activeTerm: (typeof SCHOOL_TERMS !== 'undefined' ? SCHOOL_TERMS.find(t => t.isActive) : null) || { id: 1, termName: '1st Sem' }
+      };
+
+  const masterSched = (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA))
+    ? MASTER_SCHEDULE_DATA
+    : [];
+
+  if (!activeTerm) return masterSched;
+
+  return masterSched.filter(c => {
+    if (c.termId) {
+      return c.termId === activeTerm.id;
+    }
+    if (typeof ACADEMIC_SECTIONS !== 'undefined' && c.section) {
+      const sec = ACADEMIC_SECTIONS.find(s => s.code === c.section);
+      if (sec && sec.termId) return sec.termId === activeTerm.id;
+    }
+    return activeTerm.id === 1;
+  });
+}
+
+function syncCampusMapSyFilter() {
+  const sel = document.getElementById('campusMapSyFilter');
+  if (!sel || typeof SCHOOL_YEARS === 'undefined') return;
+
+  const activeSy = SCHOOL_YEARS.find(y => y.isActive) || SCHOOL_YEARS[0];
+  sel.innerHTML = SCHOOL_YEARS.map(y => `<option value="${y.id}" ${y.isActive ? 'selected' : ''}>${escapeHtml(y.yearCode)}${y.isActive ? ' (Active)' : ''}</option>`).join('');
+  if (activeSy) sel.value = String(activeSy.id);
+}
+
+/**
  * Renders the room grid for a given floor (1F, 2F, or 3F)
  */
 function renderFloorMap(floor) {
   syncMasterScheduleRoomsWithCatalog();
+  syncCampusMapSyFilter();
 
   const canvas = document.getElementById('floorCanvas');
   if (!canvas) return;
   canvas.innerHTML = '';
 
   const floorRooms = ROOMS.filter(r => r.floor === floor);
-  const masterSched = (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA))
-    ? MASTER_SCHEDULE_DATA
-    : [];
+  const masterSched = getActiveMapSchedules();
 
   floorRooms.forEach(room => {
     const info = getRoomDisplayInfo(room);
@@ -124,9 +161,7 @@ function renderFloorMap(floor) {
  * Dynamically updates utilization metrics on the Campus Map page
  */
 function updateCampusMapStats() {
-  const masterSched = (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA))
-    ? MASTER_SCHEDULE_DATA
-    : [];
+  const masterSched = getActiveMapSchedules();
 
   const totalRooms = ROOMS.length;
   if (totalRooms === 0) return;
@@ -183,6 +218,13 @@ window.showRoomSchedule = function(roomCode) {
 
   const info = getRoomDisplayInfo(room);
 
+  const { activeSy, activeTerm } = (typeof getActiveAcademicContext === 'function')
+    ? getActiveAcademicContext()
+    : {
+        activeSy: (typeof SCHOOL_YEARS !== 'undefined' ? SCHOOL_YEARS.find(y => y.isActive) : null) || { yearCode: 'AY 2026-2027' },
+        activeTerm: (typeof SCHOOL_TERMS !== 'undefined' ? SCHOOL_TERMS.find(t => t.isActive) : null) || { termName: '1st Sem' }
+      };
+
   const titleEl = document.getElementById('schedModalRoomCode');
   if (titleEl) {
     titleEl.innerHTML = `${info.icon} ${escapeHtml(room.code)} Timetable`;
@@ -191,16 +233,14 @@ window.showRoomSchedule = function(roomCode) {
   const metaEl = document.getElementById('schedModalRoomMeta');
   if (metaEl) {
     const floorLabel = room.floor === '1F' ? '1st Floor' : room.floor === '2F' ? '2nd Floor' : '3rd Floor';
-    metaEl.textContent = `${floorLabel} · ${info.label} · Seating Capacity: ${room.cap} seats`;
+    metaEl.textContent = `${floorLabel} · ${info.label} · Seating Capacity: ${room.cap} seats · [${activeTerm.termName} ${activeSy.yearCode}]`;
   }
 
   const tbody = document.getElementById('schedModalTableBody');
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  const masterSched = (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA))
-    ? MASTER_SCHEDULE_DATA
-    : [];
+  const masterSched = getActiveMapSchedules();
 
   const roomClasses = masterSched.filter(c =>
     c.room && c.room.trim().toUpperCase() === room.code.trim().toUpperCase()

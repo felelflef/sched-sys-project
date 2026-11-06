@@ -220,10 +220,35 @@ function refreshAllSchedulingViews() {
   updateSectionDropdown();
   renderGrid();
   updateScheduleStats();
-  updateSectionDropdown();
-  renderGrid();
-  updateScheduleStats();
+  syncAllSyFilters();
+
+  if (typeof renderFloorMap === 'function') {
+    const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
+    renderFloorMap(activeFloor + 'F');
+  }
+  if (typeof updateCampusMapStats === 'function') {
+    updateCampusMapStats();
+  }
 }
+
+function syncAllSyFilters() {
+  if (typeof SCHOOL_YEARS === 'undefined') return;
+  const activeSy = SCHOOL_YEARS.find(y => y.isActive) || SCHOOL_YEARS[0];
+
+  const selects = [
+    document.getElementById('masterScheduleSyFilter'),
+    document.getElementById('campusMapSyFilter')
+  ];
+
+  selects.forEach(sel => {
+    if (!sel) return;
+    sel.innerHTML = SCHOOL_YEARS.map(sy => {
+      return `<option value="${sy.id}" ${sy.isActive ? 'selected' : ''}>${escapeHtml(sy.yearCode)}${sy.isActive ? ' (Active)' : ''}</option>`;
+    }).join('');
+    if (activeSy) sel.value = String(activeSy.id);
+  });
+}
+window.syncAllSyFilters = syncAllSyFilters;
 
 function submitSchoolYearModal() {
   const idVal = document.getElementById('syEditId').value;
@@ -319,6 +344,39 @@ function setActiveSchoolYear(id) {
     SCHOOL_TERMS.forEach(t => {
       t.isActive = (t.yearId === id && t.id === term1.id);
     });
+  }
+
+  // Ensure sections exist for this academic year if not already present
+  const { activeSy, activeTerm } = getActiveAcademicContext();
+  if (typeof ACADEMIC_SECTIONS !== 'undefined') {
+    const existingSections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id);
+    if (existingSections.length === 0 && activeTerm.id === 4) {
+      const default2728 = [
+        { id: 10, termId: 4, code: 'IT701M',  name: 'BSIT 1A',  program: 'BSIT',  year: 1, studentCount: 38, shift: 'AM', adviser: 'Prof. Academic Head' },
+        { id: 11, termId: 4, code: 'IT702M',  name: 'BSIT 1B',  program: 'BSIT',  year: 1, studentCount: 36, shift: 'AM', adviser: 'Prof. Faculty Member' },
+        { id: 12, termId: 4, code: 'IT801M',  name: 'BSIT 2A',  program: 'BSIT',  year: 2, studentCount: 35, shift: 'AM', adviser: 'Prof. Program Head' },
+        { id: 13, termId: 4, code: 'IT802M',  name: 'BSIT 2B',  program: 'BSIT',  year: 2, studentCount: 34, shift: 'AM', adviser: 'Prof. Faculty Member' },
+        { id: 14, termId: 4, code: 'CS701M',  name: 'BSCS 1A',  program: 'BSCS',  year: 1, studentCount: 32, shift: 'AM', adviser: 'Prof. Program Head' },
+        { id: 15, termId: 4, code: 'CPE701M', name: 'BSCpE 1A', program: 'BSCpE', year: 1, studentCount: 30, shift: 'AM', adviser: 'Engr. Faculty Member' },
+        { id: 16, termId: 4, code: 'HM701M',  name: 'BSHM 1A',  program: 'BSHM',  year: 1, studentCount: 40, shift: 'AM', adviser: 'Chef Faculty Member' },
+        { id: 17, termId: 4, code: 'TM701M',  name: 'BSTM 1A',  program: 'BSTM',  year: 1, studentCount: 34, shift: 'AM', adviser: 'Prof. Academic Head' },
+        { id: 18, termId: 4, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' }
+      ];
+      default2728.forEach(sec => {
+        if (!ACADEMIC_SECTIONS.some(s => s.code === sec.code && s.termId === sec.termId)) {
+          ACADEMIC_SECTIONS.push(sec);
+        }
+      });
+    }
+  }
+
+  // Ensure baseline schedules are generated for the active term if none exist
+  if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
+    const existingScheds = MASTER_SCHEDULE_DATA.filter(c => c.termId === activeTerm.id);
+    if (existingScheds.length === 0) {
+      const newScheds = generateSmartBaselineSchedules();
+      MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(newScheds);
+    }
   }
 
   saveStateToStorage();
@@ -3190,6 +3248,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Failed parsing saved master schedule', e);
   }
 
+  syncAllSyFilters();
   goToScheduleStep(ACTIVE_SCHEDULE_STEP || 6);
   isScheduleInitialized = true;
 });

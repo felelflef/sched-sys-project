@@ -76,14 +76,14 @@ let FACULTY = [
 ];
 
 let USERS = [
-  { name: 'System Administrator', email: 'admin@sti.edu', role: 'admin', roleLabel: 'System Admin', lastActive: 'Just now', status: 'Online' },
-  { name: 'Academic Head', email: 'acah@sti.edu', role: 'academic-head', roleLabel: 'Academic Head', lastActive: '5 min ago', status: 'Online' },
-  { name: 'Program Head', email: 'proh@sti.edu', role: 'program-head', roleLabel: 'Program Head', lastActive: '10 min ago', status: 'Online' },
-  { name: 'Faculty Member', email: 'faculty@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '15 min ago', status: 'Online' },
-  { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '20 min ago', status: 'Online' },
-  { name: 'Chef Hospitality Faculty', email: 'hospitality@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '25 min ago', status: 'Online' },
-  { name: 'Prof. Business Faculty', email: 'business@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '30 min ago', status: 'Online' },
-  { name: 'Engr. Faculty Member', email: 'engr@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '35 min ago', status: 'Online' }
+  { name: 'System Administrator', email: 'admin@sti.edu', role: 'admin', roleLabel: 'System Admin', lastActive: 'Just now', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Academic Head', email: 'acah@sti.edu', role: 'academic-head', roleLabel: 'Academic Head', lastActive: '5 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Program Head', email: 'proh@sti.edu', role: 'program-head', roleLabel: 'Program Head', lastActive: '10 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Faculty Member', email: 'faculty@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '15 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '20 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Chef Hospitality Faculty', email: 'hospitality@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '25 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Prof. Business Faculty', email: 'business@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '30 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Engr. Faculty Member', email: 'engr@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '35 min ago', status: 'Online', employmentType: 'Full-time' }
 ];
 
 const DAYS_ABBR = ['M','T','W','Th','F','S'];
@@ -171,6 +171,7 @@ let CURRICULUM_SUBJECTS = [
 
 // 5. Academic Sections
 let ACADEMIC_SECTIONS = [
+  // AY 2026-2027 (Term 1 - 1st Sem)
   { id: 1, termId: 1, code: 'IT701M',  name: 'BSIT 1A',  program: 'BSIT',  year: 1, studentCount: 38, shift: 'AM', adviser: 'Prof. Academic Head' },
   { id: 2, termId: 1, code: 'IT702M',  name: 'BSIT 1B',  program: 'BSIT',  year: 1, studentCount: 36, shift: 'AM', adviser: 'Prof. Faculty Member' },
   { id: 3, termId: 1, code: 'IT801M',  name: 'BSIT 2A',  program: 'BSIT',  year: 2, studentCount: 35, shift: 'AM', adviser: 'Prof. Program Head' },
@@ -179,7 +180,17 @@ let ACADEMIC_SECTIONS = [
   { id: 6, termId: 1, code: 'CPE701M', name: 'BSCpE 1A', program: 'BSCpE', year: 1, studentCount: 30, shift: 'AM', adviser: 'Engr. Faculty Member' },
   { id: 7, termId: 1, code: 'HM701M',  name: 'BSHM 1A',  program: 'BSHM',  year: 1, studentCount: 40, shift: 'AM', adviser: 'Chef Faculty Member' },
   { id: 8, termId: 1, code: 'TM701M',  name: 'BSTM 1A',  program: 'BSTM',  year: 1, studentCount: 34, shift: 'AM', adviser: 'Prof. Academic Head' },
-  { id: 9, termId: 1, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' }
+  { id: 9, termId: 1, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' },
+  // AY 2027-2028 (Term 4 - 1st Sem)
+  { id: 10, termId: 4, code: 'IT701M',  name: 'BSIT 1A',  program: 'BSIT',  year: 1, studentCount: 38, shift: 'AM', adviser: 'Prof. Academic Head' },
+  { id: 11, termId: 4, code: 'IT702M',  name: 'BSIT 1B',  program: 'BSIT',  year: 1, studentCount: 36, shift: 'AM', adviser: 'Prof. Faculty Member' },
+  { id: 12, termId: 4, code: 'IT801M',  name: 'BSIT 2A',  program: 'BSIT',  year: 2, studentCount: 35, shift: 'AM', adviser: 'Prof. Program Head' },
+  { id: 13, termId: 4, code: 'IT802M',  name: 'BSIT 2B',  program: 'BSIT',  year: 2, studentCount: 34, shift: 'AM', adviser: 'Prof. Faculty Member' },
+  { id: 14, termId: 4, code: 'CS701M',  name: 'BSCS 1A',  program: 'BSCS',  year: 1, studentCount: 32, shift: 'AM', adviser: 'Prof. Program Head' },
+  { id: 15, termId: 4, code: 'CPE701M', name: 'BSCpE 1A', program: 'BSCpE', year: 1, studentCount: 30, shift: 'AM', adviser: 'Engr. Faculty Member' },
+  { id: 16, termId: 4, code: 'HM701M',  name: 'BSHM 1A',  program: 'BSHM',  year: 1, studentCount: 40, shift: 'AM', adviser: 'Chef Faculty Member' },
+  { id: 17, termId: 4, code: 'TM701M',  name: 'BSTM 1A',  program: 'BSTM',  year: 1, studentCount: 34, shift: 'AM', adviser: 'Prof. Academic Head' },
+  { id: 18, termId: 4, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' }
 ];
 
 // Unassigned Classes Diagnostics
@@ -223,8 +234,8 @@ function loadStateFromStorage() {
     }
     // Ensure all faculty profiles have mainQuals and sideQuals arrays
     FACULTY.forEach(f => {
-      if (!f.mainQuals) f.mainQuals = (f.quals ? f.quals.slice(0, 2) : []);
-      if (!f.sideQuals) f.sideQuals = (f.quals ? f.quals.slice(2) : []);
+      if (!Array.isArray(f.mainQuals)) f.mainQuals = (Array.isArray(f.quals) ? f.quals.slice(0, 2) : []);
+      if (!Array.isArray(f.sideQuals)) f.sideQuals = (Array.isArray(f.quals) ? f.quals.slice(2) : []);
       if (!f.quals) f.quals = [...new Set([...f.mainQuals, ...f.sideQuals])];
     });
 

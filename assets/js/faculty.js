@@ -55,23 +55,22 @@ function renderFacultyCards() {
     const loadPct = Math.round((fac.load / fac.maxLoad) * 100);
     const loadColor = loadPct >= 100 ? 'var(--danger)' : loadPct >= 80 ? 'var(--warning)' : 'var(--success)';
 
-    const availHtml = DAYS_ABBR.map(day => {
-      const am = Math.random() > 0.3 ? 'open' : 'busy';
-      const pm = Math.random() > 0.4 ? 'open' : 'busy';
-      return `<div style="display:flex;flex-direction:column;gap:2px;">
-        <div class="avail-slot header">${day}</div>
-        <div class="avail-slot ${am}">AM</div>
-        <div class="avail-slot ${pm}">PM</div>
-      </div>`;
-    }).join('');
+    const mainList = Array.isArray(fac.mainQuals) ? fac.mainQuals : (fac.quals ? fac.quals.slice(0, 2) : []);
+    const sideList = Array.isArray(fac.sideQuals) ? fac.sideQuals : (fac.quals ? fac.quals.slice(2) : []);
+    const safeEmailId = fac.email.replace(/[^a-zA-Z0-9]/g, '_');
 
-    const mainList = fac.mainQuals && fac.mainQuals.length > 0 ? fac.mainQuals : (fac.quals ? fac.quals.slice(0, 2) : []);
-    const sideList = fac.sideQuals && fac.sideQuals.length > 0 ? fac.sideQuals : (fac.quals ? fac.quals.slice(2) : []);
     const mainQualsHtml = mainList.length > 0
-      ? mainList.map(q => `<span class="qual-tag locked" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600;" title="Main Teaching Qualification">★ ${q}</span>`).join('')
+      ? mainList.map(q => {
+          const removeBtn = isAdmin ? `<span onclick="removeFacultyQual('${escapeHtml(fac.email)}', 'main', '${escapeHtml(q)}', event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(q)}">✕</span>` : '';
+          return `<span class="qual-tag locked" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center;" title="Main Teaching Qualification">★ ${escapeHtml(q)}${removeBtn}</span>`;
+        }).join('')
       : `<span style="font-size:11px; color:var(--text-secondary); font-style:italic;">None</span>`;
+
     const sideQualsHtml = sideList.length > 0
-      ? sideList.map(q => `<span class="qual-tag locked" style="background:#f8fafc; color:#475569; border:1px solid #cbd5e1;" title="Side / Secondary Qualification">✦ ${q}</span>`).join('')
+      ? sideList.map(q => {
+          const removeBtn = isAdmin ? `<span onclick="removeFacultyQual('${escapeHtml(fac.email)}', 'side', '${escapeHtml(q)}', event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(q)}">✕</span>` : '';
+          return `<span class="qual-tag locked" style="background:#f8fafc; color:#475569; border:1px solid #cbd5e1; display:inline-flex; align-items:center;" title="Side / Secondary Qualification">✦ ${escapeHtml(q)}${removeBtn}</span>`;
+        }).join('')
       : `<span style="font-size:11px; color:var(--text-secondary); font-style:italic;">None</span>`;
 
     const facultyActionBtns = isAdmin
@@ -102,13 +101,18 @@ function renderFacultyCards() {
         <div style="height:6px; background:#ECEEF2; border-radius:3px; overflow:hidden; margin-bottom:14px;">
           <div style="height:100%; width:${loadPct}%; background:${loadColor}; border-radius:3px; transition:width 0.6s ease;"></div>
         </div>
-        <div class="faculty-meta-label" style="margin-bottom:6px;">Weekly Availability</div>
-        <div class="avail-grid" style="grid-template-columns:repeat(6,1fr);">
-          ${availHtml}
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; margin-bottom:4px;">
+          <span class="faculty-meta-label" style="margin:0; font-weight:700; color:#0369a1;">★ Main Qualifications</span>
+          ${isAdmin ? `<button class="btn btn-outline" style="font-size:11px; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px; color:#0369a1; border-color:#bae6fd;" onclick="toggleAddQualDropdown('${escapeHtml(fac.email)}', 'main', event)" title="Add Subject Qualification">+ Add</button>` : ''}
         </div>
-        <div class="faculty-meta-label" style="margin-top:14px; margin-bottom:4px; font-weight:700; color:#0369a1;">★ Main Qualifications</div>
+        <div id="addQualContainer-${safeEmailId}-main" style="display:none; margin-bottom:8px;"></div>
         <div class="qual-tags" style="margin-bottom:10px;">${mainQualsHtml}</div>
-        <div class="faculty-meta-label" style="margin-bottom:4px; font-weight:600; color:var(--text-secondary);">✦ Side Qualifications</div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; margin-bottom:4px;">
+          <span class="faculty-meta-label" style="margin:0; font-weight:600; color:var(--text-secondary);">✦ Side Qualifications</span>
+          ${isAdmin ? `<button class="btn btn-outline" style="font-size:11px; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px;" onclick="toggleAddQualDropdown('${escapeHtml(fac.email)}', 'side', event)" title="Add Subject Qualification">+ Add</button>` : ''}
+        </div>
+        <div id="addQualContainer-${safeEmailId}-side" style="display:none; margin-bottom:8px;"></div>
         <div class="qual-tags">${sideQualsHtml}</div>
 
       </div>
@@ -116,6 +120,127 @@ function renderFacultyCards() {
     grid.appendChild(card);
   });
 }
+
+function getAllCatalogSubjects() {
+  const map = new Map();
+  if (typeof SUBJECTS !== 'undefined' && Array.isArray(SUBJECTS)) {
+    SUBJECTS.forEach(s => {
+      const code = (s.code || '').toUpperCase().trim();
+      if (code) {
+        map.set(code, { code: s.code.trim(), title: s.title || s.name || s.code, dept: s.dept || '' });
+      }
+    });
+  }
+  if (typeof CURRICULUM_SUBJECTS !== 'undefined' && Array.isArray(CURRICULUM_SUBJECTS)) {
+    CURRICULUM_SUBJECTS.forEach(s => {
+      const code = (s.code || '').toUpperCase().trim();
+      if (code && !map.has(code)) {
+        map.set(code, { code: s.code.trim(), title: s.name || s.title || s.code, dept: s.dept || '' });
+      }
+    });
+  }
+  return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
+}
+window.getAllCatalogSubjects = getAllCatalogSubjects;
+
+window.toggleAddQualDropdown = function(email, type, event) {
+  if (event) event.stopPropagation();
+  const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
+  const container = document.getElementById(`addQualContainer-${safeId}-${type}`);
+  if (!container) return;
+
+  if (container.style.display === 'block') {
+    container.style.display = 'none';
+    return;
+  }
+
+  const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
+  if (!fac) return;
+
+  const currentQuals = new Set([...(fac.mainQuals || []), ...(fac.sideQuals || [])].map(q => q.toUpperCase()));
+  const allSubjs = getAllCatalogSubjects();
+  const availableSubjs = allSubjs.filter(s => !currentQuals.has(s.code.toUpperCase()));
+
+  if (availableSubjs.length === 0) {
+    container.innerHTML = `<div style="font-size:11px; color:var(--text-secondary); padding:4px;">All catalog subjects are already assigned.</div>`;
+    container.style.display = 'block';
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="display:flex; gap:6px; align-items:center; background:#F8FAFD; border:1px solid #BAE6FD; border-radius:6px; padding:6px 8px; margin-top:4px;">
+      <select id="selectAddQual-${safeId}-${type}" class="form-input" style="font-size:11.5px; padding:3px 6px; flex:1; height:28px;">
+        <option value="">-- Choose Subject to Add --</option>
+        ${availableSubjs.map(s => `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} — ${escapeHtml(s.title)} (${escapeHtml(s.dept || 'General')})</option>`).join('')}
+      </select>
+      <button class="btn btn-primary" style="font-size:11px; padding:3px 10px; height:28px; line-height:1;" onclick="confirmAddFacultyQual('${escapeHtml(fac.email)}', '${type}')">Add</button>
+      <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; height:28px; line-height:1;" onclick="closeAddQualDropdown('${escapeHtml(fac.email)}', '${type}')">✕</button>
+    </div>
+  `;
+  container.style.display = 'block';
+};
+
+window.closeAddQualDropdown = function(email, type) {
+  const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
+  const container = document.getElementById(`addQualContainer-${safeId}-${type}`);
+  if (container) container.style.display = 'none';
+};
+
+window.confirmAddFacultyQual = function(email, type) {
+  const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
+  const sel = document.getElementById(`selectAddQual-${safeId}-${type}`);
+  const subjCode = sel ? sel.value.trim().toUpperCase() : '';
+  if (!subjCode) {
+    alert('Please choose a subject to add.');
+    return;
+  }
+
+  const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
+  if (!fac) return;
+
+  if (!Array.isArray(fac.mainQuals)) fac.mainQuals = Array.isArray(fac.quals) ? [...fac.quals.slice(0, 2)] : [];
+  if (!Array.isArray(fac.sideQuals)) fac.sideQuals = Array.isArray(fac.quals) ? [...fac.quals.slice(2)] : [];
+
+  if (type === 'main') {
+    if (!fac.mainQuals.some(q => q.toUpperCase() === subjCode)) {
+      fac.mainQuals.push(subjCode);
+    }
+  } else {
+    if (!fac.sideQuals.some(q => q.toUpperCase() === subjCode)) {
+      fac.sideQuals.push(subjCode);
+    }
+  }
+
+  fac.quals = [...new Set([...fac.mainQuals, ...fac.sideQuals])];
+  if (typeof saveStateToStorage === 'function') saveStateToStorage();
+
+  renderFacultyCards();
+  if (typeof renderGrid === 'function') renderGrid();
+  if (typeof renderGlobalScheduleTable === 'function') renderGlobalScheduleTable();
+};
+
+window.removeFacultyQual = function(email, type, subjectCode, event) {
+  if (event) event.stopPropagation();
+  const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
+  if (!fac) return;
+
+  if (!Array.isArray(fac.mainQuals)) fac.mainQuals = Array.isArray(fac.quals) ? [...fac.quals.slice(0, 2)] : [];
+  if (!Array.isArray(fac.sideQuals)) fac.sideQuals = Array.isArray(fac.quals) ? [...fac.quals.slice(2)] : [];
+
+  const target = (subjectCode || '').toUpperCase();
+  if (type === 'main') {
+    fac.mainQuals = fac.mainQuals.filter(q => q.toUpperCase() !== target);
+  } else if (type === 'side') {
+    fac.sideQuals = fac.sideQuals.filter(q => q.toUpperCase() !== target);
+  }
+
+  fac.quals = [...new Set([...fac.mainQuals, ...fac.sideQuals])];
+  if (typeof saveStateToStorage === 'function') saveStateToStorage();
+
+  renderFacultyCards();
+  if (typeof renderGrid === 'function') renderGrid();
+  if (typeof renderGlobalScheduleTable === 'function') renderGlobalScheduleTable();
+};
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('facultyDeptFilter')?.addEventListener('change', renderFacultyCards);
@@ -207,6 +332,83 @@ window.deleteDepartment = function(idx) {
   renderSubjectTable();
 };
 
+let modalCurrentMainQuals = [];
+let modalCurrentSideQuals = [];
+
+function renderModalQualBadges(type) {
+  const isMain = type === 'main';
+  const container = document.getElementById(isMain ? 'modalMainQualsBadgeContainer' : 'modalSideQualsBadgeContainer');
+  const hiddenInput = document.getElementById(isMain ? 'changeFacultyMainQualsInput' : 'changeFacultySideQualsInput');
+  const quals = isMain ? modalCurrentMainQuals : modalCurrentSideQuals;
+
+  if (hiddenInput) {
+    hiddenInput.value = quals.join(', ');
+  }
+
+  if (!container) return;
+
+  if (quals.length === 0) {
+    container.innerHTML = `<span style="font-size:11px; color:var(--text-secondary); font-style:italic; padding:3px 0;">No ${type} qualifications assigned</span>`;
+    return;
+  }
+
+  container.innerHTML = quals.map(q => {
+    return `<span class="qual-tag" style="background:${isMain ? '#e0f2fe' : '#f8fafc'}; color:${isMain ? '#0369a1' : '#475569'}; border:1px solid ${isMain ? '#bae6fd' : '#cbd5e1'}; font-weight:600; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px;">
+      ${isMain ? '★' : '✦'} ${escapeHtml(q)}
+      <span onclick="removeModalQual('${type}', '${escapeHtml(q)}')" style="cursor:pointer; font-weight:800; opacity:0.6; margin-left:4px;" title="Remove ${escapeHtml(q)}">✕</span>
+    </span>`;
+  }).join('');
+}
+
+function populateModalQualSelects() {
+  const allSubjs = getAllCatalogSubjects();
+  const currentAssigned = new Set([...modalCurrentMainQuals, ...modalCurrentSideQuals].map(q => q.toUpperCase()));
+  const availableSubjs = allSubjs.filter(s => !currentAssigned.has(s.code.toUpperCase()));
+
+  ['main', 'side'].forEach(type => {
+    const sel = document.getElementById(type === 'main' ? 'modalAddMainQualSelect' : 'modalAddSideQualSelect');
+    if (!sel) return;
+    sel.innerHTML = `<option value="">-- Choose Subject --</option>` +
+      availableSubjs.map(s => `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} — ${escapeHtml(s.title)}</option>`).join('');
+  });
+}
+
+window.addModalQual = function(type) {
+  const sel = document.getElementById(type === 'main' ? 'modalAddMainQualSelect' : 'modalAddSideQualSelect');
+  const code = sel ? sel.value.trim().toUpperCase() : '';
+  if (!code) {
+    alert('Please select a subject from the catalog to add.');
+    return;
+  }
+
+  if (type === 'main') {
+    if (!modalCurrentMainQuals.some(q => q.toUpperCase() === code)) {
+      modalCurrentMainQuals.push(code);
+    }
+  } else {
+    if (!modalCurrentSideQuals.some(q => q.toUpperCase() === code)) {
+      modalCurrentSideQuals.push(code);
+    }
+  }
+
+  renderModalQualBadges('main');
+  renderModalQualBadges('side');
+  populateModalQualSelects();
+};
+
+window.removeModalQual = function(type, code) {
+  const target = (code || '').toUpperCase();
+  if (type === 'main') {
+    modalCurrentMainQuals = modalCurrentMainQuals.filter(q => q.toUpperCase() !== target);
+  } else {
+    modalCurrentSideQuals = modalCurrentSideQuals.filter(q => q.toUpperCase() !== target);
+  }
+
+  renderModalQualBadges('main');
+  renderModalQualBadges('side');
+  populateModalQualSelects();
+};
+
 window.openChangeFacultyDeptModal = function(identifier) {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
     alert('Access Denied: Only system administrators are authorized to edit faculty profiles.');
@@ -218,10 +420,14 @@ window.openChangeFacultyDeptModal = function(identifier) {
   document.getElementById('changeFacultyDeptTargetEmail').value = fac.email;
   const nameInput = document.getElementById('changeFacultyNameInput');
   if (nameInput) nameInput.value = fac.name;
-  const mainInput = document.getElementById('changeFacultyMainQualsInput');
-  if (mainInput) mainInput.value = (fac.mainQuals || []).join(', ');
-  const sideInput = document.getElementById('changeFacultySideQualsInput');
-  if (sideInput) sideInput.value = (fac.sideQuals || []).join(', ');
+
+  modalCurrentMainQuals = Array.isArray(fac.mainQuals) ? [...fac.mainQuals] : (fac.quals ? [...fac.quals.slice(0, 2)] : []);
+  modalCurrentSideQuals = Array.isArray(fac.sideQuals) ? [...fac.sideQuals] : (fac.quals ? [...fac.quals.slice(2)] : []);
+
+  renderModalQualBadges('main');
+  renderModalQualBadges('side');
+  populateModalQualSelects();
+
   const nameDisplay = document.getElementById('changeFacultyDeptNameDisplay');
   if (nameDisplay) nameDisplay.textContent = fac.name;
   const emailDisplay = document.getElementById('changeFacultyDeptEmailDisplay');
@@ -236,6 +442,11 @@ window.openChangeFacultyDeptModal = function(identifier) {
     if (dept === fac.dept) opt.selected = true;
     select.appendChild(opt);
   });
+
+  const statusSelect = document.getElementById('changeFacultyStatusSelect');
+  if (statusSelect) {
+    statusSelect.value = fac.status || 'Full-time';
+  }
 
   document.getElementById('changeFacultyDeptModal').style.display = 'flex';
 };
@@ -270,6 +481,14 @@ window.submitChangeFacultyDept = function() {
   // 1. Update faculty profile
   fac.name = newName;
   if (newDept) fac.dept = newDept;
+  const statusSelect = document.getElementById('changeFacultyStatusSelect');
+  const newStatus = statusSelect ? statusSelect.value : (fac.status || 'Full-time');
+  fac.status = newStatus;
+  if (newStatus === 'Part-time' && fac.maxLoad > 18) {
+    fac.maxLoad = 15;
+  } else if (newStatus === 'Full-time' && fac.maxLoad < 20) {
+    fac.maxLoad = 24;
+  }
   const mainQualsRaw = document.getElementById('changeFacultyMainQualsInput') ? document.getElementById('changeFacultyMainQualsInput').value.trim() : '';
   const sideQualsRaw = document.getElementById('changeFacultySideQualsInput') ? document.getElementById('changeFacultySideQualsInput').value.trim() : '';
   const parsedMainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
@@ -283,6 +502,7 @@ window.submitChangeFacultyDept = function() {
   const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (user) {
     user.name = newName;
+    user.employmentType = newStatus;
   }
 
   // 3. Update VALID_USERS cache
@@ -505,6 +725,10 @@ window.submitAddFaculty = function() {
       quals,
       bg: colors[Math.floor(Math.random() * colors.length)]
     });
+  }
+
+  if (user) {
+    user.employmentType = status;
   }
 
   if (VALID_USERS[user.email] && !VALID_USERS[user.email].password) {
