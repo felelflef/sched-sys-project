@@ -1738,26 +1738,36 @@ function generateSmartBaselineSchedules() {
       const targetSubjCode = (subj.code || '').toUpperCase();
       const mainQualified = FACULTY.filter(f => (f.mainQuals || []).some(q => q.toUpperCase() === targetSubjCode));
       const sideQualified = FACULTY.filter(f => (f.sideQuals || []).some(q => q.toUpperCase() === targetSubjCode) && !mainQualified.includes(f));
-      let deptFallback = [];
 
-        if (sec.program === 'BSIT' || sec.program === 'BSCS' || sec.program === 'BSCpE') {
+      // Determine subject department from catalog or code prefix
+      const catalogSubj = (typeof SUBJECTS !== 'undefined' ? SUBJECTS : []).find(s => s.code.toUpperCase() === targetSubjCode)
+        || (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).find(s => s.code.toUpperCase() === targetSubjCode) || subj;
+
+      let targetDept = catalogSubj?.dept;
+      if (!targetDept) {
+        if (targetSubjCode.startsWith('GE') || targetSubjCode.startsWith('NSTP') || catalogSubj?.type === 'pe' || subj.type === 'pe') {
+          targetDept = 'General Education';
+        } else if (targetSubjCode.startsWith('HM') || targetSubjCode.startsWith('TM') || sec.program === 'BSHM' || sec.program === 'BSTM') {
+          targetDept = 'Hospitality';
+        } else if (targetSubjCode.startsWith('BA') || sec.program === 'BSBA') {
+          targetDept = 'Business Admin';
+        } else if (sec.program === 'BSIT' || sec.program === 'BSCS' || sec.program === 'BSCpE') {
+          targetDept = 'IT / CS';
+        } else {
+          targetDept = 'IT / CS';
+        }
+      }
+
+      let deptFallback = [];
+      if (targetDept === 'IT / CS') {
         deptFallback = FACULTY.filter(f => f.dept === 'IT / CS' || f.dept === 'Engineering');
-      } else if (subj.type === 'pe') {
-        deptFallback = FACULTY.filter(f => f.dept === 'General Education' || (f.quals && f.quals.some(q => q.includes('PE'))));
-      } else if (subj.code.startsWith('GE') || subj.code.startsWith('NSTP')) {
-        deptFallback = FACULTY.filter(f => f.dept === 'General Education');
-      } else if (sec.program === 'BSHM' || sec.program === 'BSTM') {
-        deptFallback = FACULTY.filter(f => f.dept === 'Hospitality');
-      } else if (sec.program === 'BSBA') {
-        deptFallback = FACULTY.filter(f => f.dept === 'Business Admin');
+      } else if (targetDept === 'Engineering') {
+        deptFallback = FACULTY.filter(f => f.dept === 'Engineering' || f.dept === 'IT / CS');
       } else {
-        deptFallback = FACULTY.slice();
+        deptFallback = FACULTY.filter(f => f.dept === targetDept);
       }
       deptFallback = deptFallback.filter(f => !mainQualified.includes(f) && !sideQualified.includes(f));
       let candidateTeachers = [...mainQualified, ...sideQualified, ...deptFallback];
-      if (candidateTeachers.length === 0) {
-        candidateTeachers = FACULTY.slice();
-      }
 
       // Ensure section adviser is not assigned to teach the section's classes
       const adviserNameClean = (sec.adviser || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
@@ -1976,6 +1986,73 @@ function updateTeacherDropdown() {
   `).join('');
 }
 
+/* ─── Faculty Qualification & Department Eligibility Conflict Checker ─── */
+function checkFacultySubjectConflict(instructorName, subjectCode, sectionCode) {
+  if (!instructorName || instructorName === 'TBA' || instructorName === 'Unassigned') {
+    return 'Instructor Unassigned';
+  }
+
+  // 1. Check Section Adviser conflict
+  if (sectionCode && typeof ACADEMIC_SECTIONS !== 'undefined') {
+    const sec = ACADEMIC_SECTIONS.find(s => s.code === sectionCode);
+    if (sec && sec.adviser) {
+      const advClean = (sec.adviser || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
+      const instClean = (instructorName || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
+      if (advClean && instClean && (advClean === instClean || advClean.includes(instClean) || instClean.includes(advClean))) {
+        return `Adviser Conflict: Section adviser cannot teach ${sectionCode}`;
+      }
+    }
+  }
+
+  // 2. Check Faculty profile
+  const fac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.name && f.name.toLowerCase() === instructorName.toLowerCase());
+  if (!fac) {
+    return `Unregistered Faculty: ${instructorName}`;
+  }
+
+  const targetCode = (subjectCode || '').toUpperCase();
+  const hasMainQual = (fac.mainQuals || []).some(q => q.toUpperCase() === targetCode);
+  const hasSideQual = (fac.sideQuals || []).some(q => q.toUpperCase() === targetCode);
+  const hasQual = hasMainQual || hasSideQual || (fac.quals || []).some(q => q.toUpperCase() === targetCode);
+
+  // If faculty holds a certified qualification (main or side), no conflict
+  if (hasQual) return null;
+
+  // 3. Check Department Eligibility
+  const catalogSubj = (typeof SUBJECTS !== 'undefined' ? SUBJECTS : []).find(s => s.code.toUpperCase() === targetCode)
+    || (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).find(s => s.code.toUpperCase() === targetCode);
+
+  let targetDept = catalogSubj?.dept;
+  if (!targetDept) {
+    if (targetCode.startsWith('GE') || targetCode.startsWith('NSTP') || catalogSubj?.type === 'pe') {
+      targetDept = 'General Education';
+    } else if (targetCode.startsWith('HM') || targetCode.startsWith('TM')) {
+      targetDept = 'Hospitality';
+    } else if (targetCode.startsWith('BA')) {
+      targetDept = 'Business Admin';
+    } else {
+      targetDept = 'IT / CS';
+    }
+  }
+
+  const facDept = fac.dept || '';
+  let isAllowableDept = false;
+  if (targetDept === 'IT / CS') {
+    isAllowableDept = (facDept === 'IT / CS' || facDept === 'Engineering');
+  } else if (targetDept === 'Engineering') {
+    isAllowableDept = (facDept === 'Engineering' || facDept === 'IT / CS');
+  } else {
+    isAllowableDept = (facDept === targetDept);
+  }
+
+  if (!isAllowableDept) {
+    return `Qualification Mismatch: ${fac.name} (${facDept}) is not qualified or allowable for ${targetCode} (${targetDept})`;
+  }
+
+  return null;
+}
+window.checkFacultySubjectConflict = checkFacultySubjectConflict;
+
 /* ─── Main Timetable Grid Renderer ─── */
 function renderGrid() {
   const tbody = document.getElementById('sectionGridBody');
@@ -2154,6 +2231,9 @@ function renderGrid() {
         if (other.section === classItem.section) return 'Section double-booked';
       }
     }
+
+    const qualConflict = checkFacultySubjectConflict(classItem.instructor, classItem.subjectCode, classItem.section);
+    if (qualConflict) return qualConflict;
     return null;
   }
 
@@ -2274,7 +2354,12 @@ function showClassDetails(classId) {
     } else if ((instFac.sideQuals || []).some(q => q.toUpperCase() === itemSubjCode)) {
       qualBadge = `<span class="badge" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:600;">✦ Side Qualified</span>`;
     } else {
-      qualBadge = `<span class="badge" style="background:#fffbeb; color:#b45309; border:1px solid #fef3c7; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:600;">Dept Allowable</span>`;
+      const eligConflict = checkFacultySubjectConflict(item.instructor, item.subjectCode, item.section);
+      if (eligConflict) {
+        qualBadge = `<span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:700;">⚠️ Ineligible (${instFac.dept})</span>`;
+      } else {
+        qualBadge = `<span class="badge" style="background:#fffbeb; color:#b45309; border:1px solid #fef3c7; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:600;">Dept Allowable</span>`;
+      }
     }
   }
 
@@ -2400,7 +2485,8 @@ function openEditClassScheduleModal(classId) {
           ${FACULTY.map(f => {
             const isMain = (f.mainQuals || []).some(q => q.toUpperCase() === item.subjectCode.toUpperCase());
             const isSide = (f.sideQuals || []).some(q => q.toUpperCase() === item.subjectCode.toUpperCase());
-            const qualTag = isMain ? ' [⭐ Main Qualified]' : (isSide ? ' [✦ Side Qualified]' : '');
+            const conflict = checkFacultySubjectConflict(f.name, item.subjectCode, item.section);
+            const qualTag = isMain ? ' [⭐ Main Qualified]' : (isSide ? ' [✦ Side Qualified]' : (conflict ? ` [⚠️ Ineligible ${f.dept}]` : ' [Dept Allowable]'));
             return `<option value="${escapeHtml(f.name)}" ${f.name === item.instructor ? 'selected' : ''}>${escapeHtml(f.name)} (${f.dept || 'Faculty'})${qualTag}</option>`;
           }).join('')}
         </select>
@@ -2448,10 +2534,12 @@ function handleEditSubjectChange(code) {
   if (instSelect) {
     const curVal = instSelect.value;
     const targetCode = (code || '').toUpperCase();
+    const curSection = document.getElementById('editScheduleSection')?.value || '';
     instSelect.innerHTML = FACULTY.map(f => {
       const isMain = (f.mainQuals || []).some(q => q.toUpperCase() === targetCode);
       const isSide = (f.sideQuals || []).some(q => q.toUpperCase() === targetCode);
-      const qualTag = isMain ? ' [⭐ Main Qualified]' : (isSide ? ' [✦ Side Qualified]' : '');
+      const conflict = checkFacultySubjectConflict(f.name, targetCode, curSection);
+      const qualTag = isMain ? ' [⭐ Main Qualified]' : (isSide ? ' [✦ Side Qualified]' : (conflict ? ` [⚠️ Ineligible ${f.dept}]` : ' [Dept Allowable]'));
       return `<option value="${escapeHtml(f.name)}" ${f.name === curVal ? 'selected' : ''}>${escapeHtml(f.name)} (${f.dept || 'Faculty'})${qualTag}</option>`;
     }).join('');
   }
@@ -2506,6 +2594,15 @@ function submitEditClassSchedule() {
         return;
       }
     }
+  }
+
+  const qualConflict = checkFacultySubjectConflict(instructor, subjCode, section);
+  if (qualConflict) {
+    if (errDiv) {
+      errDiv.textContent = qualConflict;
+      errDiv.style.display = 'block';
+    }
+    return;
   }
 
   // Apply updates
@@ -2781,6 +2878,9 @@ function checkGlobalClassConflict(classItem) {
     if (other.instructor === classItem.instructor) return `Faculty ${classItem.instructor} double-booked with ${other.section}`;
     if (other.section === classItem.section) return `Section ${classItem.section} double-booked with ${other.subjectCode}`;
   }
+
+  const qualConflict = checkFacultySubjectConflict(classItem.instructor, classItem.subjectCode, classItem.section);
+  if (qualConflict) return qualConflict;
   return null;
 }
 

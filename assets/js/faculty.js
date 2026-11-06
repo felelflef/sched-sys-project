@@ -302,6 +302,36 @@ window.submitChangeFacultyDept = function() {
     });
   }
 
+  // Synchronize and re-evaluate MASTER_SCHEDULE_DATA assignments for this faculty member
+  if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
+    MASTER_SCHEDULE_DATA.forEach(c => {
+      if (c.instructor === oldName) {
+        c.instructor = newName;
+      }
+      if (c.instructor === newName) {
+        if (typeof checkFacultySubjectConflict === 'function') {
+          const conflict = checkFacultySubjectConflict(newName, c.subjectCode, c.section);
+          if (conflict) {
+            // Find an eligible, qualified, or department-allowable faculty replacement
+            const targetCode = (c.subjectCode || '').toUpperCase();
+            const eligible = (typeof FACULTY !== 'undefined' ? FACULTY : []).filter(other => {
+              if (other.name === newName) return false;
+              return !checkFacultySubjectConflict(other.name, targetCode, c.section);
+            });
+            if (eligible.length > 0) {
+              const mainMatch = eligible.find(f => (f.mainQuals || []).some(q => q.toUpperCase() === targetCode));
+              const sideMatch = eligible.find(f => (f.sideQuals || []).some(q => q.toUpperCase() === targetCode));
+              const replacement = mainMatch || sideMatch || eligible[0];
+              if (replacement) {
+                c.instructor = replacement.name;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
   // 5. Update CURRENT_USER if admin edited their own account
   if (CURRENT_USER && CURRENT_USER.email.toLowerCase() === email.toLowerCase()) {
     CURRENT_USER.name = newName;
@@ -335,6 +365,8 @@ window.submitChangeFacultyDept = function() {
   renderFacultyCards();
   renderUserTable();
   renderGrid();
+  if (typeof renderTimetable === 'function') renderTimetable();
+  if (typeof renderGlobalScheduleTable === 'function') renderGlobalScheduleTable();
   renderDeptList();
   renderDeptFilterOptions();
 };
