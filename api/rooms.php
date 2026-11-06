@@ -5,7 +5,6 @@ require_once __DIR__ . '/../includes/functions.php';
 
 header('Content-Type: application/json');
 
-requireLogin();
 requireRole('admin');
 
 $db = getDB();
@@ -14,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'message' => 'Method not allowed'], 405);
 }
 
-validateCSRF();
+requireCSRF();
 
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? '';
@@ -80,6 +79,23 @@ if ($action === 'add') {
     $stmt->execute([$room_name_number, $room_type, $capacity, $floor_level, $room_id]);
 
     jsonResponse(['success' => true, 'message' => 'Room updated successfully']);
+
+} elseif ($action === 'delete') {
+    $room_id = (int)($input['room_id'] ?? 0);
+    if (!$room_id) {
+        jsonResponse(['success' => false, 'message' => 'Room ID is required'], 400);
+    }
+
+    // Deleting a room cascades to its classes, so a room in use must be cleared first
+    $useStmt = $db->prepare("SELECT COUNT(*) FROM schedules WHERE room_id = ?");
+    $useStmt->execute([$room_id]);
+    if ($useStmt->fetchColumn() > 0) {
+        jsonResponse(['success' => false, 'message' => 'This room still has scheduled classes. Move them to another room first.'], 409);
+    }
+
+    $stmt = $db->prepare("DELETE FROM classrooms WHERE room_id = ?");
+    $stmt->execute([$room_id]);
+    jsonResponse(['success' => true, 'message' => 'Room removed successfully']);
 
 } else {
     jsonResponse(['success' => false, 'message' => 'Invalid action'], 400);

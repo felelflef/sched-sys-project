@@ -3,10 +3,10 @@
    ═══════════════════════════════════════════════════ */
 
 const VALID_USERS = {
-  'admin@sti.edu':   { name: 'System Administrator', role: 'admin',         initials: 'SA', password: 'password' },
-  'acah@sti.edu':    { name: 'Academic Head',        role: 'academic-head', initials: 'AH', password: 'password' },
-  'proh@sti.edu':    { name: 'Program Head',         role: 'program-head',  initials: 'PH', password: 'password' },
-  'faculty@sti.edu': { name: 'Faculty Member',       role: 'faculty',       initials: 'FM', password: 'password' },
+  'admin@sti.edu':   { name: 'System Administrator', role: 'admin',         initials: 'SA' },
+  'acah@sti.edu':    { name: 'Academic Head',        role: 'academic-head', initials: 'AH' },
+  'proh@sti.edu':    { name: 'Program Head',         role: 'program-head',  initials: 'PH' },
+  'faculty@sti.edu': { name: 'Faculty Member',       role: 'faculty',       initials: 'FM' },
 };
 
 let CURRENT_USER = null;
@@ -17,26 +17,26 @@ let ROOMS = [
   { code: 'CL-102', floor: '1F', type: 'CompLab', cap: 35, util: 88, name: 'Computer Laboratory 2' },
   { code: 'CL-103', floor: '1F', type: 'CompLab', cap: 40, util: 95, name: 'Computer Laboratory 3' },
   { code: 'CL-104', floor: '1F', type: 'CompLab', cap: 30, util: 84, name: 'Computer Laboratory 4' },
-  { code: 'LR-101', floor: '1F', type: 'Lecture', cap: 45, util: 82, name: 'Lecture Room 101' },
-  { code: 'LR-102', floor: '1F', type: 'Lecture', cap: 45, util: 76, name: 'Lecture Room 102' },
+  { code: 'LR-101', floor: '1F', type: 'Lecture', cap: 40, util: 82, name: 'Lecture Room 101' },
+  { code: 'LR-102', floor: '1F', type: 'Lecture', cap: 40, util: 76, name: 'Lecture Room 102' },
   { code: 'LR-103', floor: '1F', type: 'Lecture', cap: 40, util: 70, name: 'Lecture Room 103' },
   { code: 'Kitchen Lab', floor: '1F', type: 'Special', cap: 25, util: 70, name: 'Culinary Arts Kitchen Lab' },
 
   // Floor 2 (6 Lecture Rooms)
-  { code: 'LR-201', floor: '2F', type: 'Lecture', cap: 45, util: 88, name: 'Lecture Room 201' },
-  { code: 'LR-202', floor: '2F', type: 'Lecture', cap: 45, util: 82, name: 'Lecture Room 202' },
+  { code: 'LR-201', floor: '2F', type: 'Lecture', cap: 40, util: 88, name: 'Lecture Room 201' },
+  { code: 'LR-202', floor: '2F', type: 'Lecture', cap: 40, util: 82, name: 'Lecture Room 202' },
   { code: 'LR-203', floor: '2F', type: 'Lecture', cap: 40, util: 76, name: 'Lecture Room 203' },
   { code: 'LR-204', floor: '2F', type: 'Lecture', cap: 40, util: 91, name: 'Lecture Room 204' },
-  { code: 'LR-205', floor: '2F', type: 'Lecture', cap: 50, util: 84, name: 'Lecture Room 205' },
-  { code: 'LR-206', floor: '2F', type: 'Lecture', cap: 45, util: 68, name: 'Lecture Room 206' },
+  { code: 'LR-205', floor: '2F', type: 'Lecture', cap: 40, util: 84, name: 'Lecture Room 205' },
+  { code: 'LR-206', floor: '2F', type: 'Lecture', cap: 40, util: 68, name: 'Lecture Room 206' },
 
   // Floor 3 (6 Lecture Rooms, 1 Tourism Lab)
-  { code: 'LR-301', floor: '3F', type: 'Lecture', cap: 50, util: 70, name: 'Lecture Room 301' },
-  { code: 'LR-302', floor: '3F', type: 'Lecture', cap: 50, util: 65, name: 'Lecture Room 302' },
-  { code: 'LR-303', floor: '3F', type: 'Lecture', cap: 45, util: 78, name: 'Lecture Room 303' },
-  { code: 'LR-304', floor: '3F', type: 'Lecture', cap: 45, util: 72, name: 'Lecture Room 304' },
+  { code: 'LR-301', floor: '3F', type: 'Lecture', cap: 40, util: 70, name: 'Lecture Room 301' },
+  { code: 'LR-302', floor: '3F', type: 'Lecture', cap: 40, util: 65, name: 'Lecture Room 302' },
+  { code: 'LR-303', floor: '3F', type: 'Lecture', cap: 40, util: 78, name: 'Lecture Room 303' },
+  { code: 'LR-304', floor: '3F', type: 'Lecture', cap: 40, util: 72, name: 'Lecture Room 304' },
   { code: 'LR-305', floor: '3F', type: 'Lecture', cap: 40, util: 68, name: 'Lecture Room 305' },
-  { code: 'LR-306', floor: '3F', type: 'Lecture', cap: 45, util: 62, name: 'Lecture Room 306' },
+  { code: 'LR-306', floor: '3F', type: 'Lecture', cap: 40, util: 62, name: 'Lecture Room 306' },
   { code: 'Tourism Lab', floor: '3F', type: 'Special', cap: 30, util: 68, name: 'Tourism & Hospitality Mock Center' }
 ];
 
@@ -66,24 +66,30 @@ let SUBJECTS = [
 let DEPARTMENTS = ['IT / CS', 'Engineering', 'Hospitality', 'Business Admin', 'General Education'];
 
 let FACULTY = [
-  { name: 'Academic Head', email: 'acah@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 18, maxLoad: 24, mainQuals: ['ITE 101','CC 103'], sideQuals: ['ITE 301','ITE 202'], quals: ['ITE 101','CC 103','ITE 301','ITE 202'], bg: '#25447A' },
-  { name: 'Program Head', email: 'proh@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 18, maxLoad: 24, mainQuals: ['CS 201','CS 301'], sideQuals: ['CS 401','CC 104'], quals: ['CS 201','CS 301','CS 401','CC 104'], bg: '#2E7D5B' },
-  { name: 'Faculty Member', email: 'faculty@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['ITE 101','IM 101'], sideQuals: ['IT 312','ITE 401'], quals: ['ITE 101','IM 101','IT 312','ITE 401'], bg: '#6C3483' },
-  { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', dept: 'General Education', status: 'Full-time', load: 16, maxLoad: 24, mainQuals: ['GE 107','GE 201','PE 102'], sideQuals: ['NSTP 1','GE 102','PE 104','NSTP 2'], quals: ['GE 107','GE 201','PE 102','NSTP 1','GE 102','PE 104','NSTP 2'], bg: '#0D9488' },
-  { name: 'Chef Hospitality Faculty', email: 'hospitality@sti.edu', dept: 'Hospitality', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['HM 201','TM 301'], sideQuals: ['HM 202','TM 302'], quals: ['HM 201','TM 301','HM 202','TM 302'], bg: '#D97706' },
-  { name: 'Prof. Business Faculty', email: 'business@sti.edu', dept: 'Business Admin', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['BA 101'], sideQuals: ['BA 102'], quals: ['BA 101','BA 102'], bg: '#2563EB' },
-  { name: 'Engr. Faculty Member', email: 'engr@sti.edu', dept: 'Engineering', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['CC 103','CS 201'], sideQuals: ['CC 104'], quals: ['CC 103','CC 104','CS 201'], bg: '#4B5563' }
+  { name: 'Academic Head', email: 'acah@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 18, maxLoad: 24, mainQuals: ['ITE 101','CC 103','ITE 301','ITE 202'], bg: '#25447A' },
+  { name: 'Program Head', email: 'proh@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 18, maxLoad: 24, mainQuals: ['CS 201','CS 301','CS 401','CC 104'], bg: '#2E7D5B' },
+  { name: 'Faculty Member', email: 'faculty@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['ITE 101','IM 101','IT 312','ITE 401'], bg: '#6C3483' },
+  { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', dept: 'General Education', status: 'Full-time', load: 16, maxLoad: 24, mainQuals: ['GE 107','GE 201','PE 102','NSTP 1','GE 102','PE 104','NSTP 2'], bg: '#0D9488' },
+  { name: 'Chef Hospitality Faculty', email: 'hospitality@sti.edu', dept: 'Hospitality', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['HM 201','TM 301','HM 202','TM 302'], bg: '#D97706' },
+  { name: 'Prof. Business Faculty', email: 'business@sti.edu', dept: 'Business Admin', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['BA 101','BA 102'], bg: '#2563EB' },
+  { name: 'Engr. Faculty Member', email: 'engr@sti.edu', dept: 'Engineering', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['CC 103','CC 104','CS 201'], bg: '#4B5563' }
 ];
 
+// A teacher may only teach subjects in their main qualifications
+function isFacultyQualified(fac, subjectCode) {
+  const target = (subjectCode || '').trim().toUpperCase();
+  return (fac?.mainQuals || []).some(q => q.trim().toUpperCase() === target);
+}
+
 let USERS = [
-  { name: 'System Administrator', email: 'admin@sti.edu', role: 'admin', roleLabel: 'System Admin', lastActive: 'Just now', status: 'Online' },
-  { name: 'Academic Head', email: 'acah@sti.edu', role: 'academic-head', roleLabel: 'Academic Head', lastActive: '5 min ago', status: 'Online' },
-  { name: 'Program Head', email: 'proh@sti.edu', role: 'program-head', roleLabel: 'Program Head', lastActive: '10 min ago', status: 'Online' },
-  { name: 'Faculty Member', email: 'faculty@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '15 min ago', status: 'Online' },
-  { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '20 min ago', status: 'Online' },
-  { name: 'Chef Hospitality Faculty', email: 'hospitality@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '25 min ago', status: 'Online' },
-  { name: 'Prof. Business Faculty', email: 'business@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '30 min ago', status: 'Online' },
-  { name: 'Engr. Faculty Member', email: 'engr@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '35 min ago', status: 'Online' }
+  { name: 'System Administrator', email: 'admin@sti.edu', role: 'admin', roleLabel: 'System Admin', lastActive: 'Just now', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Academic Head', email: 'acah@sti.edu', role: 'academic-head', roleLabel: 'Academic Head', lastActive: '5 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Program Head', email: 'proh@sti.edu', role: 'program-head', roleLabel: 'Program Head', lastActive: '10 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Faculty Member', email: 'faculty@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '15 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '20 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Chef Hospitality Faculty', email: 'hospitality@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '25 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Prof. Business Faculty', email: 'business@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '30 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Engr. Faculty Member', email: 'engr@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '35 min ago', status: 'Online', employmentType: 'Full-time' }
 ];
 
 const DAYS_ABBR = ['M','T','W','Th','F','S'];
@@ -171,6 +177,7 @@ let CURRICULUM_SUBJECTS = [
 
 // 5. Academic Sections
 let ACADEMIC_SECTIONS = [
+  // AY 2026-2027 (Term 1 - 1st Sem)
   { id: 1, termId: 1, code: 'IT701M',  name: 'BSIT 1A',  program: 'BSIT',  year: 1, studentCount: 38, shift: 'AM', adviser: 'Prof. Academic Head' },
   { id: 2, termId: 1, code: 'IT702M',  name: 'BSIT 1B',  program: 'BSIT',  year: 1, studentCount: 36, shift: 'AM', adviser: 'Prof. Faculty Member' },
   { id: 3, termId: 1, code: 'IT801M',  name: 'BSIT 2A',  program: 'BSIT',  year: 2, studentCount: 35, shift: 'AM', adviser: 'Prof. Program Head' },
@@ -179,7 +186,17 @@ let ACADEMIC_SECTIONS = [
   { id: 6, termId: 1, code: 'CPE701M', name: 'BSCpE 1A', program: 'BSCpE', year: 1, studentCount: 30, shift: 'AM', adviser: 'Engr. Faculty Member' },
   { id: 7, termId: 1, code: 'HM701M',  name: 'BSHM 1A',  program: 'BSHM',  year: 1, studentCount: 40, shift: 'AM', adviser: 'Chef Faculty Member' },
   { id: 8, termId: 1, code: 'TM701M',  name: 'BSTM 1A',  program: 'BSTM',  year: 1, studentCount: 34, shift: 'AM', adviser: 'Prof. Academic Head' },
-  { id: 9, termId: 1, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' }
+  { id: 9, termId: 1, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' },
+  // AY 2027-2028 (Term 4 - 1st Sem)
+  { id: 10, termId: 4, code: 'IT701M',  name: 'BSIT 1A',  program: 'BSIT',  year: 1, studentCount: 38, shift: 'AM', adviser: 'Prof. Academic Head' },
+  { id: 11, termId: 4, code: 'IT702M',  name: 'BSIT 1B',  program: 'BSIT',  year: 1, studentCount: 36, shift: 'AM', adviser: 'Prof. Faculty Member' },
+  { id: 12, termId: 4, code: 'IT801M',  name: 'BSIT 2A',  program: 'BSIT',  year: 2, studentCount: 35, shift: 'AM', adviser: 'Prof. Program Head' },
+  { id: 13, termId: 4, code: 'IT802M',  name: 'BSIT 2B',  program: 'BSIT',  year: 2, studentCount: 34, shift: 'AM', adviser: 'Prof. Faculty Member' },
+  { id: 14, termId: 4, code: 'CS701M',  name: 'BSCS 1A',  program: 'BSCS',  year: 1, studentCount: 32, shift: 'AM', adviser: 'Prof. Program Head' },
+  { id: 15, termId: 4, code: 'CPE701M', name: 'BSCpE 1A', program: 'BSCpE', year: 1, studentCount: 30, shift: 'AM', adviser: 'Engr. Faculty Member' },
+  { id: 16, termId: 4, code: 'HM701M',  name: 'BSHM 1A',  program: 'BSHM',  year: 1, studentCount: 40, shift: 'AM', adviser: 'Chef Faculty Member' },
+  { id: 17, termId: 4, code: 'TM701M',  name: 'BSTM 1A',  program: 'BSTM',  year: 1, studentCount: 34, shift: 'AM', adviser: 'Prof. Academic Head' },
+  { id: 18, termId: 4, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' }
 ];
 
 // Unassigned Classes Diagnostics
@@ -195,6 +212,9 @@ function loadStateFromStorage() {
         if (u && u.email) CURRENT_USER = u;
       } catch (e) {}
     }
+
+    const storedRooms = JSON.parse(localStorage.getItem('sti_rooms') || 'null');
+    if (Array.isArray(storedRooms) && storedRooms.length > 0) ROOMS = storedRooms;
 
     const sy = localStorage.getItem('sti_school_years');
     if (sy) SCHOOL_YEARS = JSON.parse(sy);
@@ -221,11 +241,17 @@ function loadStateFromStorage() {
         FACULTY = parsedFac;
       }
     }
-    // Ensure all faculty profiles have mainQuals and sideQuals arrays
+    const storedCatalog = JSON.parse(localStorage.getItem('sti_subject_catalog') || 'null');
+    if (Array.isArray(storedCatalog) && storedCatalog.length > 0) SUBJECTS = storedCatalog;
+
+    const storedDepts = JSON.parse(localStorage.getItem('sti_departments') || 'null');
+    if (Array.isArray(storedDepts) && storedDepts.length > 0) DEPARTMENTS = storedDepts;
+
+    // Older saved profiles had separate lists; merge them into the one allowed list
     FACULTY.forEach(f => {
-      if (!f.mainQuals) f.mainQuals = (f.quals ? f.quals.slice(0, 2) : []);
-      if (!f.sideQuals) f.sideQuals = (f.quals ? f.quals.slice(2) : []);
-      if (!f.quals) f.quals = [...new Set([...f.mainQuals, ...f.sideQuals])];
+      f.mainQuals = [...new Set([...(f.mainQuals || []), ...(f.sideQuals || []), ...(f.quals || [])].map(q => q.trim().toUpperCase()))];
+      delete f.sideQuals;
+      delete f.quals;
     });
 
     // Self-healing: Ensure active term matches active school year
@@ -244,6 +270,9 @@ function loadStateFromStorage() {
 
 function saveStateToStorage() {
   try {
+    localStorage.setItem('sti_rooms', JSON.stringify(ROOMS));
+    localStorage.setItem('sti_subject_catalog', JSON.stringify(SUBJECTS));
+    localStorage.setItem('sti_departments', JSON.stringify(DEPARTMENTS));
     localStorage.setItem('sti_school_years', JSON.stringify(SCHOOL_YEARS));
     localStorage.setItem('sti_school_terms', JSON.stringify(SCHOOL_TERMS));
     localStorage.setItem('sti_curriculum_subjects', JSON.stringify(CURRICULUM_SUBJECTS));

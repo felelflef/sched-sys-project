@@ -1,5 +1,19 @@
-﻿<?php
+<?php
+// Keep PHP warnings out of JSON responses; they still go to the server error log.
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
 if (session_status() === PHP_SESSION_NONE) {
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    ini_set('session.use_strict_mode', '1');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
@@ -35,8 +49,10 @@ function getDB(): PDO {
 
         // Aiven MySQL requires SSL connections
         if (DB_SSL) {
-            $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
-            $options[PDO::MYSQL_ATTR_SSL_CA] = '';
+            // Set DB_SSL_CA to the provider's CA file path to verify the server certificate.
+            $sslCa = getenv('DB_SSL_CA') ?: '';
+            $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = $sslCa !== '';
+            $options[PDO::MYSQL_ATTR_SSL_CA] = $sslCa;
         }
 
         try {
@@ -54,6 +70,10 @@ function getDB(): PDO {
                     if (!$checkSchedules) {
                         $pdo->exec("ALTER TABLE schedules ADD COLUMN subject_category VARCHAR(50) DEFAULT 'IT'");
                     }
+                    $checkTerm = $pdo->query("SHOW COLUMNS FROM schedules LIKE 'term_id'")->fetch();
+                    if (!$checkTerm) {
+                        $pdo->exec("ALTER TABLE schedules ADD COLUMN term_id INT NULL, ADD INDEX idx_schedules_term_day (term_id, day_of_week)");
+                    }
                     $checkRole = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
                     if ($checkRole && strpos($checkRole['Type'], 'academic-head') === false) {
                         $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'academic-head', 'program-head', 'faculty') NOT NULL");
@@ -68,8 +88,11 @@ function getDB(): PDO {
                 $migrated = true;
             }
         } catch (PDOException $e) {
+            error_log('Database connection failed: ' . $e->getMessage());
             http_response_code(500);
-            die("Database connection failed: " . $e->getMessage());
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Database connection failed. Please try again later.']);
+            exit;
         }
     }
     return $pdo;

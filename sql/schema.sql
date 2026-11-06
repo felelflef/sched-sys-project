@@ -13,7 +13,7 @@
 CREATE TABLE IF NOT EXISTS classrooms (
     room_id INT AUTO_INCREMENT PRIMARY KEY,
     room_name_number VARCHAR(50) NOT NULL,
-    room_type ENUM('Lecture', 'Lab', 'Kitchen', 'Bar', 'Special') NOT NULL,
+    room_type ENUM('Lecture', 'Lab', 'CompLab', 'Kitchen', 'Bar', 'Special') NOT NULL,
     capacity INT NOT NULL,
     floor_level INT NOT NULL,
     current_status ENUM('Vacant', 'Occupied', 'Reserved') DEFAULT 'Vacant'
@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS academic_sections (
 
 CREATE TABLE IF NOT EXISTS schedules (
     schedule_id INT AUTO_INCREMENT PRIMARY KEY,
+    term_id INT NULL,
     room_id INT NOT NULL,
     faculty_id INT NOT NULL,
     subject_code VARCHAR(20) NOT NULL,
@@ -88,8 +89,34 @@ CREATE TABLE IF NOT EXISTS schedules (
     day_of_week ENUM('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat') NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
+    INDEX idx_schedules_term_day (term_id, day_of_week),
     FOREIGN KEY (room_id) REFERENCES classrooms(room_id) ON DELETE CASCADE,
     FOREIGN KEY (faculty_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    setting_key VARCHAR(50) PRIMARY KEY,
+    setting_value VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS departments (
+    department_name VARCHAR(100) PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS subject_catalog (
+    subject_code VARCHAR(20) PRIMARY KEY,
+    subject_title VARCHAR(100) NOT NULL,
+    department VARCHAR(100) NOT NULL,
+    it_only TINYINT(1) DEFAULT 0,
+    units INT NOT NULL DEFAULT 3
+);
+
+-- The subjects each teacher is allowed to teach
+CREATE TABLE IF NOT EXISTS faculty_qualifications (
+    user_id INT NOT NULL,
+    subject_code VARCHAR(20) NOT NULL,
+    PRIMARY KEY (user_id, subject_code),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS room_requests (
@@ -120,35 +147,39 @@ CREATE TABLE IF NOT EXISTS session_logs (
 
 -- Seed Data: Classrooms
 INSERT INTO classrooms (room_name_number, room_type, capacity, floor_level) VALUES
-('Lab 1', 'Lab', 35, 1),
-('Lab 2', 'Lab', 35, 1),
-('Lab 3', 'Lab', 35, 1),
-('Lab 4', 'Lab', 35, 1),
-('Kitchen', 'Kitchen', 20, 1),
-('Bar', 'Bar', 25, 1),
-('Room 201', 'Lecture', 45, 2),
-('Room 202', 'Lecture', 45, 2),
-('Room 203', 'Lecture', 40, 2),
-('Room 204', 'Lecture', 40, 2),
-('Room 205', 'Lecture', 50, 2),
-('Room 301', 'Lecture', 45, 3),
-('Room 302', 'Lecture', 45, 3),
-('Room 303', 'Lecture', 40, 3),
-('Room 304', 'Lecture', 40, 3),
-('Room 305', 'Lecture', 45, 3),
-('Room 306', 'Lecture', 45, 3),
-('Room 307', 'Lecture', 40, 3),
-('Room 308', 'Lecture', 40, 3),
-('Room 309', 'Lecture', 50, 3),
-('Room 310', 'Lecture', 50, 3),
-('Tourism Lab', 'Lab', 30, 3);
+('CL-101', 'CompLab', 35, 1),
+('CL-102', 'CompLab', 35, 1),
+('CL-103', 'CompLab', 40, 1),
+('CL-104', 'CompLab', 30, 1),
+('LR-101', 'Lecture', 40, 1),
+('LR-102', 'Lecture', 40, 1),
+('LR-103', 'Lecture', 40, 1),
+('Kitchen Lab', 'Special', 25, 1),
+('LR-201', 'Lecture', 40, 2),
+('LR-202', 'Lecture', 40, 2),
+('LR-203', 'Lecture', 40, 2),
+('LR-204', 'Lecture', 40, 2),
+('LR-205', 'Lecture', 40, 2),
+('LR-206', 'Lecture', 40, 2),
+('LR-301', 'Lecture', 40, 3),
+('LR-302', 'Lecture', 40, 3),
+('LR-303', 'Lecture', 40, 3),
+('LR-304', 'Lecture', 40, 3),
+('LR-305', 'Lecture', 40, 3),
+('LR-306', 'Lecture', 40, 3),
+('Tourism Lab', 'Special', 30, 3);
 
 -- Seed Data: Users
 INSERT INTO users (first_name, last_name, email, password_hash, role, subject_role) VALUES
 ('System', 'Administrator', 'admin@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', NULL),
-('Academic', 'Head', 'acah@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'faculty', 'IT'),
-('Program', 'Head', 'proh@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'faculty', 'IT'),
-('Faculty', 'Member', 'faculty@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'faculty', 'IT');
+('Academic', 'Head', 'acah@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'academic-head', 'IT'),
+('Program', 'Head', 'proh@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'program-head', 'IT'),
+('Faculty', 'Member', 'faculty@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'faculty', 'IT'),
+-- Teaching records with no usable password ('!' never matches a hash)
+('Prof.', 'GenEd Instructor', 'gened@sti.edu', '!', 'faculty', 'General Education'),
+('Chef', 'Hospitality Faculty', 'hospitality@sti.edu', '!', 'faculty', 'Hospitality'),
+('Prof.', 'Business Faculty', 'business@sti.edu', '!', 'faculty', 'Business Admin'),
+('Engr.', 'Faculty Member', 'engr@sti.edu', '!', 'faculty', 'Engineering');
 
 -- Seed Data: School Years & Terms
 INSERT INTO school_years (year_id, year_code, is_active) VALUES
@@ -190,12 +221,12 @@ INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lecture_h
 -- Seed Data: Schedules
 INSERT INTO schedules (room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time) VALUES
 (1, 2, 'IT101', 'IT', 'BSIT-1A', 'Mon', '08:00:00', '10:00:00'),
-(7, 3, 'GE101', 'General Education', 'BSIT-1B', 'Tue', '10:30:00', '12:00:00'),
-(5, 3, 'HM101', 'Hospitality', 'BSHM-1A', 'Wed', '13:00:00', '16:00:00'),
-(22, 3, 'HM102', 'Hospitality', 'BSTM-1A', 'Thu', '09:00:00', '11:00:00'),
+(9, 3, 'GE101', 'General Education', 'BSIT-1B', 'Tue', '10:30:00', '12:00:00'),
+(8, 3, 'HM101', 'Hospitality', 'BSHM-1A', 'Wed', '13:00:00', '16:00:00'),
+(21, 3, 'HM102', 'Hospitality', 'BSTM-1A', 'Thu', '09:00:00', '11:00:00'),
 (2, 2, 'IT201', 'IT', 'BSIT-2A', 'Fri', '14:00:00', '16:00:00'),
-(12, 3, 'GE102', 'General Education', 'BSIT-2B', 'Mon', '11:00:00', '13:00:00'),
-(8, 2, 'IT301', 'IT', 'BSIT-3A', 'Tue', '07:30:00', '09:30:00'),
-(6, 2, 'HM201', 'Hospitality', 'BSHM-2A', 'Wed', '16:00:00', '18:00:00'),
+(15, 3, 'GE102', 'General Education', 'BSIT-2B', 'Mon', '11:00:00', '13:00:00'),
+(10, 2, 'IT301', 'IT', 'BSIT-3A', 'Tue', '07:30:00', '09:30:00'),
+(8, 2, 'HM201', 'Hospitality', 'BSHM-2A', 'Wed', '16:00:00', '18:00:00'),
 (3, 2, 'IT401', 'IT', 'BSIT-4A', 'Sat', '08:00:00', '12:00:00'),
-(15, 3, 'GE201', 'General Education', 'BSIT-1A', 'Thu', '14:00:00', '15:30:00');
+(18, 3, 'GE201', 'General Education', 'BSIT-1A', 'Thu', '14:00:00', '15:30:00');

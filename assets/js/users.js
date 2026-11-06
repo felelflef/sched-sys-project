@@ -19,21 +19,32 @@ function renderUserTable() {
     const tr = document.createElement('tr');
     const roleBadgeClass = u.role === 'admin' ? 'role-admin' : u.role === 'academic-head' ? 'role-academic-head' : 'role-program-head';
     const isSelf = CURRENT_USER && (u.email.toLowerCase() === CURRENT_USER.email.toLowerCase());
+    const matchingFac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.email && f.email.toLowerCase() === u.email.toLowerCase());
+    const empStatus = u.employmentType || (matchingFac ? matchingFac.status : 'Full-time');
+    const empBadgeStyle = empStatus === 'Part-time'
+      ? 'background:#fef3c7; color:#b45309; border:1px solid #fde68a;'
+      : 'background:#DEF7EC; color:#03543F; border:1px solid #bbf7d0;';
 
     let actionCellHtml = '';
     if (isSelf) {
       actionCellHtml = '<span style="font-size:11px; color:var(--text-secondary);">(Current User)</span>';
     } else if (isAdmin) {
-      actionCellHtml = `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8; cursor:pointer;" onclick="window.promptDeleteUser('${u.email}')">Remove</button>`;
+      actionCellHtml = `
+        <div style="display:inline-flex; gap:4px; align-items:center;">
+          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openEditUserModal('${u.email}')">Edit</button>
+          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8; cursor:pointer;" onclick="window.promptDeleteUser('${u.email}')">Remove</button>
+        </div>
+      `;
     } else {
       actionCellHtml = '<span style="font-size:11px; color:var(--text-secondary);">—</span>';
     }
 
     tr.innerHTML = `
-      <td style="font-weight:600;">${u.name}</td>
-      <td>${u.email}</td>
-      <td><span class="role-badge ${roleBadgeClass}">${u.roleLabel}</span></td>
-      <td style="color:var(--text-secondary);">${u.lastActive}</td>
+      <td style="font-weight:600;">${escapeHtml(u.name)}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td><span class="role-badge ${roleBadgeClass}">${escapeHtml(u.roleLabel)}</span></td>
+      <td style="color:var(--text-secondary);">${escapeHtml(u.lastActive)}</td>
+      <td><span class="badge" style="${empBadgeStyle} font-size:10.5px; font-weight:700;">${escapeHtml(empStatus)}</span></td>
       <td><span class="badge ${u.status === 'Online' ? 'badge-success' : ''}" style="${u.status === 'Offline' ? 'background:#F2F2F2; color:var(--text-secondary);' : ''}">● ${u.status}</span></td>
       <td style="text-align:right;">
         ${actionCellHtml}
@@ -116,8 +127,8 @@ window.submitAddUser = function() {
     return;
   }
 
-  // Default password to 'password' if left blank
-  if (!password) {
+  // The blank-password default only applies to the local demo mode
+  if (!password && IS_STANDALONE) {
     password = 'password';
   } else if (password.length < 6) {
     showAddUserError('Password must be at least 6 characters.');
@@ -166,13 +177,16 @@ window.submitAddUser = function() {
     console.log('[Database persistence offline/standalone mode]:', err);
   });
 
+  const status = document.getElementById('newUserStatus')?.value || 'Full-time';
+
   USERS.push({
     name,
     email,
     role,
     roleLabel: roleLabels[role] || role,
     lastActive: 'Just now',
-    status: 'Online'
+    status: 'Online',
+    employmentType: status
   });
 
   const initials = name.split(' ').filter(w => w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
@@ -186,10 +200,10 @@ window.submitAddUser = function() {
         name,
         email,
         dept: dept || 'IT / CS',
-        status: 'Full-time',
-        load: 18,
-        maxLoad: 24,
-        quals: dept === 'IT / CS' ? ['ITE 101', 'CC 103'] : dept === 'Hospitality' ? ['HM 201', 'TM 301'] : ['BA 101'],
+        status: status,
+        load: status === 'Part-time' ? 12 : 18,
+        maxLoad: status === 'Part-time' ? 15 : 24,
+        mainQuals: [],
         bg: colors[Math.floor(Math.random() * colors.length)]
       });
       renderFacultyCards();
@@ -198,6 +212,131 @@ window.submitAddUser = function() {
 
   closeAddUserModal();
   renderUserTable();
+};
+
+window.openEditUserModal = function(email) {
+  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
+    alert('Access Denied: Only system administrators are authorized to edit accounts.');
+    return;
+  }
+  const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (!user) return;
+
+  const targetEmailInput = document.getElementById('editUserTargetEmail');
+  if (targetEmailInput) targetEmailInput.value = user.email;
+
+  const emailDisplay = document.getElementById('editUserEmailDisplay');
+  if (emailDisplay) emailDisplay.textContent = `${user.email} · Role: ${user.roleLabel}`;
+
+  const nameInput = document.getElementById('editUserNameInput');
+  if (nameInput) nameInput.value = user.name;
+
+  const fac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.email && f.email.toLowerCase() === user.email.toLowerCase());
+  const statusSelect = document.getElementById('editUserStatusSelect');
+  if (statusSelect) {
+    statusSelect.value = user.employmentType || (fac ? fac.status : 'Full-time');
+  }
+
+  const deptSelect = document.getElementById('editUserDeptSelect');
+  if (deptSelect) {
+    deptSelect.innerHTML = '';
+    const currentDept = fac ? fac.dept : 'IT / CS';
+    DEPARTMENTS.forEach(dept => {
+      const opt = document.createElement('option');
+      opt.value = dept;
+      opt.textContent = dept;
+      if (dept === currentDept) opt.selected = true;
+      deptSelect.appendChild(opt);
+    });
+  }
+
+  const modal = document.getElementById('editUserModal');
+  if (modal) modal.style.display = 'flex';
+};
+
+window.closeEditUserModal = function() {
+  const modal = document.getElementById('editUserModal');
+  if (modal) modal.style.display = 'none';
+};
+
+window.submitEditUser = function() {
+  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
+    alert('Access Denied: Only system administrators are authorized to edit accounts.');
+    return;
+  }
+  const email = document.getElementById('editUserTargetEmail')?.value;
+  const newName = document.getElementById('editUserNameInput')?.value.trim();
+  const newStatus = document.getElementById('editUserStatusSelect')?.value || 'Full-time';
+  const newDept = document.getElementById('editUserDeptSelect')?.value || 'IT / CS';
+
+  if (!email || !newName) {
+    alert('Please enter a valid user name.');
+    return;
+  }
+
+  const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (!user) return;
+
+  const oldName = user.name;
+
+  // 1. Update user in USERS
+  user.name = newName;
+  user.employmentType = newStatus;
+
+  // 2. Update VALID_USERS cache
+  if (VALID_USERS[email.toLowerCase()]) {
+    VALID_USERS[email.toLowerCase()].name = newName;
+    VALID_USERS[email.toLowerCase()].initials = newName.split(' ').filter(w => w.length > 0).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+  }
+
+  // 3. Update or sync corresponding FACULTY profile
+  const fac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
+  if (fac) {
+    fac.name = newName;
+    fac.status = newStatus;
+    if (newDept) fac.dept = newDept;
+    if (newStatus === 'Part-time' && fac.maxLoad > 18) {
+      fac.maxLoad = 15;
+    } else if (newStatus === 'Full-time' && fac.maxLoad < 20) {
+      fac.maxLoad = 24;
+    }
+  }
+
+  // 4. Update MASTER_SCHEDULE_DATA if name changed
+  if (oldName !== newName && typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
+    MASTER_SCHEDULE_DATA.forEach(c => {
+      if (c.instructor === oldName) c.instructor = newName;
+    });
+  }
+
+  // 5. Update CURRENT_USER if admin edited their own account
+  if (CURRENT_USER && CURRENT_USER.email.toLowerCase() === email.toLowerCase()) {
+    CURRENT_USER.name = newName;
+    const sidebarName = document.querySelector('.sidebar-footer .user-name');
+    if (sidebarName) sidebarName.textContent = newName;
+  }
+
+  // Persist to MySQL via API
+  const nameParts = newName.split(' ');
+  const firstName = nameParts[0];
+  const lastName = nameParts.slice(1).join(' ') || nameParts[0];
+  fetch('/api/users.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'edit_user',
+      email: email,
+      first_name: firstName,
+      last_name: lastName,
+      subject_role: newDept
+    })
+  }).catch(() => {});
+
+  if (typeof saveStateToStorage === 'function') saveStateToStorage();
+  closeEditUserModal();
+  renderUserTable();
+  if (typeof renderFacultyCards === 'function') renderFacultyCards();
+  if (typeof renderGrid === 'function') renderGrid();
 };
 
 window.promptDeleteUser = function(email) {

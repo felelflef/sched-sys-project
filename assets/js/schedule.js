@@ -220,10 +220,35 @@ function refreshAllSchedulingViews() {
   updateSectionDropdown();
   renderGrid();
   updateScheduleStats();
-  updateSectionDropdown();
-  renderGrid();
-  updateScheduleStats();
+  syncAllSyFilters();
+
+  if (typeof renderFloorMap === 'function') {
+    const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
+    renderFloorMap(activeFloor + 'F');
+  }
+  if (typeof updateCampusMapStats === 'function') {
+    updateCampusMapStats();
+  }
 }
+
+function syncAllSyFilters() {
+  if (typeof SCHOOL_YEARS === 'undefined') return;
+  const activeSy = SCHOOL_YEARS.find(y => y.isActive) || SCHOOL_YEARS[0];
+
+  const selects = [
+    document.getElementById('masterScheduleSyFilter'),
+    document.getElementById('campusMapSyFilter')
+  ];
+
+  selects.forEach(sel => {
+    if (!sel) return;
+    sel.innerHTML = SCHOOL_YEARS.map(sy => {
+      return `<option value="${sy.id}" ${sy.isActive ? 'selected' : ''}>${escapeHtml(sy.yearCode)}${sy.isActive ? ' (Active)' : ''}</option>`;
+    }).join('');
+    if (activeSy) sel.value = String(activeSy.id);
+  });
+}
+window.syncAllSyFilters = syncAllSyFilters;
 
 function submitSchoolYearModal() {
   const idVal = document.getElementById('syEditId').value;
@@ -305,7 +330,7 @@ function submitSchoolYearModal() {
   fetch('api/schedules.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'save_school_year', year_id: targetSyId, year_code: codeVal, is_active: isActiveVal })
+    body: JSON.stringify({ action: 'save_school_year', year_id: idVal ? targetSyId : 0, year_code: codeVal, is_active: isActiveVal, terms: yearTerms })
   }).catch(() => {});
 }
 
@@ -319,6 +344,40 @@ function setActiveSchoolYear(id) {
     SCHOOL_TERMS.forEach(t => {
       t.isActive = (t.yearId === id && t.id === term1.id);
     });
+  }
+
+  // Ensure sections exist for this academic year if not already present
+  const { activeSy, activeTerm } = getActiveAcademicContext();
+  if (typeof ACADEMIC_SECTIONS !== 'undefined') {
+    const existingSections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id);
+    if (existingSections.length === 0 && activeTerm.id === 4) {
+      const default2728 = [
+        { id: 10, termId: 4, code: 'IT701M',  name: 'BSIT 1A',  program: 'BSIT',  year: 1, studentCount: 38, shift: 'AM', adviser: 'Prof. Academic Head' },
+        { id: 11, termId: 4, code: 'IT702M',  name: 'BSIT 1B',  program: 'BSIT',  year: 1, studentCount: 36, shift: 'AM', adviser: 'Prof. Faculty Member' },
+        { id: 12, termId: 4, code: 'IT801M',  name: 'BSIT 2A',  program: 'BSIT',  year: 2, studentCount: 35, shift: 'AM', adviser: 'Prof. Program Head' },
+        { id: 13, termId: 4, code: 'IT802M',  name: 'BSIT 2B',  program: 'BSIT',  year: 2, studentCount: 34, shift: 'AM', adviser: 'Prof. Faculty Member' },
+        { id: 14, termId: 4, code: 'CS701M',  name: 'BSCS 1A',  program: 'BSCS',  year: 1, studentCount: 32, shift: 'AM', adviser: 'Prof. Program Head' },
+        { id: 15, termId: 4, code: 'CPE701M', name: 'BSCpE 1A', program: 'BSCpE', year: 1, studentCount: 30, shift: 'AM', adviser: 'Engr. Faculty Member' },
+        { id: 16, termId: 4, code: 'HM701M',  name: 'BSHM 1A',  program: 'BSHM',  year: 1, studentCount: 40, shift: 'AM', adviser: 'Chef Faculty Member' },
+        { id: 17, termId: 4, code: 'TM701M',  name: 'BSTM 1A',  program: 'BSTM',  year: 1, studentCount: 34, shift: 'AM', adviser: 'Prof. Academic Head' },
+        { id: 18, termId: 4, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' }
+      ];
+      default2728.forEach(sec => {
+        if (!ACADEMIC_SECTIONS.some(s => s.code === sec.code && s.termId === sec.termId)) {
+          ACADEMIC_SECTIONS.push(sec);
+        }
+      });
+    }
+  }
+
+  // Ensure baseline schedules are generated for the active term if none exist
+  if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
+    const existingScheds = MASTER_SCHEDULE_DATA.filter(c => c.termId === activeTerm.id);
+    if (existingScheds.length === 0) {
+      const newScheds = generateSmartBaselineSchedules();
+      MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(newScheds);
+      queueScheduleSave();
+    }
   }
 
   saveStateToStorage();
@@ -623,6 +682,12 @@ function toggleAllSubjectInclusion(status) {
   CURRICULUM_SUBJECTS.forEach(s => s.isIncluded = status);
   saveStateToStorage();
   renderSubjectOfferingTable();
+
+  fetch('api/schedules.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'set_all_subjects_included', is_included: status })
+  }).catch(() => {});
 }
 
 function openAddSubjectModal() {
@@ -676,6 +741,7 @@ function submitAddSubjectModal() {
     return;
   }
 
+  let newSubjectTermId;
   if (idVal) {
     const subj = CURRICULUM_SUBJECTS.find(s => s.id === parseInt(idVal, 10));
     if (subj) {
@@ -694,6 +760,7 @@ function submitAddSubjectModal() {
     const termId = (currentTermFilterVal && currentTermFilterVal !== 'all')
       ? parseInt(currentTermFilterVal, 10)
       : (activeTerm ? activeTerm.id : 1);
+    newSubjectTermId = termId;
     const newId = CURRICULUM_SUBJECTS.length ? Math.max(...CURRICULUM_SUBJECTS.map(s => s.id)) + 1 : 1;
     CURRICULUM_SUBJECTS.push({
       id: newId,
@@ -721,6 +788,7 @@ function submitAddSubjectModal() {
     body: JSON.stringify({
       action: 'save_term_subject',
       subject_id: idVal,
+      term_id: newSubjectTermId,
       subject_code: code,
       subject_name: name,
       units,
@@ -778,29 +846,7 @@ function evaluateResourceReadiness() {
   const totalRequiredUnits = includedSubjects.reduce((sum, s) => sum + (s.units || 3), 0);
 
   function checkSubjectHasQualifiedFaculty(subj) {
-    const sProg = (subj.program || '').toLowerCase();
-    const sCode = (subj.code || '').toLowerCase().trim();
-    return (typeof FACULTY !== 'undefined' ? FACULTY : []).some(f => {
-      // 1. Direct match in instructor certified qualifications list
-      if (Array.isArray(f.quals) && f.quals.some(q => q.toLowerCase().trim() === sCode)) {
-        return true;
-      }
-      // 2. Department-level certified mapping
-      const fDept = (f.dept || '').toLowerCase();
-      if (subj.type === 'pe' || sCode.startsWith('pe') || sCode.startsWith('nstp') || sCode.startsWith('ge')) {
-        return fDept.includes('general') || fDept.includes('education');
-      }
-      if (sProg === 'bsit' || sProg === 'bscs' || sProg === 'bscpe') {
-        return fDept.includes('it') || fDept.includes('cs') || fDept.includes('comp') || fDept.includes('engineering');
-      }
-      if (sProg === 'bshm' || sProg === 'bstm') {
-        return fDept.includes('hospitality') || fDept.includes('tourism') || fDept.includes('hm') || fDept.includes('tm');
-      }
-      if (sProg === 'bsba') {
-        return fDept.includes('business') || fDept.includes('admin') || fDept.includes('ba');
-      }
-      return false;
-    });
+    return (typeof FACULTY !== 'undefined' ? FACULTY : []).some(f => isFacultyQualified(f, subj.code));
   }
 
   const unqualifiedSubjects = includedSubjects.filter(s => !checkSubjectHasQualifiedFaculty(s));
@@ -873,7 +919,7 @@ function evaluateResourceReadiness() {
     checks.push({
       status: 'critical',
       title: 'Subjects with No Qualified Faculty',
-      desc: `The following ${uniqueUnqualifiedCodes.length} subject(s) lack certified teaching faculty in their department: ${uniqueUnqualifiedCodes.join(', ')}.`
+      desc: `No faculty member has these ${uniqueUnqualifiedCodes.length} subject(s) in their main qualifications: ${uniqueUnqualifiedCodes.join(', ')}.`
     });
     criticalReasons.push(`Insufficient professors: ${uniqueUnqualifiedCodes.length} course(s) lack qualified faculty (${uniqueUnqualifiedCodes.join(', ')}).`);
   } else if (totalMaxLoad < totalRequiredUnits) {
@@ -1122,6 +1168,20 @@ function executeQuickGenerateSections() {
   updateScheduleStats();
   updateSectionDropdown();
   updateScheduleStats();
+
+  fetch('api/schedules.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'auto_generate_sections',
+      programs: [prog],
+      years: [yr],
+      sections_per_group: count,
+      students_per_section: students,
+      term_id: activeTerm.id
+    })
+  }).catch(() => {});
+
   alert(`Generated ${count} sections for ${prog} Year ${yr}.`);
 }
 
@@ -1208,7 +1268,7 @@ function submitAutoGenerateSections() {
         const code = `${prog.substring(2) || prog}${yr}0${i + 1}M`;
         const name = `${prog} ${yr}${letter}`;
 
-        let existing = ACADEMIC_SECTIONS.find(s => s.code === code);
+        let existing = ACADEMIC_SECTIONS.find(s => s.code === code && s.termId === activeTerm.id);
         if (existing) {
           existing.studentCount = studentsPerSec;
           existing.name = name;
@@ -1258,6 +1318,7 @@ function submitAutoGenerateSections() {
       years: targetYears,
       sections_per_group: countPerGroup,
       students_per_section: studentsPerSec,
+      term_id: activeTerm.id,
       attach_curriculum: attachSubjs ? 1 : 0
     })
   }).catch(() => {});
@@ -1375,6 +1436,7 @@ function submitSectionModal() {
     body: JSON.stringify({
       action: 'save_section',
       section_id: idVal,
+      term_id: activeTerm.id,
       section_code: code,
       section_name: name,
       program: prog,
@@ -1458,7 +1520,7 @@ function openMergeSectionsModal(id) {
   document.getElementById('mergePromptDesc').textContent = `Select a secondary section to merge into ${sec.code} (${sec.name}).`;
 
   const sel = document.getElementById('mergeSecondarySectionSelect');
-  const others = ACADEMIC_SECTIONS.filter(s => s.id !== id && s.program === sec.program);
+  const others = ACADEMIC_SECTIONS.filter(s => s.id !== id && s.program === sec.program && s.termId === sec.termId);
   if (others.length === 0) {
     alert(`No compatible sections in ${sec.program} to merge with.`);
     return;
@@ -1590,7 +1652,8 @@ function executeGenerateBaseline() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'generate_baseline',
-      schedules: MASTER_SCHEDULE_DATA
+      term_id: activeTerm.id,
+      schedules: newSchedules
     })
   }).catch(() => {});
 
@@ -1683,6 +1746,7 @@ function generateSmartBaselineSchedules() {
     // Subjects matching this section's program & year that are marked included
     // Flexible curriculum subject matching for active term
     let subjects = (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).filter(s => {
+      if (s.isIncluded === false) return false;
       if (s.program !== sec.program) return false;
       if (String(s.year) !== String(sec.year)) return false;
       if (s.termId === activeTerm.id) return true;
@@ -1697,9 +1761,10 @@ function generateSmartBaselineSchedules() {
     });
 
     if (subjects.length === 0) {
-      subjects = (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).filter(s => s.program === sec.program);
+      subjects = (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).filter(s => s.program === sec.program && s.isIncluded !== false);
     }
-    if (subjects.length === 0) {
+    // Placeholders are only for programs with no curriculum, not ones whose subjects were excluded
+    if (subjects.length === 0 && !(typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).some(s => s.program === sec.program)) {
       subjects = [
         { code: `${sec.program} 101`, name: `${sec.program} Core Foundations`, units: 3, type: 'lecture' },
         { code: `${sec.program} 102`, name: `${sec.program} Methods & Applications`, units: 3, type: 'lecture' },
@@ -1733,41 +1798,15 @@ function generateSmartBaselineSchedules() {
         candidateRooms = ROOMS.filter(r => r.type === 'Lecture');
       }
 
+      // Prefer rooms that seat the whole section; keep all candidates if none are big enough
+      const roomsThatFit = candidateRooms.filter(r => r.cap >= sec.studentCount);
+      if (roomsThatFit.length > 0) candidateRooms = roomsThatFit;
+
       // Determine candidate faculty
       // Check faculty qualified/allowable for this subject
       const targetSubjCode = (subj.code || '').toUpperCase();
-      const mainQualified = FACULTY.filter(f => (f.mainQuals || []).some(q => q.toUpperCase() === targetSubjCode));
-      const sideQualified = FACULTY.filter(f => (f.sideQuals || []).some(q => q.toUpperCase() === targetSubjCode) && !mainQualified.includes(f));
-
-      // Determine subject department from catalog or code prefix
-      const catalogSubj = (typeof SUBJECTS !== 'undefined' ? SUBJECTS : []).find(s => s.code.toUpperCase() === targetSubjCode)
-        || (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).find(s => s.code.toUpperCase() === targetSubjCode) || subj;
-
-      let targetDept = catalogSubj?.dept;
-      if (!targetDept) {
-        if (targetSubjCode.startsWith('GE') || targetSubjCode.startsWith('NSTP') || catalogSubj?.type === 'pe' || subj.type === 'pe') {
-          targetDept = 'General Education';
-        } else if (targetSubjCode.startsWith('HM') || targetSubjCode.startsWith('TM') || sec.program === 'BSHM' || sec.program === 'BSTM') {
-          targetDept = 'Hospitality';
-        } else if (targetSubjCode.startsWith('BA') || sec.program === 'BSBA') {
-          targetDept = 'Business Admin';
-        } else if (sec.program === 'BSIT' || sec.program === 'BSCS' || sec.program === 'BSCpE') {
-          targetDept = 'IT / CS';
-        } else {
-          targetDept = 'IT / CS';
-        }
-      }
-
-      let deptFallback = [];
-      if (targetDept === 'IT / CS') {
-        deptFallback = FACULTY.filter(f => f.dept === 'IT / CS' || f.dept === 'Engineering');
-      } else if (targetDept === 'Engineering') {
-        deptFallback = FACULTY.filter(f => f.dept === 'Engineering' || f.dept === 'IT / CS');
-      } else {
-        deptFallback = FACULTY.filter(f => f.dept === targetDept);
-      }
-      deptFallback = deptFallback.filter(f => !mainQualified.includes(f) && !sideQualified.includes(f));
-      let candidateTeachers = [...mainQualified, ...sideQualified, ...deptFallback];
+      let candidateTeachers = FACULTY.filter(f => isFacultyQualified(f, targetSubjCode));
+      const hasQualifiedFaculty = candidateTeachers.length > 0;
 
       // Ensure section adviser is not assigned to teach the section's classes
       const adviserNameClean = (sec.adviser || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
@@ -1902,7 +1941,9 @@ function generateSmartBaselineSchedules() {
         UNASSIGNED_CLASSES.push({
           section: sec.code,
           code: subj.code,
-          reason: `No conflict-free slot found matching capacity (seats: ${sec.studentCount}) and faculty availability.`
+          reason: hasQualifiedFaculty
+            ? `No conflict-free slot found matching capacity (seats: ${sec.studentCount}) and faculty availability.`
+            : `No faculty member has ${subj.code} in their main qualifications.`
         });
       }
     });
@@ -2010,43 +2051,9 @@ function checkFacultySubjectConflict(instructorName, subjectCode, sectionCode) {
     return `Unregistered Faculty: ${instructorName}`;
   }
 
-  const targetCode = (subjectCode || '').toUpperCase();
-  const hasMainQual = (fac.mainQuals || []).some(q => q.toUpperCase() === targetCode);
-  const hasSideQual = (fac.sideQuals || []).some(q => q.toUpperCase() === targetCode);
-  const hasQual = hasMainQual || hasSideQual || (fac.quals || []).some(q => q.toUpperCase() === targetCode);
-
-  // If faculty holds a certified qualification (main or side), no conflict
-  if (hasQual) return null;
-
-  // 3. Check Department Eligibility
-  const catalogSubj = (typeof SUBJECTS !== 'undefined' ? SUBJECTS : []).find(s => s.code.toUpperCase() === targetCode)
-    || (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).find(s => s.code.toUpperCase() === targetCode);
-
-  let targetDept = catalogSubj?.dept;
-  if (!targetDept) {
-    if (targetCode.startsWith('GE') || targetCode.startsWith('NSTP') || catalogSubj?.type === 'pe') {
-      targetDept = 'General Education';
-    } else if (targetCode.startsWith('HM') || targetCode.startsWith('TM')) {
-      targetDept = 'Hospitality';
-    } else if (targetCode.startsWith('BA')) {
-      targetDept = 'Business Admin';
-    } else {
-      targetDept = 'IT / CS';
-    }
-  }
-
-  const facDept = fac.dept || '';
-  let isAllowableDept = false;
-  if (targetDept === 'IT / CS') {
-    isAllowableDept = (facDept === 'IT / CS' || facDept === 'Engineering');
-  } else if (targetDept === 'Engineering') {
-    isAllowableDept = (facDept === 'Engineering' || facDept === 'IT / CS');
-  } else {
-    isAllowableDept = (facDept === targetDept);
-  }
-
-  if (!isAllowableDept) {
-    return `Qualification Mismatch: ${fac.name} (${facDept}) is not qualified or allowable for ${targetCode} (${targetDept})`;
+  // Main qualifications are the only list of what a teacher may teach
+  if (!isFacultyQualified(fac, subjectCode)) {
+    return `Not Qualified: ${fac.name} does not have ${(subjectCode || '').toUpperCase()} in their main qualifications`;
   }
 
   return null;
@@ -2068,14 +2075,7 @@ function renderGrid() {
     const advClean = (sec.adviser || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
     const instClean = (c.instructor || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
     if (advClean && instClean && (instClean === advClean || instClean.includes(advClean) || advClean.includes(instClean))) {
-      const qualified = FACULTY.filter(f => f.quals && f.quals.some(q => q.toUpperCase() === (c.subjectCode || '').toUpperCase()));
-      let pool = qualified.length > 0 ? qualified : FACULTY.filter(f => {
-        if (sec.program === 'BSIT' || sec.program === 'BSCS' || sec.program === 'BSCpE') return f.dept === 'IT / CS' || f.dept === 'Engineering';
-        if (sec.program === 'BSHM' || sec.program === 'BSTM') return f.dept === 'Hospitality';
-        if (sec.program === 'BSBA') return f.dept === 'Business Admin';
-        return f.dept === 'General Education';
-      });
-      const allowableNonAdviser = pool.filter(f => {
+      const allowableNonAdviser = FACULTY.filter(f => isFacultyQualified(f, c.subjectCode)).filter(f => {
         const fc = (f.name || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
         return fc !== advClean && !fc.includes(advClean) && !advClean.includes(fc);
       });
@@ -2221,6 +2221,7 @@ function renderGrid() {
     for (const other of MASTER_SCHEDULE_DATA) {
       if (other.id === classItem.id) continue;
       if (other.day !== classItem.day) continue;
+      if (other.termId && classItem.termId && other.termId !== classItem.termId) continue;
 
       const osMin = timeToMinutes(other.startTime);
       const oeMin = timeToMinutes(other.endTime);
@@ -2349,17 +2350,10 @@ function showClassDetails(classId) {
   const itemSubjCode = (item.subjectCode || '').toUpperCase();
   let qualBadge = '';
   if (instFac) {
-    if ((instFac.mainQuals || []).some(q => q.toUpperCase() === itemSubjCode)) {
+    if (isFacultyQualified(instFac, itemSubjCode)) {
       qualBadge = `<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:700;">⭐ Main Qualified</span>`;
-    } else if ((instFac.sideQuals || []).some(q => q.toUpperCase() === itemSubjCode)) {
-      qualBadge = `<span class="badge" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:600;">✦ Side Qualified</span>`;
     } else {
-      const eligConflict = checkFacultySubjectConflict(item.instructor, item.subjectCode, item.section);
-      if (eligConflict) {
-        qualBadge = `<span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:700;">⚠️ Ineligible (${instFac.dept})</span>`;
-      } else {
-        qualBadge = `<span class="badge" style="background:#fffbeb; color:#b45309; border:1px solid #fef3c7; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:600;">Dept Allowable</span>`;
-      }
+      qualBadge = `<span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; font-size:10.5px; padding:1px 6px; margin-left:6px; font-weight:700;">⚠️ Not Qualified</span>`;
     }
   }
 
@@ -2483,11 +2477,8 @@ function openEditClassScheduleModal(classId) {
         <label class="form-label" style="font-weight:700; font-size:12px;">Instructor / Faculty</label>
         <select id="editScheduleInstructor" class="form-input" style="width:100%;">
           ${FACULTY.map(f => {
-            const isMain = (f.mainQuals || []).some(q => q.toUpperCase() === item.subjectCode.toUpperCase());
-            const isSide = (f.sideQuals || []).some(q => q.toUpperCase() === item.subjectCode.toUpperCase());
-            const conflict = checkFacultySubjectConflict(f.name, item.subjectCode, item.section);
-            const qualTag = isMain ? ' [⭐ Main Qualified]' : (isSide ? ' [✦ Side Qualified]' : (conflict ? ` [⚠️ Ineligible ${f.dept}]` : ' [Dept Allowable]'));
-            return `<option value="${escapeHtml(f.name)}" ${f.name === item.instructor ? 'selected' : ''}>${escapeHtml(f.name)} (${f.dept || 'Faculty'})${qualTag}</option>`;
+            const qualTag = isFacultyQualified(f, item.subjectCode) ? ' [⭐ Main Qualified]' : ' [⚠️ Not Qualified]';
+            return `<option value="${escapeHtml(f.name)}" ${f.name === item.instructor ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.dept || 'Faculty')})${qualTag}</option>`;
           }).join('')}
         </select>
       </div>
@@ -2534,13 +2525,9 @@ function handleEditSubjectChange(code) {
   if (instSelect) {
     const curVal = instSelect.value;
     const targetCode = (code || '').toUpperCase();
-    const curSection = document.getElementById('editScheduleSection')?.value || '';
     instSelect.innerHTML = FACULTY.map(f => {
-      const isMain = (f.mainQuals || []).some(q => q.toUpperCase() === targetCode);
-      const isSide = (f.sideQuals || []).some(q => q.toUpperCase() === targetCode);
-      const conflict = checkFacultySubjectConflict(f.name, targetCode, curSection);
-      const qualTag = isMain ? ' [⭐ Main Qualified]' : (isSide ? ' [✦ Side Qualified]' : (conflict ? ` [⚠️ Ineligible ${f.dept}]` : ' [Dept Allowable]'));
-      return `<option value="${escapeHtml(f.name)}" ${f.name === curVal ? 'selected' : ''}>${escapeHtml(f.name)} (${f.dept || 'Faculty'})${qualTag}</option>`;
+      const qualTag = isFacultyQualified(f, targetCode) ? ' [⭐ Main Qualified]' : ' [⚠️ Not Qualified]';
+      return `<option value="${escapeHtml(f.name)}" ${f.name === curVal ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.dept || 'Faculty')})${qualTag}</option>`;
     }).join('');
   }
 }
@@ -2575,6 +2562,7 @@ function submitEditClassSchedule() {
   for (const other of MASTER_SCHEDULE_DATA) {
     if (other.id === item.id) continue;
     if (other.day !== day) continue;
+    if (other.termId && item.termId && other.termId !== item.termId) continue;
     const sMin = timeToMinutes(startTime);
     const eMin = timeToMinutes(endTime);
     const osMin = timeToMinutes(other.startTime);
@@ -2629,11 +2617,13 @@ function submitEditClassSchedule() {
   if (typeof syncMasterScheduleRoomsWithCatalog === 'function') {
     syncMasterScheduleRoomsWithCatalog();
   }
+  queueScheduleSave();
 }
 
 function deleteClassSchedule(classId) {
   if (!confirm('Are you sure you want to remove this class from the schedule?')) return;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.id !== classId);
+  queueScheduleSave();
   saveStateToStorage();
   closeClassDetailModal();
   renderGrid();
@@ -2712,6 +2702,7 @@ function handleSlotDrop(event, targetDay, targetSlotMin) {
   item.startTime = minutesToTime(targetSlotMin);
   item.endTime = minutesToTime(targetEndMin);
 
+  queueScheduleSave();
   saveStateToStorage();
   renderGrid();
   updateScheduleStats();
@@ -2844,6 +2835,7 @@ function submitSlotAssignment() {
   };
 
   MASTER_SCHEDULE_DATA.push(newClass);
+  queueScheduleSave();
   saveStateToStorage();
   closeSlotModal();
   renderGrid();
@@ -2867,6 +2859,7 @@ function checkGlobalClassConflict(classItem) {
   for (const other of MASTER_SCHEDULE_DATA) {
     if (other.id === classItem.id) continue;
     if (other.day !== classItem.day) continue;
+    if (other.termId && classItem.termId && other.termId !== classItem.termId) continue;
 
     const osMin = timeToMinutes(other.startTime);
     const oeMin = timeToMinutes(other.endTime);
@@ -3050,18 +3043,18 @@ function exportAllSectionsBatchPDF() {
   `;
 
   sections.forEach(sec => {
-    const secClasses = MASTER_SCHEDULE_DATA.filter(c => c.section === sec.code);
+    const secClasses = MASTER_SCHEDULE_DATA.filter(c => c.section === sec.code && (!c.termId || c.termId === activeTerm.id));
     const totalUnits = secClasses.reduce((sum, c) => sum + (c.units || 0), 0);
 
     batchHtml += `
       <div class="section-page">
         <div class="header">
           <div>
-            <div class="meta">${sec.program} · Year ${sec.year}</div>
-            <div class="title">${sec.code} (${sec.name})</div>
+            <div class="meta">${escapeHtml(sec.program)} · Year ${escapeHtml(sec.year)}</div>
+            <div class="title">${escapeHtml(sec.code)} (${escapeHtml(sec.name)})</div>
           </div>
           <div style="text-align:right;">
-            <div class="meta">Adviser: ${sec.adviser || '—'} · Students: ${sec.studentCount} · Units: ${totalUnits}</div>
+            <div class="meta">Adviser: ${escapeHtml(sec.adviser || '—')} · Students: ${sec.studentCount} · Units: ${totalUnits}</div>
             <div style="font-size:8.5px; color:#555;">STI Academic Scheduling Master Timetable</div>
           </div>
         </div>
@@ -3075,8 +3068,8 @@ function exportAllSectionsBatchPDF() {
           <tbody>
     `;
 
-    // Standard time slots 8:00 to 17:00
-    for (let m = 8 * 60; m < 18 * 60; m += 60) {
+    // Hourly rows covering the generator's full 7:00 AM - 7:00 PM range
+    for (let m = 7 * 60; m < 19 * 60; m += 60) {
       const tStr = minutesToTime(m);
       const tEndStr = minutesToTime(m + 60);
       batchHtml += `<tr><td class="time-col">${formatTime12(tStr)}</td>`;
@@ -3085,9 +3078,9 @@ function exportAllSectionsBatchPDF() {
         const cls = secClasses.find(c => c.day === day && timeToMinutes(c.startTime) <= m && timeToMinutes(c.endTime) > m);
         if (cls) {
           batchHtml += `
-            <td class="class-box ${cls.type}">
-              <div class="subj-code">${cls.subjectCode}</div>
-              <div>${cls.room} · ${cls.instructor}</div>
+            <td class="class-box ${escapeHtml(cls.type)}">
+              <div class="subj-code">${escapeHtml(cls.subjectCode)}</div>
+              <div>${escapeHtml(cls.room)} · ${escapeHtml(cls.instructor)}</div>
               <div>${cls.units} Units (${formatTime12(cls.startTime)}–${formatTime12(cls.endTime)})</div>
             </td>
           `;
@@ -3190,6 +3183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Failed parsing saved master schedule', e);
   }
 
+  syncAllSyFilters();
   goToScheduleStep(ACTIVE_SCHEDULE_STEP || 6);
   isScheduleInitialized = true;
 });

@@ -5,6 +5,9 @@ require_once __DIR__ . '/../includes/functions.php';
 
 header('Content-Type: application/json');
 
+// A login is always required: this endpoint spends API quota and exposes schedule data.
+requireLogin();
+
 // Read request payload
 $input = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -14,16 +17,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Check authorization: valid PHP session, client key, or server-configured key
-$hasSession = !empty($_SESSION['user_id']);
+// Use the user's own key if supplied, otherwise the server-configured key
 $clientKey = trim($input['apiKey'] ?? ($_SERVER['HTTP_X_GEMINI_API_KEY'] ?? ''));
 $serverKey = (defined('GEMINI_API_KEY') && GEMINI_API_KEY !== 'your_gemini_api_key_here') ? GEMINI_API_KEY : getenv('GEMINI_API_KEY');
 $apiKey = !empty($clientKey) ? $clientKey : $serverKey;
-
-if (!$hasSession && empty($clientKey) && empty($serverKey)) {
-    // If neither session nor client key nor server key is present, require authentication
-    jsonResponse(['success' => false, 'code' => 'AUTH_REQUIRED', 'error' => 'Authentication or API key required.'], 401);
-}
 
 if (empty($apiKey)) {
     jsonResponse([
@@ -67,6 +64,7 @@ try {
         FROM schedules s 
         JOIN classrooms c ON s.room_id = c.room_id 
         JOIN users u ON s.faculty_id = u.user_id
+        WHERE s.term_id IS NULL OR s.term_id = (SELECT term_id FROM school_terms WHERE is_active = 1 LIMIT 1)
         ORDER BY s.day_of_week, s.start_time
     ");
     $stmtSched->execute();
@@ -155,7 +153,7 @@ curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
 curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
 curl_setopt($ch, CURLOPT_TIMEOUT, 40);
 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -175,7 +173,7 @@ if ($httpCode === 404) {
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
     curl_setopt($ch, CURLOPT_TIMEOUT, 40);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);

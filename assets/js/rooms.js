@@ -2,6 +2,22 @@
    MODULE 3 — ROOM INFORMATION (ADD / EDIT / REMOVE)
    ═══════════════════════════════════════════════════ */
 
+function saveRoomToServer(action, room) {
+  if (IS_STANDALONE) return;
+  fetch('api/rooms.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action,
+      room_id: room.dbId,
+      room_name_number: room.code,
+      room_type: room.type,
+      capacity: room.cap,
+      floor_level: parseInt(room.floor, 10)
+    })
+  }).catch(() => {});
+}
+
 function renderRoomTable() {
   const tbody = document.getElementById('roomTableBody');
   if (!tbody) return;
@@ -35,8 +51,8 @@ function renderRoomTable() {
       : `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px;" onclick="viewRoomOnCampusMap('${room.code}')">View on Map</button>`;
 
     tr.innerHTML = `
-      <td style="font-weight:700;">${room.code}</td>
-      <td>${room.floor}</td>
+      <td style="font-weight:700;">${escapeHtml(room.code)}</td>
+      <td>${escapeHtml(room.floor)}</td>
       <td><span class="badge ${typeBadge}">${typeLabel}</span></td>
       <td>${room.cap} seats</td>
       <td style="text-align:right;">
@@ -58,7 +74,7 @@ window.openAddRoomModal = function() {
   document.getElementById('roomCodeInput').disabled = false;
   document.getElementById('roomFloorInput').value = '1F';
   document.getElementById('roomTypeInput').value = 'Lecture';
-  document.getElementById('roomCapInput').value = '45';
+  document.getElementById('roomCapInput').value = '40';
   document.getElementById('roomModalSubmitBtn').textContent = 'Add Room';
   document.getElementById('roomModal').style.display = 'flex';
 };
@@ -108,6 +124,7 @@ window.submitRoomForm = function() {
       room.floor = floor;
       room.type = type;
       room.cap = cap;
+      saveRoomToServer('edit', room);
     }
   } else {
     if (ROOMS.some(r => r.code === code)) {
@@ -121,8 +138,10 @@ window.submitRoomForm = function() {
       cap,
       util: Math.floor(Math.random() * 30 + 60)
     });
+    saveRoomToServer('add', ROOMS[ROOMS.length - 1]);
   }
 
+  saveStateToStorage();
   closeRoomModal();
   renderRoomTable();
   const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
@@ -154,6 +173,13 @@ window.confirmDeleteRoom = function() {
     return;
   }
   const code = document.getElementById('deleteRoomTargetCode').value;
+  const deletedRoom = ROOMS.find(r => r.code === code);
+  if (!IS_STANDALONE && MASTER_SCHEDULE_DATA.some(c => c.room === code)) {
+    alert(`${code} still has scheduled classes. Move them to another room before removing it.`);
+    closeDeleteRoomModal();
+    return;
+  }
+  if (deletedRoom) saveRoomToServer('delete', deletedRoom);
   ROOMS = ROOMS.filter(r => r.code !== code);
   if (typeof scheduleData !== 'undefined' && scheduleData && scheduleData[code]) {
     delete scheduleData[code];
@@ -163,6 +189,7 @@ window.confirmDeleteRoom = function() {
       if (c.room === code) c.room = 'TBA';
     });
   }
+  saveStateToStorage();
   closeDeleteRoomModal();
   renderRoomTable();
   const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';

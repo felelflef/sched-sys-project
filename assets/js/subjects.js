@@ -76,7 +76,7 @@ function renderSubjectTable() {
 
     const eligBadge = subj.itOnly
       ? `<span class="badge" style="background:#EEF2FF; color:var(--accent-primary); border:1px solid #C7D2FE; font-weight:600;">💻 IT / CS Professor Only</span>`
-      : `<span class="badge" style="background:#F1F5F9; color:var(--text-secondary); border:1px solid #CBD5E1;">🌐 Other Department (${subj.dept})</span>`;
+      : `<span class="badge" style="background:#F1F5F9; color:var(--text-secondary); border:1px solid #CBD5E1;">🌐 Other Department (${escapeHtml(subj.dept)})</span>`;
 
     const actionButtons = isAdmin
       ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditSubjectModal('${subj.code}')">Edit</button>
@@ -84,11 +84,11 @@ function renderSubjectTable() {
       : `<span style="font-size:11px; color:var(--text-secondary);">&mdash;</span>`;
 
     tr.innerHTML = `
-      <td style="font-weight:700; color:var(--accent-primary);">${subj.code}</td>
+      <td style="font-weight:700; color:var(--accent-primary);">${escapeHtml(subj.code)}</td>
       <td>
-        <div style="font-weight:600; color:var(--text-primary); font-size:13px;">${subj.title}</div>
+        <div style="font-weight:600; color:var(--text-primary); font-size:13px;">${escapeHtml(subj.title)}</div>
       </td>
-      <td><span class="badge" style="background:#F8FAFC; border:1px solid var(--border-subtle); color:var(--text-primary);">${subj.dept}</span></td>
+      <td><span class="badge" style="background:#F8FAFC; border:1px solid var(--border-subtle); color:var(--text-primary);">${escapeHtml(subj.dept)}</span></td>
       <td>${eligBadge}</td>
       <td style="text-align:center; font-weight:600;">${subj.units || 3}</td>
       <td style="text-align:right;">${actionButtons}</td>
@@ -201,6 +201,7 @@ window.submitSubjectForm = function() {
       subj.units = units;
       subj.dept = dept;
       subj.itOnly = itOnly;
+      saveCatalogSubject(subj);
     }
   } else {
     // Add new
@@ -215,8 +216,10 @@ window.submitSubjectForm = function() {
       itOnly,
       units
     });
+    saveCatalogSubject(SUBJECTS[SUBJECTS.length - 1]);
   }
 
+  saveStateToStorage();
   closeSubjectModal();
   renderSubjectTable();
   renderSubjectDatalist();
@@ -247,7 +250,9 @@ window.confirmDeleteSubject = function() {
   }
   const code = document.getElementById('deleteSubjectTargetCode').value;
   SUBJECTS = SUBJECTS.filter(s => s.code.toLowerCase() !== code.toLowerCase());
+  deleteCatalogSubject(code);
 
+  saveStateToStorage();
   closeDeleteSubjectModal();
   renderSubjectTable();
   renderSubjectDatalist();
