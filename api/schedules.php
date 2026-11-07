@@ -494,6 +494,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         $terms = is_array($input['terms'] ?? null) ? $input['terms'] : [];
 
+        $dupYear = $db->prepare("SELECT year_id FROM school_years WHERE year_code = ? AND year_id != ?");
+        $dupYear->execute([$year_code, $year_id]);
+        if ($dupYear->fetch()) {
+            jsonResponse(['success' => false, 'message' => "School year {$year_code} already exists."], 409);
+        }
+
         $db->beginTransaction();
         if ($is_active) {
             $db->exec("UPDATE school_years SET is_active = 0");
@@ -554,6 +560,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $end_date = $input['end_date'] ?? date('Y-m-d', strtotime('+4 months'));
         $status = in_array($input['status'] ?? '', ['draft', 'active', 'closed']) ? $input['status'] : 'draft';
         $is_active = !empty($input['is_active']) ? 1 : 0;
+
+        if ($end_date <= $start_date) {
+            jsonResponse(['success' => false, 'message' => 'The term end date must be after its start date.'], 400);
+        }
 
         if ($term_id > 0) {
             // Status and date edits don't send is_active, so only change it when provided.
@@ -655,6 +665,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'Section code and name are required'], 400);
         }
 
+        // An edit stays in the section's own term
+        if ($section_id > 0) {
+            $findTerm = $db->prepare("SELECT term_id FROM academic_sections WHERE section_id = ?");
+            $findTerm->execute([$section_id]);
+            $term_id = (int)$findTerm->fetchColumn();
+        }
+        $dupSection = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ? AND section_id != ?");
+        $dupSection->execute([$section_code, $term_id, $section_id]);
+        if ($dupSection->fetch()) {
+            jsonResponse(['success' => false, 'message' => "Section code {$section_code} already exists in this term."], 409);
+        }
+
         if ($section_id > 0) {
             $stmt = $db->prepare("UPDATE academic_sections SET section_code=?, section_name=?, program=?, year_level=?, student_count=?, adviser=?, shift=? WHERE section_id=?");
             $stmt->execute([$section_code, $section_name, $program, $year_level, $student_count, $adviser, $shift, $section_id]);
@@ -713,6 +735,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if (!$sec) jsonResponse(['success' => false, 'message' => 'Source section not found'], 404);
         if ($split_count <= 0 || $split_count >= $sec['student_count']) {
             jsonResponse(['success' => false, 'message' => 'Split count must be between 1 and ' . ($sec['student_count'] - 1)], 400);
+        }
+
+        $splitCode = $new_code ?: $sec['section_code'] . '-B';
+        $dupSection = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ?");
+        $dupSection->execute([$splitCode, $sec['term_id']]);
+        if ($dupSection->fetch()) {
+            jsonResponse(['success' => false, 'message' => "Section code {$splitCode} already exists in this term."], 409);
         }
 
         $remaining = $sec['student_count'] - $split_count;

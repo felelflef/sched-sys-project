@@ -190,7 +190,7 @@ function renderSchoolYearTable() {
 function openAddSchoolYearModal() {
   document.getElementById('syModalTitle').textContent = 'Add School Year';
   document.getElementById('syEditId').value = '';
-  document.getElementById('syCodeInput').value = 'AY 2026-2027';
+  document.getElementById('syCodeInput').value = '';
   document.getElementById('syIsActiveInput').checked = true;
   document.getElementById('schoolYearModal').style.display = 'flex';
 }
@@ -257,6 +257,11 @@ function submitSchoolYearModal() {
 
   if (!codeVal) {
     alert('Please enter an academic school year code (e.g., AY 2026-2027).');
+    return;
+  }
+
+  if (SCHOOL_YEARS.some(y => y.yearCode.toLowerCase() === codeVal.toLowerCase() && String(y.id) !== idVal)) {
+    alert(`School year ${codeVal} already exists.`);
     return;
   }
 
@@ -389,6 +394,18 @@ function setActiveSchoolYear(id) {
     body: JSON.stringify({ action: 'set_active_year', year_id: id })
   }).catch(() => {});
 }
+
+// The year dropdowns change the shared active year, so confirm before switching
+function handleActiveYearFilter(select) {
+  const id = parseInt(select.value, 10);
+  const target = SCHOOL_YEARS.find(y => y.id === id);
+  if (!target || !confirm(`Switch the active school year to ${target.yearCode}?\n\nThis changes it for all users, not just this view.`)) {
+    syncAllSyFilters();
+    return;
+  }
+  setActiveSchoolYear(id);
+}
+window.handleActiveYearFilter = handleActiveYearFilter;
 
 function deleteSchoolYear(id) {
   if (SCHOOL_YEARS.length <= 1) {
@@ -537,6 +554,11 @@ function submitTermModal() {
   const endVal = document.getElementById('termEndDateInput').value;
   const statusVal = document.getElementById('termStatusSelect').value;
 
+  if (!startVal || !endVal || endVal <= startVal) {
+    alert('The term end date must be after its start date.');
+    return;
+  }
+
   const term = SCHOOL_TERMS.find(t => t.id === termId);
   if (term) {
     term.termName = nameVal;
@@ -654,7 +676,7 @@ function renderSubjectOfferingTable() {
         <td>Year ${subj.year}</td>
         <td style="text-align:right;">
           <div style="display:inline-flex; gap:6px;">
-            <button class="btn btn-outline" onclick="openEditSubjectModal(${subj.id})" style="font-size:11px; padding:3px 7px;">Edit</button>
+            <button class="btn btn-outline" onclick="openEditCurriculumSubjectModal(${subj.id})" style="font-size:11px; padding:3px 7px;">Edit</button>
             <button class="btn btn-outline" onclick="deleteSubjectOffering(${subj.id})" style="font-size:11px; padding:3px 7px; color:#DC2626; border-color:#FCA5A5;">Delete</button>
           </div>
         </td>
@@ -690,7 +712,7 @@ function toggleAllSubjectInclusion(status) {
   }).catch(() => {});
 }
 
-function openAddSubjectModal() {
+function openAddCurriculumSubjectModal() {
   document.getElementById('curricSubjModalTitle').textContent = 'Add Curriculum Subject';
   document.getElementById('curricSubjEditId').value = '';
   document.getElementById('curricSubjCode').value = '';
@@ -704,7 +726,7 @@ function openAddSubjectModal() {
   document.getElementById('manualSubjectModal').style.display = 'flex';
 }
 
-function openEditSubjectModal(id) {
+function openEditCurriculumSubjectModal(id) {
   const subj = CURRICULUM_SUBJECTS.find(s => s.id === id);
   if (!subj) return;
   document.getElementById('curricSubjModalTitle').textContent = 'Edit Curriculum Subject';
@@ -1397,6 +1419,11 @@ function submitSectionModal() {
     return;
   }
 
+  if (ACADEMIC_SECTIONS.some(s => s.termId === activeTerm.id && s.code.toLowerCase() === code.toLowerCase() && String(s.id) !== idVal)) {
+    alert(`Section code ${code} already exists in this term.`);
+    return;
+  }
+
   if (idVal) {
     const sec = ACADEMIC_SECTIONS.find(s => s.id === parseInt(idVal, 10));
     if (sec) {
@@ -1475,6 +1502,12 @@ function submitSplitSection() {
 
   if (splitCount <= 0 || splitCount >= sec.studentCount) {
     alert(`Split count must be between 1 and ${sec.studentCount - 1}.`);
+    return;
+  }
+
+  const splitCode = (newCode || `${sec.code}-B`).toLowerCase();
+  if (ACADEMIC_SECTIONS.some(s => s.termId === sec.termId && s.code.toLowerCase() === splitCode)) {
+    alert(`Section code ${newCode || `${sec.code}-B`} already exists in this term.`);
     return;
   }
 
@@ -2810,6 +2843,16 @@ function submitSlotAssignment() {
     return;
   }
 
+  // Same eligibility rule as editing a class
+  const eligibility = checkFacultySubjectConflict(instructor, subjectCode, section);
+  if (eligibility) {
+    if (errDiv) {
+      errDiv.textContent = eligibility;
+      errDiv.style.display = 'block';
+    }
+    return;
+  }
+
   // Subject metadata lookup
   const matchingSubj = CURRICULUM_SUBJECTS.find(s => s.code.toUpperCase() === subjectCode);
   const subjectTitle = matchingSubj ? matchingSubj.name : subjectCode;
@@ -3221,8 +3264,8 @@ window.updateCurriculumTermFilter = updateCurriculumTermFilter;
 window.renderSubjectOfferingTable = renderSubjectOfferingTable;
 window.toggleSubjectInclusion = toggleSubjectInclusion;
 window.toggleAllSubjectInclusion = toggleAllSubjectInclusion;
-window.openAddSubjectModal = openAddSubjectModal;
-window.openEditSubjectModal = openEditSubjectModal;
+window.openAddCurriculumSubjectModal = openAddCurriculumSubjectModal;
+window.openEditCurriculumSubjectModal = openEditCurriculumSubjectModal;
 window.closeAddSubjectModal = closeAddSubjectModal;
 window.submitAddSubjectModal = submitAddSubjectModal;
 window.deleteSubjectOffering = deleteSubjectOffering;

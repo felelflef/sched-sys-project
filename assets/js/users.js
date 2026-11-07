@@ -351,6 +351,13 @@ window.promptDeleteUser = function(email) {
   const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (!user) return;
 
+  // Deleting an account also deletes its classes, so they must be reassigned first
+  const classCount = MASTER_SCHEDULE_DATA.filter(c => c.instructor === user.name).length;
+  if (!IS_STANDALONE && classCount > 0) {
+    alert(`${user.name} still has ${classCount} scheduled class(es). Reassign them before removing this account.`);
+    return;
+  }
+
   document.getElementById('deleteUserTargetEmail').value = user.email;
   document.getElementById('deleteUserNameDisplay').textContent = user.name;
   document.getElementById('deleteUserEmailDisplay').textContent = `${user.email} · ${user.roleLabel}`;

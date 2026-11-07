@@ -165,6 +165,14 @@ if ($action === 'add') {
         jsonResponse(['success' => false, 'message' => 'Cannot delete your own account'], 400);
     }
 
+    // The schedules table cascades, so deleting a teacher would silently delete their classes
+    $classCheck = $db->prepare("SELECT COUNT(*) FROM schedules s JOIN users u ON s.faculty_id = u.user_id WHERE u.email = ?");
+    $classCheck->execute([$email]);
+    $classCount = (int)$classCheck->fetchColumn();
+    if ($classCount > 0) {
+        jsonResponse(['success' => false, 'message' => "This user still has {$classCount} scheduled class(es). Reassign them first."], 409);
+    }
+
     try {
         if (!empty($email)) {
             $stmt = $db->prepare("DELETE FROM users WHERE email = ?");
