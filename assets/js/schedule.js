@@ -1419,6 +1419,11 @@ function submitSectionModal() {
     return;
   }
 
+  if (document.getElementById('secStudentsInput').value.trim() !== '' && parseInt(document.getElementById('secStudentsInput').value, 10) < 1) {
+    alert('Student count must be at least 1.');
+    return;
+  }
+
   if (ACADEMIC_SECTIONS.some(s => s.termId === activeTerm.id && s.code.toLowerCase() === code.toLowerCase() && String(s.id) !== idVal)) {
     alert(`Section code ${code} already exists in this term.`);
     return;
@@ -1694,9 +1699,18 @@ function executeGenerateBaseline() {
 }
 
 /* ─── Smart Constraint-Honoring Baseline Schedule Generator ─── */
-function generateSmartBaselineSchedules() {
+// Options are used by the AI draft: seed keeps classes already placed, enforceLoad applies teaching limits
+function generateSmartBaselineSchedules({ seed = [], enforceLoad = false } = {}) {
   UNASSIGNED_CLASSES = [];
-  const schedules = [];
+  const schedules = [...seed];
+
+  function fitsTeacherLoad(teacher, addedMinutes) {
+    if (!enforceLoad) return true;
+    const usedMinutes = schedules
+      .filter(c => c.instructor === teacher.name)
+      .reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
+    return usedMinutes + addedMinutes <= (teacher.maxLoad || 24) * 60;
+  }
 
   // Working day sequence: Mon to Sat
   const workDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1807,6 +1821,7 @@ function generateSmartBaselineSchedules() {
     }
 
     subjects.forEach((subj, subjIdx) => {
+      if (seed.some(c => c.section === sec.code && c.subjectCode === subj.code)) return;
       let placed = false;
 
       // Determine eligible rooms based on subject type
@@ -1863,7 +1878,8 @@ function generateSmartBaselineSchedules() {
       } else if (secShift === 'PM') {
         shiftSlots = [{ start: '17:30', end: '19:00' }, { start: '16:00', end: '17:30' }, { start: '17:00', end: '18:30' }, { start: '14:30', end: '16:00' }, { start: '13:00', end: '14:30' }, { start: '17:00', end: '19:00' }, { start: '16:00', end: '18:00' }, { start: '15:30', end: '17:30' }, { start: '15:00', end: '17:00' }, { start: '14:30', end: '16:30' }];
       }
-      const activeSearchSlots = [...shiftSlots, ...allMasterSlots.filter(ms => !shiftSlots.some(ss => ss.start === ms.start && ss.end === ms.end))];
+      // In-shift times are tried on every day before any out-of-shift time is used
+      const slotGroups = [shiftSlots, allMasterSlots.filter(ms => !shiftSlots.some(ss => ss.start === ms.start && ss.end === ms.end))];
 
       // Standard collegiate academic day pairs for 1.5 units each meeting
       const DAY_PAIRS = [
@@ -1880,9 +1896,9 @@ function generateSmartBaselineSchedules() {
       const unitsPerMeeting = isTwoDaySubject ? 1.5 : (subj.units || 1.5);
 
       if (isTwoDaySubject) {
-        for (const [day1, day2] of orderedDayPairs) {
+        for (const slotGroup of slotGroups) for (const [day1, day2] of orderedDayPairs) {
           if (placed) break;
-          for (const slot of activeSearchSlots) {
+          for (const slot of slotGroup) {
             if (placed) break;
             for (const roomObj of candidateRooms) {
               if (placed) break;
@@ -1890,7 +1906,7 @@ function generateSmartBaselineSchedules() {
                 const free1 = !hasOverlap(day1, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code);
                 const free2 = !hasOverlap(day2, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code);
 
-                if (free1 && free2) {
+                if (free1 && free2 && fitsTeacherLoad(teacherObj, (timeToMinutes(slot.end) - timeToMinutes(slot.start)) * 2)) {
                   schedCounter++;
                   schedules.push({
                     id: `SCH-${schedCounter}`,
@@ -1937,14 +1953,14 @@ function generateSmartBaselineSchedules() {
       }
       if (!placed) {
       } const fallbackDays = isTwoDaySubject ? ['Wed', 'Sat', 'Mon', 'Tue', 'Thu', 'Fri'] : ['Wed', 'Sat', 'Fri', 'Thu', 'Tue', 'Mon'];
-        for (const day of fallbackDays) {
+        for (const slotGroup of slotGroups) for (const day of fallbackDays) {
         if (placed) break;
-        for (const slot of activeSearchSlots) {
+        for (const slot of slotGroup) {
           if (placed) break;
           for (const roomObj of candidateRooms) {
             if (placed) break;
             for (const teacherObj of candidateTeachers) {
-              if (!hasOverlap(day, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code)) {
+              if (!hasOverlap(day, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code) && fitsTeacherLoad(teacherObj, timeToMinutes(slot.end) - timeToMinutes(slot.start))) {
                 schedCounter++;
                 schedules.push({
                   id: `SCH-${schedCounter}`,

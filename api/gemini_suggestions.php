@@ -143,7 +143,7 @@ $postData = [
     ]
 ];
 
-$model = getenv('GEMINI_MODEL') ?: 'gemini-2.5-flash';
+$model = getenv('GEMINI_MODEL') ?: 'gemini-flash-lite-latest';
 $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . urlencode($apiKey);
 
 $ch = curl_init($url);
@@ -160,13 +160,9 @@ $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlError = curl_error($ch);
 curl_close($ch);
 
-if ($curlError) {
-    jsonResponse(['success' => false, 'error' => 'Connection to Gemini API failed: ' . $curlError], 500);
-}
-
-// Fallback to gemini-2.0-flash if model not found
-if ($httpCode === 404) {
-    $fallbackUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" . urlencode($apiKey);
+// Try the backup model if the main one is retired, busy, or times out
+if ($curlError || in_array($httpCode, [404, 429, 500, 503], true)) {
+    $fallbackUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=" . urlencode($apiKey);
     $ch = curl_init($fallbackUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
@@ -176,7 +172,13 @@ if ($httpCode === 404) {
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
     curl_close($ch);
+}
+
+if ($curlError) {
+    error_log('Gemini connection failed: ' . $curlError);
+    jsonResponse(['success' => false, 'error' => 'Could not reach the AI service. Please try again.'], 500);
 }
 
 if ($httpCode !== 200 || !$response) {

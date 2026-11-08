@@ -44,6 +44,43 @@ function validateActiveSession(): bool {
     return true;
 }
 
+const LOGIN_ATTEMPT_LIMIT = 5;
+const LOGIN_IP_ATTEMPT_LIMIT = 30;
+const LOGIN_ATTEMPT_WINDOW = 900; // 15 minutes
+
+/** The address added by the hosting proxy; earlier forwarded entries can be faked by the client. */
+function clientIp(): string {
+    $forwarded = array_map('trim', explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
+    return end($forwarded) ?: ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+}
+
+/** Returns the seconds left in a lockout, or 0 if attempts are allowed. */
+function attemptLockSeconds(PDO $db, string $key, int $limit): int {
+    $stmt = $db->prepare("SELECT attempts, window_start FROM login_attempts WHERE attempt_key = ?");
+    $stmt->execute([$key]);
+    $row = $stmt->fetch();
+    if (!$row || (int)$row['attempts'] < $limit) {
+        return 0;
+    }
+    return max(0, (int)$row['window_start'] + LOGIN_ATTEMPT_WINDOW - time());
+}
+
+function recordFailedAttempt(PDO $db, string $key): void {
+    $now = time();
+    $expired = $now - LOGIN_ATTEMPT_WINDOW;
+    $stmt = $db->prepare("
+        INSERT INTO login_attempts (attempt_key, attempts, window_start) VALUES (?, 1, ?)
+        ON DUPLICATE KEY UPDATE
+            attempts = IF(window_start < ?, 1, attempts + 1),
+            window_start = IF(window_start < ?, ?, window_start)
+    ");
+    $stmt->execute([$key, $now, $expired, $expired, $now]);
+}
+
+function clearFailedAttempts(PDO $db, string $key): void {
+    $db->prepare("DELETE FROM login_attempts WHERE attempt_key = ? OR window_start < ?")->execute([$key, time() - LOGIN_ATTEMPT_WINDOW]);
+}
+
 function requireLogin() {
     $isApi = str_contains($_SERVER['REQUEST_URI'] ?? '', '/api/') || 
              (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'));
