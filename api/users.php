@@ -43,6 +43,7 @@ if ($action === 'add') {
     if (empty($firstName) || empty($lastName) || empty($email)) {
         jsonResponse(['success' => false, 'message' => 'First name, last name, and email are required'], 400);
     }
+    requireFieldLengths(['First name' => [$firstName, 50], 'Last name' => [$lastName, 50], 'Email' => [$email, 100], 'Department' => [$subjectRole, 50]]);
 
     // Validate email format
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -66,8 +67,8 @@ if ($action === 'add') {
     }
 
     // Validate password length
-    if (strlen($password) < 6) {
-        jsonResponse(['success' => false, 'message' => 'Password must be at least 6 characters'], 400);
+    if ($passwordError = passwordProblem($password)) {
+        jsonResponse(['success' => false, 'message' => $passwordError], 400);
     }
 
     // Check if email already exists
@@ -100,6 +101,7 @@ if ($action === 'add') {
     if ($userId <= 0 || empty($subjectRole)) {
         jsonResponse(['success' => false, 'message' => 'User ID and Subject Role are required'], 400);
     }
+    requireFieldLengths(['Department' => [$subjectRole, 50]]);
 
     try {
         $stmt = $db->prepare("UPDATE users SET subject_role = ? WHERE user_id = ? AND role = 'faculty'");
@@ -132,6 +134,7 @@ if ($action === 'add') {
     if (empty($lastName)) {
         $lastName = $firstName;
     }
+    requireFieldLengths(['First name' => [$firstName, 50], 'Last name' => [$lastName, 50], 'Department' => [$subjectRole, 50]]);
 
     try {
         if ($subjectRole !== null) {
@@ -163,6 +166,14 @@ if ($action === 'add') {
 
     if ($userId > 0 && $current && $userId === (int)$current['user_id']) {
         jsonResponse(['success' => false, 'message' => 'Cannot delete your own account'], 400);
+    }
+
+    // The schedules table cascades, so deleting a teacher would silently delete their classes
+    $classCheck = $db->prepare("SELECT COUNT(*) FROM schedules s JOIN users u ON s.faculty_id = u.user_id WHERE u.email = ?");
+    $classCheck->execute([$email]);
+    $classCount = (int)$classCheck->fetchColumn();
+    if ($classCount > 0) {
+        jsonResponse(['success' => false, 'message' => "This user still has {$classCount} scheduled class(es). Reassign them first."], 409);
     }
 
     try {

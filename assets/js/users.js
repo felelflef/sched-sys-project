@@ -32,6 +32,7 @@ function renderUserTable() {
       actionCellHtml = `
         <div style="display:inline-flex; gap:4px; align-items:center;">
           <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openEditUserModal('${u.email}')">Edit</button>
+          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openResetPasswordModal('${u.email}')">Reset Password</button>
           <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8; cursor:pointer;" onclick="window.promptDeleteUser('${u.email}')">Remove</button>
         </div>
       `;
@@ -130,8 +131,8 @@ window.submitAddUser = function() {
   // The blank-password default only applies to the local demo mode
   if (!password && IS_STANDALONE) {
     password = 'password';
-  } else if (password.length < 6) {
-    showAddUserError('Password must be at least 6 characters.');
+  } else if (password.length < 8) {
+    showAddUserError('Password must be at least 8 characters.');
     return;
   }
 
@@ -339,6 +340,87 @@ window.submitEditUser = function() {
   if (typeof renderGrid === 'function') renderGrid();
 };
 
+function showPasswordModal({ title, note, email, askCurrent }) {
+  document.getElementById('passwordModalTitle').textContent = title;
+  document.getElementById('passwordModalNote').textContent = note;
+  document.getElementById('passwordTargetEmail').value = email;
+  document.getElementById('currentPasswordGroup').style.display = askCurrent ? 'block' : 'none';
+  ['currentPasswordInput', 'newPasswordInput', 'confirmPasswordInput'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('passwordError').style.display = 'none';
+  document.getElementById('passwordModal').style.display = 'flex';
+}
+
+window.openChangePasswordModal = function() {
+  const menu = document.getElementById('userDropdownMenu');
+  if (menu) menu.style.display = 'none';
+  if (IS_STANDALONE) {
+    alert('Passwords cannot be changed in demo mode.');
+    return;
+  }
+  showPasswordModal({ title: 'Change Password', note: 'Choose a new password for your account.', email: '', askCurrent: true });
+};
+
+window.openResetPasswordModal = function(email) {
+  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
+    alert('Access denied: Only system administrators are authorized to reset passwords.');
+    return;
+  }
+  if (IS_STANDALONE) {
+    alert('Passwords cannot be changed in demo mode.');
+    return;
+  }
+  showPasswordModal({ title: 'Reset Password', note: `Set a new password for ${email}. They will be signed out of any device they are using.`, email, askCurrent: false });
+};
+
+window.closePasswordModal = function() {
+  document.getElementById('passwordModal').style.display = 'none';
+};
+
+window.submitPasswordModal = async function() {
+  const errorEl = document.getElementById('passwordError');
+  const showError = message => {
+    errorEl.textContent = message;
+    errorEl.style.display = 'block';
+  };
+  const email = document.getElementById('passwordTargetEmail').value;
+  const currentPassword = document.getElementById('currentPasswordInput').value;
+  const newPassword = document.getElementById('newPasswordInput').value;
+
+  if (newPassword.length < 8) {
+    showError('Password must be at least 8 characters.');
+    return;
+  }
+  if (newPassword !== document.getElementById('confirmPasswordInput').value) {
+    showError('The new passwords do not match.');
+    return;
+  }
+
+  const btn = document.getElementById('passwordSubmitBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('api/auth.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken || '' },
+      body: JSON.stringify(email
+        ? { action: 'admin_reset_password', email, new_password: newPassword }
+        : { action: 'change_password', current_password: currentPassword, new_password: newPassword })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      showError(data.message || 'Could not save the password. Please try again.');
+      return;
+    }
+    closePasswordModal();
+    alert(data.message);
+  } catch (e) {
+    showError('Could not reach the server. Please try again.');
+  } finally {
+    btn.disabled = false;
+  }
+};
+
 window.promptDeleteUser = function(email) {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
     alert('Access denied: Only system administrators are authorized to remove accounts.');
@@ -350,6 +432,13 @@ window.promptDeleteUser = function(email) {
   }
   const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (!user) return;
+
+  // Deleting an account also deletes its classes, so they must be reassigned first
+  const classCount = MASTER_SCHEDULE_DATA.filter(c => c.instructor === user.name).length;
+  if (!IS_STANDALONE && classCount > 0) {
+    alert(`${user.name} still has ${classCount} scheduled class(es). Reassign them before removing this account.`);
+    return;
+  }
 
   document.getElementById('deleteUserTargetEmail').value = user.email;
   document.getElementById('deleteUserNameDisplay').textContent = user.name;

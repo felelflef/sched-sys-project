@@ -190,7 +190,7 @@ function renderSchoolYearTable() {
 function openAddSchoolYearModal() {
   document.getElementById('syModalTitle').textContent = 'Add School Year';
   document.getElementById('syEditId').value = '';
-  document.getElementById('syCodeInput').value = 'AY 2026-2027';
+  document.getElementById('syCodeInput').value = '';
   document.getElementById('syIsActiveInput').checked = true;
   document.getElementById('schoolYearModal').style.display = 'flex';
 }
@@ -257,6 +257,11 @@ function submitSchoolYearModal() {
 
   if (!codeVal) {
     alert('Please enter an academic school year code (e.g., AY 2026-2027).');
+    return;
+  }
+
+  if (SCHOOL_YEARS.some(y => y.yearCode.toLowerCase() === codeVal.toLowerCase() && String(y.id) !== idVal)) {
+    alert(`School year ${codeVal} already exists.`);
     return;
   }
 
@@ -389,6 +394,18 @@ function setActiveSchoolYear(id) {
     body: JSON.stringify({ action: 'set_active_year', year_id: id })
   }).catch(() => {});
 }
+
+// The year dropdowns change the shared active year, so confirm before switching
+function handleActiveYearFilter(select) {
+  const id = parseInt(select.value, 10);
+  const target = SCHOOL_YEARS.find(y => y.id === id);
+  if (!target || !confirm(`Switch the active school year to ${target.yearCode}?\n\nThis changes it for all users, not just this view.`)) {
+    syncAllSyFilters();
+    return;
+  }
+  setActiveSchoolYear(id);
+}
+window.handleActiveYearFilter = handleActiveYearFilter;
 
 function deleteSchoolYear(id) {
   if (SCHOOL_YEARS.length <= 1) {
@@ -537,6 +554,11 @@ function submitTermModal() {
   const endVal = document.getElementById('termEndDateInput').value;
   const statusVal = document.getElementById('termStatusSelect').value;
 
+  if (!startVal || !endVal || endVal <= startVal) {
+    alert('The term end date must be after its start date.');
+    return;
+  }
+
   const term = SCHOOL_TERMS.find(t => t.id === termId);
   if (term) {
     term.termName = nameVal;
@@ -654,7 +676,7 @@ function renderSubjectOfferingTable() {
         <td>Year ${subj.year}</td>
         <td style="text-align:right;">
           <div style="display:inline-flex; gap:6px;">
-            <button class="btn btn-outline" onclick="openEditSubjectModal(${subj.id})" style="font-size:11px; padding:3px 7px;">Edit</button>
+            <button class="btn btn-outline" onclick="openEditCurriculumSubjectModal(${subj.id})" style="font-size:11px; padding:3px 7px;">Edit</button>
             <button class="btn btn-outline" onclick="deleteSubjectOffering(${subj.id})" style="font-size:11px; padding:3px 7px; color:#DC2626; border-color:#FCA5A5;">Delete</button>
           </div>
         </td>
@@ -690,7 +712,7 @@ function toggleAllSubjectInclusion(status) {
   }).catch(() => {});
 }
 
-function openAddSubjectModal() {
+function openAddCurriculumSubjectModal() {
   document.getElementById('curricSubjModalTitle').textContent = 'Add Curriculum Subject';
   document.getElementById('curricSubjEditId').value = '';
   document.getElementById('curricSubjCode').value = '';
@@ -704,7 +726,7 @@ function openAddSubjectModal() {
   document.getElementById('manualSubjectModal').style.display = 'flex';
 }
 
-function openEditSubjectModal(id) {
+function openEditCurriculumSubjectModal(id) {
   const subj = CURRICULUM_SUBJECTS.find(s => s.id === id);
   if (!subj) return;
   document.getElementById('curricSubjModalTitle').textContent = 'Edit Curriculum Subject';
@@ -1397,6 +1419,16 @@ function submitSectionModal() {
     return;
   }
 
+  if (document.getElementById('secStudentsInput').value.trim() !== '' && parseInt(document.getElementById('secStudentsInput').value, 10) < 1) {
+    alert('Student count must be at least 1.');
+    return;
+  }
+
+  if (ACADEMIC_SECTIONS.some(s => s.termId === activeTerm.id && s.code.toLowerCase() === code.toLowerCase() && String(s.id) !== idVal)) {
+    alert(`Section code ${code} already exists in this term.`);
+    return;
+  }
+
   if (idVal) {
     const sec = ACADEMIC_SECTIONS.find(s => s.id === parseInt(idVal, 10));
     if (sec) {
@@ -1475,6 +1507,12 @@ function submitSplitSection() {
 
   if (splitCount <= 0 || splitCount >= sec.studentCount) {
     alert(`Split count must be between 1 and ${sec.studentCount - 1}.`);
+    return;
+  }
+
+  const splitCode = (newCode || `${sec.code}-B`).toLowerCase();
+  if (ACADEMIC_SECTIONS.some(s => s.termId === sec.termId && s.code.toLowerCase() === splitCode)) {
+    alert(`Section code ${newCode || `${sec.code}-B`} already exists in this term.`);
     return;
   }
 
@@ -1661,9 +1699,18 @@ function executeGenerateBaseline() {
 }
 
 /* ─── Smart Constraint-Honoring Baseline Schedule Generator ─── */
-function generateSmartBaselineSchedules() {
+// Options are used by the AI draft: seed keeps classes already placed, enforceLoad applies teaching limits
+function generateSmartBaselineSchedules({ seed = [], enforceLoad = false } = {}) {
   UNASSIGNED_CLASSES = [];
-  const schedules = [];
+  const schedules = [...seed];
+
+  function fitsTeacherLoad(teacher, addedMinutes) {
+    if (!enforceLoad) return true;
+    const usedMinutes = schedules
+      .filter(c => c.instructor === teacher.name)
+      .reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
+    return usedMinutes + addedMinutes <= (teacher.maxLoad || 24) * 60;
+  }
 
   // Working day sequence: Mon to Sat
   const workDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1774,6 +1821,7 @@ function generateSmartBaselineSchedules() {
     }
 
     subjects.forEach((subj, subjIdx) => {
+      if (seed.some(c => c.section === sec.code && c.subjectCode === subj.code)) return;
       let placed = false;
 
       // Determine eligible rooms based on subject type
@@ -1830,7 +1878,8 @@ function generateSmartBaselineSchedules() {
       } else if (secShift === 'PM') {
         shiftSlots = [{ start: '17:30', end: '19:00' }, { start: '16:00', end: '17:30' }, { start: '17:00', end: '18:30' }, { start: '14:30', end: '16:00' }, { start: '13:00', end: '14:30' }, { start: '17:00', end: '19:00' }, { start: '16:00', end: '18:00' }, { start: '15:30', end: '17:30' }, { start: '15:00', end: '17:00' }, { start: '14:30', end: '16:30' }];
       }
-      const activeSearchSlots = [...shiftSlots, ...allMasterSlots.filter(ms => !shiftSlots.some(ss => ss.start === ms.start && ss.end === ms.end))];
+      // In-shift times are tried on every day before any out-of-shift time is used
+      const slotGroups = [shiftSlots, allMasterSlots.filter(ms => !shiftSlots.some(ss => ss.start === ms.start && ss.end === ms.end))];
 
       // Standard collegiate academic day pairs for 1.5 units each meeting
       const DAY_PAIRS = [
@@ -1847,9 +1896,9 @@ function generateSmartBaselineSchedules() {
       const unitsPerMeeting = isTwoDaySubject ? 1.5 : (subj.units || 1.5);
 
       if (isTwoDaySubject) {
-        for (const [day1, day2] of orderedDayPairs) {
+        for (const slotGroup of slotGroups) for (const [day1, day2] of orderedDayPairs) {
           if (placed) break;
-          for (const slot of activeSearchSlots) {
+          for (const slot of slotGroup) {
             if (placed) break;
             for (const roomObj of candidateRooms) {
               if (placed) break;
@@ -1857,7 +1906,7 @@ function generateSmartBaselineSchedules() {
                 const free1 = !hasOverlap(day1, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code);
                 const free2 = !hasOverlap(day2, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code);
 
-                if (free1 && free2) {
+                if (free1 && free2 && fitsTeacherLoad(teacherObj, (timeToMinutes(slot.end) - timeToMinutes(slot.start)) * 2)) {
                   schedCounter++;
                   schedules.push({
                     id: `SCH-${schedCounter}`,
@@ -1904,14 +1953,14 @@ function generateSmartBaselineSchedules() {
       }
       if (!placed) {
       } const fallbackDays = isTwoDaySubject ? ['Wed', 'Sat', 'Mon', 'Tue', 'Thu', 'Fri'] : ['Wed', 'Sat', 'Fri', 'Thu', 'Tue', 'Mon'];
-        for (const day of fallbackDays) {
+        for (const slotGroup of slotGroups) for (const day of fallbackDays) {
         if (placed) break;
-        for (const slot of activeSearchSlots) {
+        for (const slot of slotGroup) {
           if (placed) break;
           for (const roomObj of candidateRooms) {
             if (placed) break;
             for (const teacherObj of candidateTeachers) {
-              if (!hasOverlap(day, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code)) {
+              if (!hasOverlap(day, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code) && fitsTeacherLoad(teacherObj, timeToMinutes(slot.end) - timeToMinutes(slot.start))) {
                 schedCounter++;
                 schedules.push({
                   id: `SCH-${schedCounter}`,
@@ -2810,6 +2859,16 @@ function submitSlotAssignment() {
     return;
   }
 
+  // Same eligibility rule as editing a class
+  const eligibility = checkFacultySubjectConflict(instructor, subjectCode, section);
+  if (eligibility) {
+    if (errDiv) {
+      errDiv.textContent = eligibility;
+      errDiv.style.display = 'block';
+    }
+    return;
+  }
+
   // Subject metadata lookup
   const matchingSubj = CURRICULUM_SUBJECTS.find(s => s.code.toUpperCase() === subjectCode);
   const subjectTitle = matchingSubj ? matchingSubj.name : subjectCode;
@@ -3221,8 +3280,8 @@ window.updateCurriculumTermFilter = updateCurriculumTermFilter;
 window.renderSubjectOfferingTable = renderSubjectOfferingTable;
 window.toggleSubjectInclusion = toggleSubjectInclusion;
 window.toggleAllSubjectInclusion = toggleAllSubjectInclusion;
-window.openAddSubjectModal = openAddSubjectModal;
-window.openEditSubjectModal = openEditSubjectModal;
+window.openAddCurriculumSubjectModal = openAddCurriculumSubjectModal;
+window.openEditCurriculumSubjectModal = openEditCurriculumSubjectModal;
 window.closeAddSubjectModal = closeAddSubjectModal;
 window.submitAddSubjectModal = submitAddSubjectModal;
 window.deleteSubjectOffering = deleteSubjectOffering;

@@ -99,6 +99,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
     setting_value VARCHAR(255) NOT NULL
 );
 
+-- Failed sign-in counters; keys are hashed so no email or IP is stored
+CREATE TABLE IF NOT EXISTS login_attempts (
+    attempt_key CHAR(64) PRIMARY KEY,
+    attempts INT NOT NULL,
+    window_start INT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS departments (
     department_name VARCHAR(100) PRIMARY KEY
 );

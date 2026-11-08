@@ -5,6 +5,8 @@ require_once __DIR__ . '/../includes/functions.php';
 
 header('Content-Type: application/json');
 
+const LOGIN_ATTEMPTS_TABLE_SQL = "CREATE TABLE IF NOT EXISTS login_attempts (attempt_key CHAR(64) PRIMARY KEY, attempts INT NOT NULL, window_start INT NOT NULL)";
+
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // If user is currently flagged as logged in in PHP session, check if active token in DB is valid
     if (isset($_SESSION['user_id'])) {
@@ -76,6 +78,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(['success' => true, 'message' => 'Logged out successfully']);
     }
 
+    if ($action === 'change_password' || $action === 'admin_reset_password') {
+        $db = getDB();
+        $db->exec(LOGIN_ATTEMPTS_TABLE_SQL);
+        $newPassword = trim($input['new_password'] ?? '');
+        $problem = passwordProblem($newPassword);
+
+        if ($action === 'change_password') {
+            requireLogin();
+            requireCSRF();
+
+            $attemptKey = hash('sha256', 'password-change|' . $_SESSION['user_id']);
+            $lockSeconds = attemptLockSeconds($db, $attemptKey, LOGIN_ATTEMPT_LIMIT);
+            if ($lockSeconds > 0) {
+                jsonResponse(['success' => false, 'message' => 'Too many incorrect attempts. Try again in ' . ceil($lockSeconds / 60) . ' minute(s).'], 429);
+            }
+
+            $stmt = $db->prepare("SELECT password_hash FROM users WHERE user_id = ?");
+            $stmt->execute([$_SESSION['user_id']]);
+            if (!password_verify(trim($input['current_password'] ?? ''), (string)$stmt->fetchColumn())) {
+                recordFailedAttempt($db, $attemptKey);
+                jsonResponse(['success' => false, 'message' => 'Your current password is incorrect.'], 400);
+            }
+            if ($problem) {
+                jsonResponse(['success' => false, 'message' => $problem], 400);
+            }
+
+            $sessionToken = bin2hex(random_bytes(32));
+            $update = $db->prepare("UPDATE users SET password_hash = ?, active_session_token = ? WHERE user_id = ?");
+            $update->execute([password_hash($newPassword, PASSWORD_BCRYPT), $sessionToken, $_SESSION['user_id']]);
+            session_regenerate_id(true);
+            $_SESSION['session_token'] = $sessionToken;
+            clearFailedAttempts($db, $attemptKey);
+            jsonResponse(['success' => true, 'message' => 'Your password has been changed.']);
+        }
+
+        requireRole('admin');
+        requireCSRF();
+        $target = trim($input['email'] ?? '');
+        if (strcasecmp($target, $_SESSION['email'] ?? '') === 0) {
+            jsonResponse(['success' => false, 'message' => 'Use Change Password for your own account.'], 400);
+        }
+        if ($problem) {
+            jsonResponse(['success' => false, 'message' => $problem], 400);
+        }
+
+        // The new token signs the user out of any device they were using
+        $update = $db->prepare("UPDATE users SET password_hash = ?, active_session_token = ? WHERE email = ?");
+        $update->execute([password_hash($newPassword, PASSWORD_BCRYPT), bin2hex(random_bytes(32)), $target]);
+        if ($update->rowCount() === 0) {
+            jsonResponse(['success' => false, 'message' => 'User not found.'], 404);
+        }
+        jsonResponse(['success' => true, 'message' => 'Password reset. Share it with the user securely.']);
+    }
+
     $email = trim($input['email'] ?? '');
     $password = trim($input['password'] ?? '');
 
@@ -85,11 +141,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $db = getDB();
+        $db->exec(LOGIN_ATTEMPTS_TABLE_SQL);
+
+        $accountKey = hash('sha256', 'login|' . strtolower($email) . '|' . clientIp());
+        $networkKey = hash('sha256', 'network|' . clientIp());
+        $lockSeconds = max(
+            attemptLockSeconds($db, $accountKey, LOGIN_ATTEMPT_LIMIT),
+            attemptLockSeconds($db, $networkKey, LOGIN_IP_ATTEMPT_LIMIT)
+        );
+        if ($lockSeconds > 0) {
+            jsonResponse(['success' => false, 'message' => 'Too many failed attempts. Try again in ' . ceil($lockSeconds / 60) . ' minute(s).'], 429);
+        }
+
         $stmt = $db->prepare("SELECT user_id, first_name, last_name, email, password_hash, role, subject_role FROM users WHERE email = ? LIMIT 1");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password_hash'])) {
+            clearFailedAttempts($db, $accountKey);
+
             // Generate a fresh unique session token for this new login instance
             $sessionToken = bin2hex(random_bytes(32));
 
@@ -129,6 +199,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'csrf_token' => generateCSRF()
             ]);
         } else {
+            recordFailedAttempt($db, $accountKey);
+            recordFailedAttempt($db, $networkKey);
             jsonResponse(['success' => false, 'message' => 'Invalid email or password'], 401);
         }
     } catch (PDOException $e) {

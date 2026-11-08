@@ -51,6 +51,8 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
             jsonResponse(['success' => false, 'message' => "Class '{$subCode}' for section '{$secName}' has invalid details. No changes were made."], 400);
         }
 
+        requireFieldLengths(['Subject code' => [$subCode, 20], 'Section code' => [$secName, 20], 'Subject category' => [$subCat, 50]]);
+
         if ($qualifications !== null && empty($qualifications[$facultyId][strtoupper($subCode)])) {
             jsonResponse(['success' => false, 'message' => "{$instructor} does not have {$subCode} in their main qualifications. No changes were made."], 400);
         }
@@ -438,6 +440,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if ($code === '' || $title === '' || $department === '') {
             jsonResponse(['success' => false, 'message' => 'Subject code, title and department are required.'], 400);
         }
+        requireFieldLengths(['Subject code' => [$code, 20], 'Subject title' => [$title, 100], 'Department' => [$department, 100]]);
+        if ((int)($input['units'] ?? 3) < 1) {
+            jsonResponse(['success' => false, 'message' => 'Units must be at least 1.'], 400);
+        }
         $stmt = $db->prepare("
             INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units) VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE subject_title = VALUES(subject_title), department = VALUES(department), it_only = VALUES(it_only), units = VALUES(units)
@@ -462,6 +468,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $names = array_values(array_unique(array_filter(array_map('trim', is_array($input['departments'] ?? null) ? $input['departments'] : []))));
         if (!$names) {
             jsonResponse(['success' => false, 'message' => 'At least one department must remain.'], 400);
+        }
+        foreach ($names as $name) {
+            requireFieldLengths(['Department' => [$name, 100]]);
         }
 
         $existing = $db->query("SELECT department_name FROM departments")->fetchAll(PDO::FETCH_COLUMN);
@@ -493,6 +502,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
 
         $terms = is_array($input['terms'] ?? null) ? $input['terms'] : [];
+
+        requireFieldLengths(['School year code' => [$year_code, 50]]);
+        foreach ($terms as $t) {
+            if (!in_array($t['termName'] ?? '', ['1st Sem', '2nd Sem', 'Summer'], true)
+                || !isValidDate($t['startDate'] ?? null) || !isValidDate($t['endDate'] ?? null)
+                || $t['endDate'] <= $t['startDate']) {
+                jsonResponse(['success' => false, 'message' => 'Each term needs a valid name, and an end date after its start date.'], 400);
+            }
+        }
+
+        $dupYear = $db->prepare("SELECT year_id FROM school_years WHERE year_code = ? AND year_id != ?");
+        $dupYear->execute([$year_code, $year_id]);
+        if ($dupYear->fetch()) {
+            jsonResponse(['success' => false, 'message' => "School year {$year_code} already exists."], 409);
+        }
 
         $db->beginTransaction();
         if ($is_active) {
@@ -555,6 +579,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $status = in_array($input['status'] ?? '', ['draft', 'active', 'closed']) ? $input['status'] : 'draft';
         $is_active = !empty($input['is_active']) ? 1 : 0;
 
+        if (!in_array($term_name, ['1st Sem', '2nd Sem', 'Summer'], true)) {
+            jsonResponse(['success' => false, 'message' => 'Term name must be 1st Sem, 2nd Sem or Summer.'], 400);
+        }
+        if (!isValidDate($start_date) || !isValidDate($end_date)) {
+            jsonResponse(['success' => false, 'message' => 'Please enter valid term dates.'], 400);
+        }
+        if ($end_date <= $start_date) {
+            jsonResponse(['success' => false, 'message' => 'The term end date must be after its start date.'], 400);
+        }
+
         if ($term_id > 0) {
             // Status and date edits don't send is_active, so only change it when provided.
             if (array_key_exists('is_active', $input)) {
@@ -606,6 +640,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if (!$subject_code || !$subject_name) {
             jsonResponse(['success' => false, 'message' => 'Subject code and title are required'], 400);
         }
+        requireFieldLengths(['Subject code' => [$subject_code, 20], 'Subject name' => [$subject_name, 100], 'Program' => [$program, 20], 'Curriculum' => [$curriculum, 50]]);
+        if ($units < 1 || $year_level < 1 || $lecture_hours < 0 || $lab_hours < 0 || $lecture_hours > 99 || $lab_hours > 99) {
+            jsonResponse(['success' => false, 'message' => 'Units, year level and hours must be valid positive numbers.'], 400);
+        }
 
         if ($subject_id > 0) {
             $stmt = $db->prepare("UPDATE term_subjects SET subject_code=?, subject_name=?, units=?, lecture_hours=?, lab_hours=?, subject_type=?, program=?, year_level=?, curriculum=?, is_included=? WHERE subject_id=?");
@@ -653,6 +691,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         if (!$section_code || !$section_name) {
             jsonResponse(['success' => false, 'message' => 'Section code and name are required'], 400);
+        }
+        requireFieldLengths(['Section code' => [$section_code, 20], 'Section name' => [$section_name, 50], 'Program' => [$program, 20], 'Adviser' => [$adviser, 100]]);
+        if ($student_count < 1 || $year_level < 1) {
+            jsonResponse(['success' => false, 'message' => 'Student count and year level must be at least 1.'], 400);
+        }
+
+        // An edit stays in the section's own term
+        if ($section_id > 0) {
+            $findTerm = $db->prepare("SELECT term_id FROM academic_sections WHERE section_id = ?");
+            $findTerm->execute([$section_id]);
+            $term_id = (int)$findTerm->fetchColumn();
+        }
+        $dupSection = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ? AND section_id != ?");
+        $dupSection->execute([$section_code, $term_id, $section_id]);
+        if ($dupSection->fetch()) {
+            jsonResponse(['success' => false, 'message' => "Section code {$section_code} already exists in this term."], 409);
         }
 
         if ($section_id > 0) {
@@ -715,6 +769,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'Split count must be between 1 and ' . ($sec['student_count'] - 1)], 400);
         }
 
+        $splitCode = $new_code ?: $sec['section_code'] . '-B';
+        requireFieldLengths(['Section code' => [$splitCode, 20], 'Section name' => [$new_name ?: $sec['section_name'] . ' (Split)', 50]]);
+        $dupSection = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ?");
+        $dupSection->execute([$splitCode, $sec['term_id']]);
+        if ($dupSection->fetch()) {
+            jsonResponse(['success' => false, 'message' => "Section code {$splitCode} already exists in this term."], 409);
+        }
+
         $remaining = $sec['student_count'] - $split_count;
         $db->prepare("UPDATE academic_sections SET student_count = ? WHERE section_id = ?")->execute([$remaining, $sec_id]);
 
@@ -730,6 +792,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $sec_count = (int)($input['sections_per_group'] ?? 2);
         $student_count = (int)($input['students_per_section'] ?? 35);
         $term_id = (int)($input['term_id'] ?? 1);
+
+        if ($sec_count < 1 || $sec_count > 26 || $student_count < 1) {
+            jsonResponse(['success' => false, 'message' => 'Enter between 1 and 26 sections, with at least 1 student each.'], 400);
+        }
+        foreach ($programs as $prog) {
+            requireFieldLengths(['Program' => [$prog, 20]]);
+        }
 
         $letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
         $advisers = ['Prof. Academic Head', 'Prof. Program Head', 'Prof. Faculty Member', 'Engr. Faculty Member'];
@@ -782,6 +851,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         // Qualifications apply once the shared data has been published
         $rows = resolveScheduleRows($db, $schedules, $term_id, isStatePublished($db) ? loadQualifications($db) : null);
 
+        // AI drafts must have no clashes at all; manual edits may still save with a warning
+        if (!empty($input['strict'])) {
+            foreach ($rows as $i => $a) {
+                foreach (array_slice($rows, $i + 1) as $b) {
+                    if ($a[6] === $b[6] && $a[7] < $b[8] && $a[8] > $b[7] && ($a[1] === $b[1] || $a[2] === $b[2] || $a[5] === $b[5])) {
+                        jsonResponse(['success' => false, 'message' => "This draft has a clash on {$a[6]} at {$a[7]}. No changes were made."], 409);
+                    }
+                }
+            }
+        }
+
         $db->beginTransaction();
         try {
             // Replace this term only. NULL rows are old records saved before terms were tracked.
@@ -811,6 +891,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if (!$room_id || !$faculty_id || !$subject_code || !$section_name || !$day_of_week || !$start_time || !$end_time) {
             jsonResponse(['success' => false, 'message' => 'All fields are required'], 400);
         }
+        requireFieldLengths(['Subject code' => [$subject_code, 20], 'Section code' => [$section_name, 20], 'Subject category' => [$subject_category, 50]]);
 
         $validDays = ['Mon','Tue','Wed','Thu','Fri','Sat'];
         if (!in_array($day_of_week, $validDays)) {

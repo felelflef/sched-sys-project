@@ -4,8 +4,8 @@
    ========================================================================== */
 
 const GEMINI_STORAGE_KEY = 'sti_gemini_api_key';
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
-const FALLBACK_GEMINI_MODEL = 'gemini-2.0-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-flash-lite-latest';
+const FALLBACK_GEMINI_MODEL = 'gemini-3.5-flash';
 
 let isAiLoading = false;
 

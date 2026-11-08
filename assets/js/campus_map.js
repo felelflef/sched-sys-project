@@ -94,6 +94,19 @@ function syncCampusMapSyFilter() {
 }
 
 /**
+ * Returns 'available', 'occupied' or 'ending' for a room's classes at this moment
+ */
+function getRoomLiveStatus(roomClasses, now = new Date()) {
+  const today = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][now.getDay()];
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const current = roomClasses.find(c =>
+    c.day === today && timeToMinutes(c.startTime) <= minutes && minutes < timeToMinutes(c.endTime)
+  );
+  if (!current) return 'available';
+  return timeToMinutes(current.endTime) - minutes <= 15 ? 'ending' : 'occupied';
+}
+
+/**
  * Renders the room grid for a given floor (1F, 2F, or 3F)
  */
 function renderFloorMap(floor) {
@@ -113,16 +126,10 @@ function renderFloorMap(floor) {
       c.room && c.room.trim().toUpperCase() === room.code.trim().toUpperCase()
     );
 
-    // Calculate status: available, occupied, or partial
-    let status = 'available';
-    let statusLabel = 'Available';
-    if (assignedClasses.length > 2) {
-      status = 'occupied';
-      statusLabel = 'Occupied';
-    } else if (assignedClasses.length > 0) {
-      status = 'partial';
-      statusLabel = 'Partially Booked';
-    }
+    // Status for this moment, matching the map legend
+    const liveStatus = getRoomLiveStatus(assignedClasses);
+    const status = liveStatus === 'ending' ? 'partial' : liveStatus;
+    const statusLabel = { available: 'Available', occupied: 'Occupied', ending: 'Ending Soon' }[liveStatus];
 
     const cell = document.createElement('div');
     cell.className = `room-cell ${status}`;
@@ -175,10 +182,14 @@ function updateCampusMapStats() {
     }
   });
 
-  const occupiedCount = scheduledRooms.size;
-  const availableCount = Math.max(0, totalRooms - occupiedCount);
-  const endingSoonCount = Math.min(3, Math.floor(occupiedCount / 2));
-  const overallUtilPercent = Math.round((occupiedCount / totalRooms) * 100);
+  // Occupied and ending-soon counts reflect this moment; utilization covers the whole week
+  const liveStatuses = ROOMS.map(room => getRoomLiveStatus(
+    masterSched.filter(c => c.room && c.room.trim().toUpperCase() === room.code.trim().toUpperCase())
+  ));
+  const endingSoonCount = liveStatuses.filter(s => s === 'ending').length;
+  const occupiedCount = liveStatuses.filter(s => s === 'occupied').length + endingSoonCount;
+  const availableCount = totalRooms - occupiedCount;
+  const overallUtilPercent = Math.round((scheduledRooms.size / totalRooms) * 100);
 
   const elAvail = document.getElementById('statAvailableRooms');
   if (elAvail) elAvail.textContent = String(availableCount);
@@ -418,3 +429,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+
+// Keep the live room status current while the map is open
+setInterval(() => {
+  if (document.getElementById('page-minimap')?.classList.contains('active')) {
+    const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
+    renderFloorMap(activeFloor + 'F');
+  }
+}, 60000);
