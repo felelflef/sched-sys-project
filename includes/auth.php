@@ -92,7 +92,7 @@ function requireLogin() {
             echo json_encode(['success' => false, 'code' => 'AUTH_REQUIRED', 'message' => 'Authentication required']);
             exit;
         }
-        header('Location: /sti_scheduling_dashboard.html');
+        header('Location: /');
         exit;
     }
 
@@ -108,7 +108,7 @@ function requireLogin() {
             ]);
             exit;
         }
-        header('Location: /sti_scheduling_dashboard.html?superseded=1');
+        header('Location: /?superseded=1');
         exit;
     }
 }

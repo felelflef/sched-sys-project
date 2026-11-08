@@ -4,6 +4,10 @@ RewriteEngine On
 RewriteCond %{HTTP:X-Forwarded-Proto} =http
 RewriteRule .* https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+# Old links to the dashboard file go to the main address
+RewriteCond %{THE_REQUEST} \s/sti_scheduling_dashboard\.html[\s?]
+RewriteRule ^ / [R=301,L]
+
 # If the requested file or directory doesn't exist, serve index.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
