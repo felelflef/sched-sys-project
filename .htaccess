@@ -1,6 +1,6 @@
 RewriteEngine On
 
-# Redirect HTTP to HTTPS (Koyeb provides SSL termination)
+# Redirect HTTP to HTTPS (the hosting platform provides SSL)
 RewriteCond %{HTTP:X-Forwarded-Proto} =http
 RewriteRule .* https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 

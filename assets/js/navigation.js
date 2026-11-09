@@ -27,15 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Freshly evaluate and render modules based on active role
       if (mod === 'rooms') renderRoomTable();
-      if (mod === 'minimap') {
-        const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
-        if (typeof renderFloorMap === 'function') renderFloorMap(activeFloor + 'F');
+      if (mod === 'viewer') {
+        if (typeof renderScheduleViewer === 'function') renderScheduleViewer();
       }
       if (mod === 'faculty') renderFacultyCards();
       if (mod === 'subjects') renderSubjectTable();
       if (mod === 'schedule') renderGrid();
       if (mod === 'users') renderUserTable();
-      if (mod === 'ai' && typeof initAiModule === 'function') initAiModule();
+      if (mod === 'reports') renderScheduleReports();
     });
   });
 

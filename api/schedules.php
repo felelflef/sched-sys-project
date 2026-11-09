@@ -13,6 +13,7 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
     $roomStmt = $db->prepare("SELECT room_id FROM classrooms WHERE room_name_number = ? LIMIT 1");
     $facultyStmt = $db->prepare("SELECT user_id FROM users WHERE CONCAT(first_name, ' ', last_name) = ? LIMIT 1");
     $validDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    $availability = loadAvailability($db);
     $rows = [];
 
     foreach ($items as $item) {
@@ -57,6 +58,10 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
             jsonResponse(['success' => false, 'message' => "{$instructor} does not have {$subCode} in their main qualifications. No changes were made."], 400);
         }
 
+        if (isset($availability[$facultyId]) && !isWithinAvailability($availability[$facultyId], $day, $start, $end)) {
+            jsonResponse(['success' => false, 'message' => "{$instructor} is not available for {$subCode} on {$day} at that time. No changes were made."], 400);
+        }
+
         $rowTermId = $termId ?: (int)($item['termId'] ?? 0);
         $rows[] = [$rowTermId ?: null, $roomId, $facultyId, $subCode, $subCat, $secName, $day, $start, $end, empty($item['aiPlaced']) ? 0 : 1];
     }
@@ -74,6 +79,38 @@ function loadQualifications(PDO $db): array {
         $map[(int)$row['user_id']][strtoupper($row['subject_code'])] = true;
     }
     return $map;
+}
+
+/** Returns [user_id] => days and shifts, only for part-time teachers who have availability set. */
+function loadAvailability(PDO $db): array {
+    $map = [];
+    foreach ($db->query("SELECT user_id, available_days, available_shifts FROM users WHERE employment_status = 'Part-time' AND available_days <> '' AND available_shifts <> ''")->fetchAll() as $row) {
+        $map[(int)$row['user_id']] = ['days' => explode(',', $row['available_days']), 'shifts' => explode(',', $row['available_shifts'])];
+    }
+    return $map;
+}
+
+/** Times are HH:MM:SS. Selected shifts that touch or overlap count as one continuous window. */
+function isWithinAvailability(array $availability, string $day, string $start, string $end): bool {
+    if (!in_array($day, $availability['days'], true)) {
+        return false;
+    }
+    $from = null;
+    $to = null;
+    foreach (SHIFT_WINDOWS as $shift => [$shiftStart, $shiftEnd]) {
+        if (!in_array($shift, $availability['shifts'], true)) {
+            continue;
+        }
+        if ($from !== null && $shiftStart > $to) {
+            if ($start >= $from && $end <= $to) {
+                return true;
+            }
+            $from = null;
+        }
+        $from = $from ?? $shiftStart;
+        $to = $shiftEnd;
+    }
+    return $from !== null && $start >= $from && $end <= $to;
 }
 
 function requireAdminRole(): void {
@@ -100,6 +137,32 @@ function requireTermExists(PDO $db, int $termId): void {
     }
 }
 
+/** Keeps a copy of the term's schedule so the last Generate can be undone. */
+function saveScheduleSnapshot(PDO $db, int $termId): void {
+    $find = $db->prepare("SELECT room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time, ai_generated FROM schedules WHERE term_id = ? OR term_id IS NULL");
+    $find->execute([$termId]);
+    $rows = $find->fetchAll();
+    if ($rows) {
+        $db->prepare("REPLACE INTO schedule_snapshots (term_id, saved_at, schedule_json) VALUES (?, NOW(), ?)")->execute([$termId, json_encode($rows)]);
+    }
+}
+
+/** Locks the term's version row. Refuses the save if someone else changed the schedule first. */
+function lockScheduleVersion(PDO $db, int $termId, $expected): int {
+    $lock = $db->prepare("SELECT schedule_version FROM school_terms WHERE term_id = ? FOR UPDATE");
+    $lock->execute([$termId]);
+    $current = (int)$lock->fetchColumn();
+    if ($expected !== null && (int)$expected !== $current) {
+        $db->rollBack();
+        jsonResponse(['success' => false, 'message' => 'Someone else changed this schedule while you were working. The latest version has been loaded, so please make your change again.'], 409);
+    }
+    return $current + 1;
+}
+
+function bumpScheduleVersion(PDO $db, int $termId): void {
+    $db->prepare("UPDATE school_terms SET schedule_version = schedule_version + 1 WHERE term_id = ?")->execute([$termId]);
+}
+
 function insertScheduleRows(PDO $db, array $rows): void {
     $ins = $db->prepare("
         INSERT INTO schedules (term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time, ai_generated)
@@ -120,7 +183,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $db = getDB();
 
-// Ensure lifecycle tables exist (Self-healing schema migration)
+// Ensure lifecycle tables exist. Runs once per SCHEMA_VERSION, not on every request.
+if (($GLOBALS['schema_stamps']['schema_lifecycle'] ?? '') !== SCHEMA_VERSION) {
 try {
     $db->exec("
         CREATE TABLE IF NOT EXISTS school_years (
@@ -206,8 +270,18 @@ try {
             (1, 'BA 101',  'Principles of Management', 3, 3.0, 0.0, 'lecture', 'BSBA', 1, '2024 Revised', 1);
         ");
     }
+
+    $db->exec("CREATE TABLE IF NOT EXISTS schedule_snapshots (term_id INT PRIMARY KEY, saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, schedule_json MEDIUMTEXT NOT NULL)");
+    if (!$db->query("SHOW COLUMNS FROM school_terms LIKE 'schedule_version'")->fetch()) {
+        $db->exec("ALTER TABLE school_terms ADD COLUMN schedule_version INT NOT NULL DEFAULT 0");
+    }
+    if (!$db->query("SHOW COLUMNS FROM subject_catalog LIKE 'catalog_id'")->fetch()) {
+        $db->exec("ALTER TABLE subject_catalog ADD COLUMN catalog_id INT NOT NULL AUTO_INCREMENT UNIQUE");
+    }
+    $db->prepare("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('schema_lifecycle', ?)")->execute([SCHEMA_VERSION]);
 } catch (Exception $e) {
     // Non-fatal if DB permissions restrict DDL
+}
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -221,7 +295,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $subjects = $db->query("SELECT * FROM term_subjects ORDER BY year_level ASC, subject_code ASC")->fetchAll();
             $sections = $db->query("SELECT * FROM academic_sections ORDER BY year_level ASC, section_code ASC")->fetchAll();
             $rooms = $db->query("SELECT room_id, room_name_number, room_type, capacity, floor_level, current_status FROM classrooms ORDER BY floor_level, room_name_number")->fetchAll();
-            $faculty = $db->query("SELECT user_id, first_name, last_name, email, role, subject_role FROM users WHERE role IN ('faculty', 'academic-head', 'program-head')")->fetchAll();
+            $faculty = $db->query("SELECT user_id, first_name, last_name, email, role, subject_role, employment_status, available_days, available_shifts, max_load FROM users WHERE role IN ('faculty', 'academic-head', 'program-head')")->fetchAll();
             $schedules = $db->query("
                 SELECT s.*, c.room_name_number, CONCAT(u.first_name, ' ', u.last_name) AS faculty_name
                 FROM schedules s
@@ -238,6 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 JOIN users u ON q.user_id = u.user_id
                 ORDER BY q.subject_code
             ")->fetchAll();
+            $snapshots = $db->query("SELECT term_id, saved_at FROM schedule_snapshots")->fetchAll();
 
             jsonResponse([
                 'success' => true,
@@ -252,7 +327,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     'schedules' => $schedules,
                     'catalog' => $catalog,
                     'departments' => $departments,
-                    'qualifications' => $qualifications
+                    'qualifications' => $qualifications,
+                    'snapshots' => $snapshots
                 ]
             ]);
         } catch (Exception $e) {
@@ -261,75 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
     }
 
-    if (!isset($_GET['day'])) {
-        // Return all raw schedules if no specific day filter
-        $stmt = $db->query("SELECT s.*, c.room_name_number, CONCAT(u.first_name, ' ', u.last_name) AS faculty_name FROM schedules s JOIN classrooms c ON s.room_id = c.room_id JOIN users u ON s.faculty_id = u.user_id");
-        jsonResponse(['success' => true, 'data' => $stmt->fetchAll()]);
-    }
-
-    $day = $_GET['day'];
-    $floor = (isset($_GET['floor']) && $_GET['floor'] !== 'all') ? (int)$_GET['floor'] : null;
-    $room_id = isset($_GET['room_id']) ? (int)$_GET['room_id'] : null;
-
-    // Build room query
-    $roomQuery = "SELECT room_id, room_name_number, floor_level FROM classrooms";
-    $roomParams = [];
-    $conditions = [];
-
-    if ($floor) {
-        $conditions[] = "floor_level = ?";
-        $roomParams[] = $floor;
-    }
-    if ($room_id) {
-        $conditions[] = "room_id = ?";
-        $roomParams[] = $room_id;
-    }
-    if ($conditions) {
-        $roomQuery .= " WHERE " . implode(" AND ", $conditions);
-    }
-    $roomQuery .= " ORDER BY floor_level, room_name_number";
-
-    $stmt = $db->prepare($roomQuery);
-    $stmt->execute($roomParams);
-    $rooms = $stmt->fetchAll();
-
-    // Get schedules for the day
-    $schedQuery = "SELECT s.schedule_id, s.room_id, s.faculty_id, s.subject_code, s.subject_category, s.section_name,
-                          s.day_of_week, s.start_time, s.end_time,
-                          CONCAT(u.first_name, ' ', u.last_name) AS faculty_name,
-                          u.subject_role AS faculty_subject_role
-                   FROM schedules s
-                   JOIN users u ON s.faculty_id = u.user_id
-                   WHERE s.day_of_week = ?";
-    $schedParams = [$day];
-
-    if ($room_id) {
-        $schedQuery .= " AND s.room_id = ?";
-        $schedParams[] = $room_id;
-    }
-
-    $stmt = $db->prepare($schedQuery);
-    $stmt->execute($schedParams);
-    $schedules = $stmt->fetchAll();
-
-    // Group schedules by room_id
-    $schedByRoom = [];
-    foreach ($schedules as $s) {
-        $schedByRoom[$s['room_id']][] = $s;
-    }
-
-    // Build grouped response
-    $result = [];
-    foreach ($rooms as $room) {
-        $result[] = [
-            'room_id' => $room['room_id'],
-            'room_name_number' => $room['room_name_number'],
-            'floor_level' => $room['floor_level'],
-            'schedules' => $schedByRoom[$room['room_id']] ?? []
-        ];
-    }
-
-    jsonResponse(['success' => true, 'data' => $result]);
+    jsonResponse(['success' => false, 'message' => 'Unknown request'], 400);
 
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -433,11 +441,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             }
         }
 
+        // A subject can't be taken away while this teacher still teaches it this term
+        $kept = array_map(fn($code) => strtoupper(trim((string)$code)), $subjects);
+        $inUse = $db->prepare("SELECT DISTINCT UPPER(s.subject_code) FROM schedules s JOIN school_terms t ON s.term_id = t.term_id JOIN faculty_qualifications q ON q.user_id = s.faculty_id AND UPPER(q.subject_code) = UPPER(s.subject_code) WHERE s.faculty_id = ? AND t.is_active = 1");
+        $inUse->execute([$userId]);
+        $blocked = array_diff($inUse->fetchAll(PDO::FETCH_COLUMN), $kept);
+        if ($blocked) {
+            jsonResponse(['success' => false, 'message' => 'This teacher still has ' . implode(', ', $blocked) . ' classes this term. Reassign them first. No changes were made.'], 409);
+        }
+
         $db->beginTransaction();
         $db->prepare("DELETE FROM faculty_qualifications WHERE user_id = ?")->execute([$userId]);
         insertQualifications($db, $userId, $subjects);
         $db->commit();
         jsonResponse(['success' => true, 'message' => 'Qualifications saved']);
+    }
+
+    if ($action === 'save_faculty_availability') {
+        requireAdminRole();
+        $status = $input['status'] ?? '';
+        if (!in_array($status, ['Full-time', 'Part-time'], true)) {
+            rejectInput('Employment status must be Full-time or Part-time.');
+        }
+
+        $sentDays = is_array($input['days'] ?? null) ? $input['days'] : [];
+        $sentShifts = is_array($input['shifts'] ?? null) ? $input['shifts'] : [];
+        $days = array_values(array_intersect(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], $sentDays));
+        $shifts = array_values(array_intersect(array_keys(SHIFT_WINDOWS), $sentShifts));
+        if (count($days) !== count($sentDays) || count($shifts) !== count($sentShifts)) {
+            rejectInput('Please choose valid days and shifts.');
+        }
+        if ($status === 'Full-time') {
+            $days = [];
+            $shifts = [];
+        } elseif ((bool)$days !== (bool)$shifts) {
+            rejectInput('Choose at least one day and one shift.');
+        }
+
+        $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ? AND role IN ('faculty', 'academic-head', 'program-head')");
+        $findUser->execute([trim((string)($input['email'] ?? ''))]);
+        $userId = (int)$findUser->fetchColumn();
+        if (!$userId) {
+            jsonResponse(['success' => false, 'message' => 'That teacher has no user account in the database.'], 404);
+        }
+
+        // Availability can't be narrowed past classes already on the active term's schedule
+        if ($days) {
+            $classes = $db->prepare("SELECT s.subject_code, s.day_of_week, s.start_time, s.end_time FROM schedules s JOIN school_terms t ON s.term_id = t.term_id WHERE s.faculty_id = ? AND t.is_active = 1");
+            $classes->execute([$userId]);
+            foreach ($classes->fetchAll() as $class) {
+                if (!isWithinAvailability(['days' => $days, 'shifts' => $shifts], $class['day_of_week'], $class['start_time'], $class['end_time'])) {
+                    jsonResponse(['success' => false, 'message' => "This teacher has {$class['subject_code']} on {$class['day_of_week']} outside that availability. Reassign that class first."], 409);
+                }
+            }
+        }
+
+        $maxLoad = requireIntInRange('Max load', $input['max_load'] ?? 24, 6, 30);
+        $db->prepare("UPDATE users SET employment_status = ?, available_days = ?, available_shifts = ?, max_load = ? WHERE user_id = ?")
+            ->execute([$status, implode(',', $days), implode(',', $shifts), $maxLoad, $userId]);
+        jsonResponse(['success' => true, 'message' => 'Availability saved']);
     }
 
     if ($action === 'save_catalog_subject') {
@@ -749,8 +811,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
 
         if ($section_id > 0) {
+            $findCode = $db->prepare("SELECT section_code FROM academic_sections WHERE section_id = ?");
+            $findCode->execute([$section_id]);
+            $previousCode = (string)$findCode->fetchColumn();
+
+            $db->beginTransaction();
             $stmt = $db->prepare("UPDATE academic_sections SET section_code=?, section_name=?, program=?, year_level=?, student_count=?, adviser=?, shift=? WHERE section_id=?");
             $stmt->execute([$section_code, $section_name, $program, $year_level, $student_count, $adviser, $shift, $section_id]);
+            // Classes are matched by section code, so they follow a rename
+            if ($previousCode !== '' && $previousCode !== $section_code) {
+                $db->prepare("UPDATE schedules SET section_name = ? WHERE section_name = ? AND term_id = ?")->execute([$section_code, $previousCode, $term_id]);
+                bumpScheduleVersion($db, $term_id);
+            }
+            $db->commit();
             jsonResponse(['success' => true, 'message' => 'Section updated']);
         } else {
             $stmt = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, adviser, shift) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
@@ -786,6 +859,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             // Re-point any schedules from sec2 to sec1
             $updSched = $db->prepare("UPDATE schedules SET section_name = ? WHERE section_name = ? AND (term_id = ? OR term_id IS NULL)");
             $updSched->execute([$row1['section_code'], $row2['section_code'], $row2['term_id']]);
+            bumpScheduleVersion($db, (int)$row2['term_id']);
 
             $del = $db->prepare("DELETE FROM academic_sections WHERE section_id = ?");
             $del->execute([$sec2_id]);
@@ -853,7 +927,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         requireTermExists($db, $term_id);
 
         $letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-        $advisers = ['Prof. Academic Head', 'Prof. Program Head', 'Prof. Faculty Member', 'Engr. Faculty Member'];
         $created = 0;
 
         foreach ($programs as $prog) {
@@ -863,7 +936,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     $prefix = substr($prog, 2) ?: $prog;
                     $code = "{$prefix}{$yr}0" . ($i + 1) . "M";
                     $name = "{$prog} {$yr}{$letter}";
-                    $adviser = $advisers[$i % count($advisers)];
+                    $adviser = '';
 
                     $check = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ?");
                     $check->execute([$code, $term_id]);
@@ -883,13 +956,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     if ($action === 'delete_section') {
         $section_id = (int)($input['section_id'] ?? 0);
-        $stmt = $db->prepare("DELETE FROM academic_sections WHERE section_id = ?");
-        $stmt->execute([$section_id]);
+        $findSection = $db->prepare("SELECT section_code, term_id FROM academic_sections WHERE section_id = ?");
+        $findSection->execute([$section_id]);
+        $section = $findSection->fetch();
+        if ($section) {
+            $db->beginTransaction();
+            $db->prepare("DELETE FROM schedules WHERE section_name = ? AND term_id = ?")->execute([$section['section_code'], $section['term_id']]);
+            $db->prepare("DELETE FROM academic_sections WHERE section_id = ?")->execute([$section_id]);
+            bumpScheduleVersion($db, (int)$section['term_id']);
+            $db->commit();
+        }
         jsonResponse(['success' => true, 'message' => 'Section deleted']);
     }
 
     // ─── 5. BULK BASELINE PERSISTENCE ───
-    if ($action === 'generate_baseline' || $action === 'bulk_save_schedules' || $action === 'generate_schedule') {
+    if ($action === 'generate_baseline' || $action === 'bulk_save_schedules') {
         $schedules = is_array($input['schedules'] ?? null) ? $input['schedules'] : [];
         $term_id = (int)($input['term_id'] ?? 0);
         if (!$term_id) {
@@ -916,12 +997,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         $db->beginTransaction();
         try {
+            $newVersion = lockScheduleVersion($db, $term_id, $input['expected_version'] ?? null);
+            // A full regenerate can be undone; ordinary edits don't replace the undo copy
+            if ($action !== 'bulk_save_schedules') {
+                saveScheduleSnapshot($db, $term_id);
+            }
             // Replace this term only. NULL rows are old records saved before terms were tracked.
             $del = $db->prepare("DELETE FROM schedules WHERE term_id = ? OR term_id IS NULL");
             $del->execute([$term_id]);
             insertScheduleRows($db, $rows);
+            bumpScheduleVersion($db, $term_id);
             $db->commit();
-            jsonResponse(['success' => true, 'message' => 'Baseline schedules successfully persisted to database', 'count' => count($schedules)]);
+            jsonResponse(['success' => true, 'message' => 'Baseline schedules successfully persisted to database', 'count' => count($schedules), 'schedule_version' => $newVersion]);
         } catch (Exception $e) {
             $db->rollBack();
             error_log('schedules.php baseline: ' . $e->getMessage());
@@ -929,112 +1016,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
     }
 
-    // ─── 6. STANDARD SCHEDULE CRUD (Add, Edit, Delete) ───
-    if ($action === 'add' || $action === 'edit') {
-        $room_id = (int)($input['room_id'] ?? 0);
-        $faculty_id = (int)($input['faculty_id'] ?? 0);
-        $subject_code = trim($input['subject_code'] ?? '');
-        $subject_category = trim($input['subject_category'] ?? 'IT');
-        $section_name = trim($input['section_name'] ?? '');
-        $day_of_week = $input['day_of_week'] ?? '';
-        $start_time = $input['start_time'] ?? '';
-        $end_time = $input['end_time'] ?? '';
-
-        if (!$room_id || !$faculty_id || !$subject_code || !$section_name || !$day_of_week || !$start_time || !$end_time) {
-            jsonResponse(['success' => false, 'message' => 'All fields are required'], 400);
-        }
-        requireFieldLengths(['Subject code' => [$subject_code, 20], 'Section code' => [$section_name, 20], 'Subject category' => [$subject_category, 50]]);
-
-        $validDays = ['Mon','Tue','Wed','Thu','Fri','Sat'];
-        if (!in_array($day_of_week, $validDays)) {
-            jsonResponse(['success' => false, 'message' => 'Invalid day of week'], 400);
+    if ($action === 'restore_schedule') {
+        $term_id = (int)($input['term_id'] ?? 0);
+        $findSnapshot = $db->prepare("SELECT schedule_json FROM schedule_snapshots WHERE term_id = ?");
+        $findSnapshot->execute([$term_id]);
+        $saved = json_decode((string)$findSnapshot->fetchColumn(), true);
+        if (!$saved) {
+            jsonResponse(['success' => false, 'message' => 'There is no earlier schedule to restore for this term.'], 404);
         }
 
-        if (strlen((string)$start_time) === 5) $start_time .= ':00';
-        if (strlen((string)$end_time) === 5) $end_time .= ':00';
-        if (!isValidClassTime((string)$start_time, (string)$end_time)) {
-            jsonResponse(['success' => false, 'message' => 'Class times must be in order and between 7:00 AM and 8:30 PM.'], 400);
-        }
-
-        // Validate Faculty Subject Role Restriction
-        $facultyStmt = $db->prepare("SELECT user_id, first_name, last_name, role, subject_role FROM users WHERE user_id = ?");
-        $facultyStmt->execute([$faculty_id]);
-        $facultyUser = $facultyStmt->fetch();
-
-        if (!$facultyUser) {
-            jsonResponse(['success' => false, 'message' => 'Selected faculty does not exist'], 400);
-        }
-
-        // A teacher may only teach subjects in their main qualifications
-        if (isStatePublished($db) && empty(loadQualifications($db)[$faculty_id][strtoupper($subject_code)])) {
-            $facultyName = $facultyUser['first_name'] . ' ' . $facultyUser['last_name'];
-            jsonResponse(['success' => false, 'message' => "{$facultyName} does not have {$subject_code} in their main qualifications."], 400);
-        }
-
-        // Check time conflict (same room, same day, overlapping time)
-        $conflictQuery = "SELECT schedule_id FROM schedules
-                          WHERE room_id = ? AND day_of_week = ?
-                          AND start_time < ? AND end_time > ?";
-        $conflictParams = [$room_id, $day_of_week, $end_time, $start_time];
-
-        if ($action === 'edit') {
-            $schedule_id = (int)($input['schedule_id'] ?? 0);
-            if (!$schedule_id) {
-                jsonResponse(['success' => false, 'message' => 'schedule_id required for edit'], 400);
+        // Rooms, teachers or rules may have changed since the copy was made
+        $roomIds = array_flip($db->query("SELECT room_id FROM classrooms")->fetchAll(PDO::FETCH_COLUMN));
+        $userIds = array_flip($db->query("SELECT user_id FROM users")->fetchAll(PDO::FETCH_COLUMN));
+        $qualifications = isStatePublished($db) ? loadQualifications($db) : null;
+        $availability = loadAvailability($db);
+        $rows = [];
+        foreach ($saved as $r) {
+            $facultyId = (int)$r['faculty_id'];
+            $valid = isset($roomIds[$r['room_id']]) && isset($userIds[$r['faculty_id']])
+                && ($qualifications === null || !empty($qualifications[$facultyId][strtoupper($r['subject_code'])]))
+                && (!isset($availability[$facultyId]) || isWithinAvailability($availability[$facultyId], $r['day_of_week'], $r['start_time'], $r['end_time']));
+            if (!$valid) {
+                jsonResponse(['success' => false, 'message' => "The earlier schedule can't be restored because {$r['section_name']} {$r['subject_code']} no longer meets the current rooms, qualifications or availability."], 409);
             }
-            $conflictQuery .= " AND schedule_id != ?";
-            $conflictParams[] = $schedule_id;
+            $rows[] = [$term_id, (int)$r['room_id'], $facultyId, $r['subject_code'], $r['subject_category'], $r['section_name'], $r['day_of_week'], $r['start_time'], $r['end_time'], (int)$r['ai_generated']];
         }
 
-        $stmt = $db->prepare($conflictQuery);
-        $stmt->execute($conflictParams);
-        if ($stmt->fetch()) {
-            jsonResponse(['success' => false, 'message' => 'Time conflict: another class is scheduled in this room at the same time'], 409);
+        $db->beginTransaction();
+        try {
+            lockScheduleVersion($db, $term_id, $input['expected_version'] ?? null);
+            saveScheduleSnapshot($db, $term_id); // Restoring can itself be undone
+            $db->prepare("DELETE FROM schedules WHERE term_id = ? OR term_id IS NULL")->execute([$term_id]);
+            insertScheduleRows($db, $rows);
+            bumpScheduleVersion($db, $term_id);
+            $db->commit();
+            jsonResponse(['success' => true, 'message' => 'Previous schedule restored']);
+        } catch (Exception $e) {
+            $db->rollBack();
+            error_log('schedules.php restore: ' . $e->getMessage());
+            jsonResponse(['success' => false, 'message' => 'Could not restore the schedule. No changes were made.'], 500);
         }
-
-        // Check faculty schedule overlap (same faculty, same day, overlapping time across ANY room)
-        $facConflictQuery = "SELECT s.schedule_id, c.room_name_number FROM schedules s
-                             JOIN classrooms c ON s.room_id = c.room_id
-                             WHERE s.faculty_id = ? AND s.day_of_week = ?
-                             AND s.start_time < ? AND s.end_time > ?";
-        $facConflictParams = [$faculty_id, $day_of_week, $end_time, $start_time];
-        if ($action === 'edit') {
-            $facConflictQuery .= " AND s.schedule_id != ?";
-            $facConflictParams[] = $schedule_id;
-        }
-
-        $stmt = $db->prepare($facConflictQuery);
-        $stmt->execute($facConflictParams);
-        $facConflict = $stmt->fetch();
-        if ($facConflict) {
-            jsonResponse([
-                'success' => false,
-                'message' => "Faculty schedule overlap: This instructor is already scheduled in Room {$facConflict['room_name_number']} on {$day_of_week} at this time."
-            ], 409);
-        }
-
-        if ($action === 'add') {
-            $stmt = $db->prepare("INSERT INTO schedules (room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$room_id, $faculty_id, $subject_code, $subject_category, $section_name, $day_of_week, $start_time, $end_time]);
-            jsonResponse(['success' => true, 'message' => 'Schedule added', 'schedule_id' => $db->lastInsertId()]);
-        } else {
-            $stmt = $db->prepare("UPDATE schedules SET room_id=?, faculty_id=?, subject_code=?, subject_category=?, section_name=?, day_of_week=?, start_time=?, end_time=? WHERE schedule_id=?");
-            $stmt->execute([$room_id, $faculty_id, $subject_code, $subject_category, $section_name, $day_of_week, $start_time, $end_time, $schedule_id]);
-            jsonResponse(['success' => true, 'message' => 'Schedule updated']);
-        }
-
-    } elseif ($action === 'delete') {
-        $schedule_id = (int)($input['schedule_id'] ?? 0);
-        if (!$schedule_id) {
-            jsonResponse(['success' => false, 'message' => 'schedule_id required'], 400);
-        }
-        $stmt = $db->prepare("DELETE FROM schedules WHERE schedule_id = ?");
-        $stmt->execute([$schedule_id]);
-        jsonResponse(['success' => true, 'message' => 'Schedule deleted']);
-
-    } else {
-        jsonResponse(['success' => false, 'message' => 'Invalid action: ' . htmlspecialchars($action)], 400);
     }
+
+    jsonResponse(['success' => false, 'message' => 'Invalid action: ' . htmlspecialchars($action)], 400);
 } else {
     jsonResponse(['success' => false, 'error' => 'Method not allowed'], 405);
 }

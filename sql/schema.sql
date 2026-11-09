@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS users (
     role ENUM('admin', 'academic-head', 'program-head', 'faculty') NOT NULL,
     subject_role VARCHAR(50) DEFAULT 'IT',
     active_session_token VARCHAR(255) DEFAULT NULL,
+    employment_status VARCHAR(20) NOT NULL DEFAULT 'Full-time',
+    available_days VARCHAR(30) NOT NULL DEFAULT '',
+    available_shifts VARCHAR(30) NOT NULL DEFAULT '',
+    max_load INT NOT NULL DEFAULT 24,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -39,6 +43,7 @@ CREATE TABLE IF NOT EXISTS school_years (
 );
 
 CREATE TABLE IF NOT EXISTS school_terms (
+    schedule_version INT NOT NULL DEFAULT 0,
     term_id INT AUTO_INCREMENT PRIMARY KEY,
     year_id INT NOT NULL,
     term_name ENUM('1st Sem', '2nd Sem', 'Summer') NOT NULL,
@@ -95,6 +100,12 @@ CREATE TABLE IF NOT EXISTS schedules (
     FOREIGN KEY (faculty_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS schedule_snapshots (
+    term_id INT PRIMARY KEY,
+    saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    schedule_json MEDIUMTEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     setting_key VARCHAR(50) PRIMARY KEY,
     setting_value VARCHAR(255) NOT NULL
@@ -116,7 +127,8 @@ CREATE TABLE IF NOT EXISTS subject_catalog (
     subject_title VARCHAR(100) NOT NULL,
     department VARCHAR(100) NOT NULL,
     it_only TINYINT(1) DEFAULT 0,
-    units INT NOT NULL DEFAULT 3
+    units INT NOT NULL DEFAULT 3,
+    catalog_id INT NOT NULL AUTO_INCREMENT UNIQUE
 );
 
 -- The subjects each teacher is allowed to teach
@@ -125,32 +137,6 @@ CREATE TABLE IF NOT EXISTS faculty_qualifications (
     subject_code VARCHAR(20) NOT NULL,
     PRIMARY KEY (user_id, subject_code),
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS room_requests (
-    request_id INT AUTO_INCREMENT PRIMARY KEY,
-    room_id INT NOT NULL,
-    faculty_id INT NOT NULL,
-    request_date DATE NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    purpose TEXT NOT NULL,
-    status ENUM('Pending', 'Approved', 'Declined') DEFAULT 'Pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (room_id) REFERENCES classrooms(room_id) ON DELETE CASCADE,
-    FOREIGN KEY (faculty_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS session_logs (
-    log_id INT AUTO_INCREMENT PRIMARY KEY,
-    room_id INT NOT NULL,
-    faculty_id INT NOT NULL,
-    session_date DATE NOT NULL,
-    actual_start_time DATETIME NOT NULL,
-    actual_end_time DATETIME NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (room_id) REFERENCES classrooms(room_id) ON DELETE CASCADE,
-    FOREIGN KEY (faculty_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 -- Seed Data: Classrooms

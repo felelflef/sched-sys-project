@@ -196,40 +196,6 @@
   background: #F9FAFB;
 }
 
-/* ─── View Toggle Group (Segmented Controls) ─── */
-.view-toggle-group {
-  display: inline-flex;
-  background: #E5E7EB;
-  border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.view-toggle-btn {
-  border: none;
-  background: transparent;
-  padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #4B5563;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.view-toggle-btn:hover {
-  color: #111827;
-}
-
-.view-toggle-btn.active {
-  background: #FFFFFF;
-  color: #1C3664;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
 /* ─── Grid Controls ─── */
 .grid-controls {
   display: flex;
@@ -697,7 +663,55 @@ select:focus, input:focus {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-size: 11px;
   font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* ─── View Schedule (read-only timetable page) ─── */
+.viewer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.viewer-mode-buttons {
+  display: flex;
+  gap: 6px;
+  margin-right: 8px;
+}
+#viewerSelect {
+  min-width: 220px;
+  max-width: 100%;
+  padding: 6px 10px;
+  font-weight: 700;
+}
+.viewer-empty-message {
+  padding: 48px 16px !important;
+  text-align: center;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.schedule-viewer-sheet .section-spreadsheet-table td.empty-cell,
+.schedule-viewer-sheet .section-spreadsheet-table td.empty-cell:hover {
+  background: #FFFFFF;
+  cursor: default;
+}
+.schedule-viewer-sheet .section-spreadsheet-table td.class-block-cell,
+.schedule-viewer-sheet .section-spreadsheet-table td.class-block-cell:active {
+  cursor: default;
+}
+.schedule-viewer-sheet .section-spreadsheet-table td.class-block-cell:hover {
+  filter: none;
+  box-shadow: none;
+}
+@media (max-width: 768px) {
+  .schedule-viewer-sheet .section-spreadsheet-table {
+    min-width: 760px;
+  }
 }
 .legend-swatch {
   width: 14px;
@@ -777,17 +791,14 @@ select:focus, input:focus {
     margin: 0 !important;
   }
   .sidebar,
-  .topbar,
   .grid-controls,
   .export-dropdown-menu,
   .modal-overlay,
   .schedule-stepper-container,
-  .view-toggle-group,
   .btn,
   #userDropdownMenu {
     display: none !important;
   }
-  .app-shell,
   .main,
   .content,
   .module-page,

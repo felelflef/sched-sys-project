@@ -7,6 +7,7 @@ requireLogin();
 $db = getDB();
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    requireAnyRole(['admin', 'academic-head', 'program-head']);
     try {
         $stmt = $db->query("SELECT user_id, first_name, last_name, email, role, subject_role, created_at FROM users ORDER BY user_id ASC");
         $users = $stmt->fetchAll();
@@ -102,38 +103,7 @@ if ($action === 'add') {
         error_log('users.php: ' . $e->getMessage());
         jsonResponse(['success' => false, 'message' => 'A server error occurred. Please try again later.'], 500);
     }
-} elseif ($action === 'edit_subject_role') {
-    $userId = (int)($input['user_id'] ?? 0);
-    $subjectRole = trim($input['subject_role'] ?? '');
-
-    if ($userId <= 0 || empty($subjectRole)) {
-        jsonResponse(['success' => false, 'message' => 'User ID and Subject Role are required'], 400);
-    }
-    requireFieldLengths(['Department' => [$subjectRole, 50]]);
-    $current = $db->prepare("SELECT subject_role FROM users WHERE user_id = ?");
-    $current->execute([$userId]);
-    requireKnownDepartment($db, $subjectRole, [(string)$current->fetchColumn()]);
-
-    try {
-        $stmt = $db->prepare("UPDATE users SET subject_role = ? WHERE user_id = ? AND role = 'faculty'");
-        $stmt->execute([$subjectRole, $userId]);
-
-        if ($stmt->rowCount() === 0) {
-            // Check if user exists or is not faculty
-            $check = $db->prepare("SELECT user_id, role FROM users WHERE user_id = ?");
-            $check->execute([$userId]);
-            $user = $check->fetch();
-            if (!$user) {
-                jsonResponse(['success' => false, 'message' => 'User not found'], 404);
-            }
-        }
-
-        jsonResponse(['success' => true, 'message' => 'Subject role updated successfully']);
-    } catch (PDOException $e) {
-        error_log('users.php: ' . $e->getMessage());
-        jsonResponse(['success' => false, 'message' => 'A server error occurred. Please try again later.'], 500);
-    }
-} elseif ($action === 'edit_user' || $action === 'edit_name') {
+} elseif ($action === 'edit_user') {
     $email = trim($input['email'] ?? '');
     $firstName = trim($input['first_name'] ?? '');
     $lastName = trim($input['last_name'] ?? '');

@@ -2,7 +2,7 @@
    DESIGN TOKENS — Psychological Color Palette
    ───────────────────────────────────────────── */
 :root {
-  --bg-primary: #FAF9F5;
+  --bg-primary: #F5F7FB;
   --bg-secondary: #FFFFFF;
   --accent-primary: #25447A;
   --sti-blue: #25447A;
@@ -10,8 +10,8 @@
   --text-primary: #2C303A;
   --text-secondary: #5C6375;
   --text-on-accent: #FFFFFF;
-  --border-subtle: #E2E4E9;
-  --shadow-float: 0 8px 30px rgba(44, 48, 58, 0.04);
+  --border-subtle: #E3E7EF;
+  --shadow-float: 0 1px 3px rgba(28, 54, 100, 0.06);
 
   /* Extended palette */
   --success: #2E7D5B;

@@ -13,34 +13,32 @@ let CURRENT_USER = null;
 
 let ROOMS = [
   // Floor 1 (4 Computer Labs, 3 Lecture Rooms, 1 Culinary Kitchen Lab)
-  { code: 'CL-101', floor: '1F', type: 'CompLab', cap: 35, util: 92, name: 'Computer Laboratory 1' },
-  { code: 'CL-102', floor: '1F', type: 'CompLab', cap: 35, util: 88, name: 'Computer Laboratory 2' },
-  { code: 'CL-103', floor: '1F', type: 'CompLab', cap: 40, util: 95, name: 'Computer Laboratory 3' },
-  { code: 'CL-104', floor: '1F', type: 'CompLab', cap: 30, util: 84, name: 'Computer Laboratory 4' },
-  { code: 'LR-101', floor: '1F', type: 'Lecture', cap: 40, util: 82, name: 'Lecture Room 101' },
-  { code: 'LR-102', floor: '1F', type: 'Lecture', cap: 40, util: 76, name: 'Lecture Room 102' },
-  { code: 'LR-103', floor: '1F', type: 'Lecture', cap: 40, util: 70, name: 'Lecture Room 103' },
-  { code: 'Kitchen Lab', floor: '1F', type: 'Special', cap: 25, util: 70, name: 'Culinary Arts Kitchen Lab' },
+  { code: 'CL-101', floor: '1F', type: 'CompLab', cap: 35, name: 'Computer Laboratory 1' },
+  { code: 'CL-102', floor: '1F', type: 'CompLab', cap: 35, name: 'Computer Laboratory 2' },
+  { code: 'CL-103', floor: '1F', type: 'CompLab', cap: 40, name: 'Computer Laboratory 3' },
+  { code: 'CL-104', floor: '1F', type: 'CompLab', cap: 30, name: 'Computer Laboratory 4' },
+  { code: 'LR-101', floor: '1F', type: 'Lecture', cap: 40, name: 'Lecture Room 101' },
+  { code: 'LR-102', floor: '1F', type: 'Lecture', cap: 40, name: 'Lecture Room 102' },
+  { code: 'LR-103', floor: '1F', type: 'Lecture', cap: 40, name: 'Lecture Room 103' },
+  { code: 'Kitchen Lab', floor: '1F', type: 'Special', cap: 25, name: 'Culinary Arts Kitchen Lab' },
 
   // Floor 2 (6 Lecture Rooms)
-  { code: 'LR-201', floor: '2F', type: 'Lecture', cap: 40, util: 88, name: 'Lecture Room 201' },
-  { code: 'LR-202', floor: '2F', type: 'Lecture', cap: 40, util: 82, name: 'Lecture Room 202' },
-  { code: 'LR-203', floor: '2F', type: 'Lecture', cap: 40, util: 76, name: 'Lecture Room 203' },
-  { code: 'LR-204', floor: '2F', type: 'Lecture', cap: 40, util: 91, name: 'Lecture Room 204' },
-  { code: 'LR-205', floor: '2F', type: 'Lecture', cap: 40, util: 84, name: 'Lecture Room 205' },
-  { code: 'LR-206', floor: '2F', type: 'Lecture', cap: 40, util: 68, name: 'Lecture Room 206' },
+  { code: 'LR-201', floor: '2F', type: 'Lecture', cap: 40, name: 'Lecture Room 201' },
+  { code: 'LR-202', floor: '2F', type: 'Lecture', cap: 40, name: 'Lecture Room 202' },
+  { code: 'LR-203', floor: '2F', type: 'Lecture', cap: 40, name: 'Lecture Room 203' },
+  { code: 'LR-204', floor: '2F', type: 'Lecture', cap: 40, name: 'Lecture Room 204' },
+  { code: 'LR-205', floor: '2F', type: 'Lecture', cap: 40, name: 'Lecture Room 205' },
+  { code: 'LR-206', floor: '2F', type: 'Lecture', cap: 40, name: 'Lecture Room 206' },
 
   // Floor 3 (6 Lecture Rooms, 1 Tourism Lab)
-  { code: 'LR-301', floor: '3F', type: 'Lecture', cap: 40, util: 70, name: 'Lecture Room 301' },
-  { code: 'LR-302', floor: '3F', type: 'Lecture', cap: 40, util: 65, name: 'Lecture Room 302' },
-  { code: 'LR-303', floor: '3F', type: 'Lecture', cap: 40, util: 78, name: 'Lecture Room 303' },
-  { code: 'LR-304', floor: '3F', type: 'Lecture', cap: 40, util: 72, name: 'Lecture Room 304' },
-  { code: 'LR-305', floor: '3F', type: 'Lecture', cap: 40, util: 68, name: 'Lecture Room 305' },
-  { code: 'LR-306', floor: '3F', type: 'Lecture', cap: 40, util: 62, name: 'Lecture Room 306' },
-  { code: 'Tourism Lab', floor: '3F', type: 'Special', cap: 30, util: 68, name: 'Tourism & Hospitality Mock Center' }
+  { code: 'LR-301', floor: '3F', type: 'Lecture', cap: 40, name: 'Lecture Room 301' },
+  { code: 'LR-302', floor: '3F', type: 'Lecture', cap: 40, name: 'Lecture Room 302' },
+  { code: 'LR-303', floor: '3F', type: 'Lecture', cap: 40, name: 'Lecture Room 303' },
+  { code: 'LR-304', floor: '3F', type: 'Lecture', cap: 40, name: 'Lecture Room 304' },
+  { code: 'LR-305', floor: '3F', type: 'Lecture', cap: 40, name: 'Lecture Room 305' },
+  { code: 'LR-306', floor: '3F', type: 'Lecture', cap: 40, name: 'Lecture Room 306' },
+  { code: 'Tourism Lab', floor: '3F', type: 'Special', cap: 30, name: 'Tourism & Hospitality Mock Center' }
 ];
-
-let scheduleData = {};
 
 let SUBJECTS = [
   { code: 'ITE 101', title: 'Introduction to Computing', dept: 'IT / CS', itOnly: true, units: 3 },
@@ -66,13 +64,13 @@ let SUBJECTS = [
 let DEPARTMENTS = ['IT / CS', 'Engineering', 'Hospitality', 'Business Admin', 'General Education'];
 
 let FACULTY = [
-  { name: 'Academic Head', email: 'acah@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 18, maxLoad: 24, mainQuals: ['ITE 101','CC 103','ITE 301','ITE 202'], bg: '#25447A' },
-  { name: 'Program Head', email: 'proh@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 18, maxLoad: 24, mainQuals: ['CS 201','CS 301','CS 401','CC 104'], bg: '#2E7D5B' },
-  { name: 'Faculty Member', email: 'faculty@sti.edu', dept: 'IT / CS', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['ITE 101','IM 101','IT 312','ITE 401'], bg: '#6C3483' },
-  { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', dept: 'General Education', status: 'Full-time', load: 16, maxLoad: 24, mainQuals: ['GE 107','GE 201','PE 102','NSTP 1','GE 102','PE 104','NSTP 2'], bg: '#0D9488' },
-  { name: 'Chef Hospitality Faculty', email: 'hospitality@sti.edu', dept: 'Hospitality', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['HM 201','TM 301','HM 202','TM 302'], bg: '#D97706' },
-  { name: 'Prof. Business Faculty', email: 'business@sti.edu', dept: 'Business Admin', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['BA 101','BA 102'], bg: '#2563EB' },
-  { name: 'Engr. Faculty Member', email: 'engr@sti.edu', dept: 'Engineering', status: 'Full-time', load: 15, maxLoad: 24, mainQuals: ['CC 103','CC 104','CS 201'], bg: '#4B5563' }
+  { name: 'Academic Head', email: 'acah@sti.edu', dept: 'IT / CS', status: 'Full-time', maxLoad: 24, mainQuals: ['ITE 101','CC 103','ITE 301','ITE 202'], bg: '#25447A' },
+  { name: 'Program Head', email: 'proh@sti.edu', dept: 'IT / CS', status: 'Full-time', maxLoad: 24, mainQuals: ['CS 201','CS 301','CS 401','CC 104'], bg: '#2E7D5B' },
+  { name: 'Faculty Member', email: 'faculty@sti.edu', dept: 'IT / CS', status: 'Full-time', maxLoad: 24, mainQuals: ['ITE 101','IM 101','IT 312','ITE 401'], bg: '#6C3483' },
+  { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', dept: 'General Education', status: 'Full-time', maxLoad: 24, mainQuals: ['GE 107','GE 201','PE 102','NSTP 1','GE 102','PE 104','NSTP 2'], bg: '#0D9488' },
+  { name: 'Chef Hospitality Faculty', email: 'hospitality@sti.edu', dept: 'Hospitality', status: 'Full-time', maxLoad: 24, mainQuals: ['HM 201','TM 301','HM 202','TM 302'], bg: '#D97706' },
+  { name: 'Prof. Business Faculty', email: 'business@sti.edu', dept: 'Business Admin', status: 'Full-time', maxLoad: 24, mainQuals: ['BA 101','BA 102'], bg: '#2563EB' },
+  { name: 'Engr. Faculty Member', email: 'engr@sti.edu', dept: 'Engineering', status: 'Full-time', maxLoad: 24, mainQuals: ['CC 103','CC 104','CS 201'], bg: '#4B5563' }
 ];
 
 // A teacher may only teach subjects in their main qualifications
@@ -92,17 +90,16 @@ let USERS = [
   { name: 'Engr. Faculty Member', email: 'engr@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '35 min ago', status: 'Online', employmentType: 'Full-time' }
 ];
 
-const DAYS_ABBR = ['M','T','W','Th','F','S'];
-const TIME_SLOTS = ['7:00–8:30','8:30–10:00','10:00–11:30','11:30–1:00','1:00–2:30','2:30–4:00','4:00–5:30','5:30–7:00'];
 
 const MODULE_TITLES = {
-  schedule: { title: 'Interactive Schedule Management Dashboard', sub: '1st Semester AY 2026–2027 · 9 sections across 21 rooms' },
-  minimap:  { title: 'AI Integrated Campus Map & Utilization', sub: 'Real-time room availability across 3 floors' },
-  rooms:    { title: 'Room Information', sub: '15 lecture rooms · 4 computer labs · 2 specialized labs' },
-  faculty:  { title: 'Faculty & Resource Profiling', sub: 'Time availability, teaching loads & MAQ certifications' },
-  subjects: { title: 'Subject Catalog & Specialization', sub: 'Course codes, department specialization & teaching eligibility' },
-  ai:       { title: 'AI Space & Schedule Optimization', sub: 'Powered by Google Gemini API · Automated room utilization and timetable analytics' },
-  users:    { title: 'User Management & Security', sub: 'Role-based access control & audit trail' },
+  schedule: { title: 'Master Schedule', sub: 'Set up the term and build the weekly timetable' },
+  viewer:   { title: 'View Schedule', sub: 'Weekly timetables by section, professor or room' },
+  reports:  { title: 'Schedule Overview', sub: 'Professor loads, room use, conflicts and missing hours' },
+  rooms:    { title: 'Room Information', sub: 'Rooms, capacity and weekly schedules' },
+  faculty:  { title: 'Faculty Profiles', sub: 'Professors and the subjects they can teach' },
+  subjects: { title: 'Subject Catalog', sub: 'Courses, units and qualified professors' },
+  ai:       { title: 'AI Assistant', sub: 'Ask questions and get suggestions about rooms and schedules' },
+  users:    { title: 'User Management', sub: 'Accounts, roles and passwords' },
 };
 
 /* ═══════════════════════════════════════════════════
@@ -110,6 +107,7 @@ const MODULE_TITLES = {
    ═══════════════════════════════════════════════════ */
 
 let ACTIVE_SCHEDULE_STEP = 6; // Default to step 6 (Timetable & Master Schedule)
+let SCHEDULE_SNAPSHOTS = []; // Terms that have an earlier schedule to undo back to
 let CURRENT_TIMETABLE_VIEW = 'section'; // 'section' | 'room' | 'teacher'
 let TIMETABLE_STYLE = 'spreadsheet'; // 'spreadsheet' | 'plain-print'
 

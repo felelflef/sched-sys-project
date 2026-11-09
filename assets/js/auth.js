@@ -29,10 +29,13 @@ async function reportApiWriteFailure(res) {
     handleSessionTerminated(data.message || 'Your session has expired. Please log in again.');
     return;
   }
+  // Screens update before the server answers, so a refused change is rolled back here
+  if (typeof loadServerState === 'function') loadServerState();
+  if (typeof syncUsersFromDB === 'function') syncUsersFromDB();
   const now = Date.now();
   if (now - lastApiFailureNoticeAt < 5000) return;
   lastApiFailureNoticeAt = now;
-  alert(`The server did not save this change, so it exists only in this browser.\n\n${data.message || data.error || `HTTP ${res.status}`}`);
+  alert(`That change wasn't saved, so the latest saved data has been reloaded.\n\n${data.message || data.error || `HTTP ${res.status}`}`);
 }
 
 // Adds the CSRF token to API writes and makes rejected saves visible.
@@ -345,7 +348,6 @@ async function syncUsersFromDB() {
                 email: email,
                 dept: u.subject_role || 'IT / CS',
                 status: 'Full-time',
-                load: 18,
                 maxLoad: 24,
                 mainQuals: [],
                 bg: colors[Math.floor(Math.random() * colors.length)]
@@ -358,7 +360,7 @@ async function syncUsersFromDB() {
       }
     }
   } catch (err) {
-    console.log('Database user sync skipped (standalone or offline):', err);
+    // Offline: keep the accounts already on screen
   }
 }
 

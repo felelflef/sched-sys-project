@@ -7,7 +7,7 @@
 // Saves that create records need a reload so the browser gets the server's IDs
 const RELOAD_AFTER_ACTIONS = new Set([
   'save_school_year', 'save_term_subject', 'save_section',
-  'split_section', 'merge_sections', 'auto_generate_sections',
+  'split_section', 'merge_sections', 'auto_generate_sections', 'delete_section',
   'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications'
 ]);
 const MAX_DB_INT = 2147483647;
@@ -22,6 +22,8 @@ function mapServerClass(row, sections, subjects) {
   const subject = subjects.find(s => s.code === row.subject_code && (!termId || s.termId === termId) && (!section || s.program === section.program))
     || subjects.find(s => s.code === row.subject_code);
   const units = subject ? subject.units : 3;
+  const weeklyHours = subject ? (subject.lecHours || 0) + (subject.labHours || 0) : 0;
+  const classHours = (timeToMinutes(String(row.end_time).slice(0, 5)) - timeToMinutes(String(row.start_time).slice(0, 5))) / 60;
 
   return {
     id: `SCH-${row.schedule_id}`,
@@ -32,7 +34,8 @@ function mapServerClass(row, sections, subjects) {
     subjectCode: row.subject_code,
     subjectTitle: subject ? subject.name : row.subject_code,
     type: subject ? subject.type : 'lecture',
-    units: units >= 3 ? 1.5 : units,
+    // A class carries the share of the subject's units that its time represents
+    units: weeklyHours > 0 ? Math.round((units * classHours / weeklyHours) * 100) / 100 : (units >= 3 ? 1.5 : units),
     room: row.room_name_number,
     instructor: row.faculty_name,
     day: row.day_of_week,
@@ -57,8 +60,10 @@ function applyServerState(data) {
     startDate: t.start_date,
     endDate: t.end_date,
     status: t.status,
-    isActive: Number(t.is_active) === 1
+    isActive: Number(t.is_active) === 1,
+    scheduleVersion: Number(t.schedule_version || 0)
   }));
+  SCHEDULE_SNAPSHOTS = data.snapshots || [];
 
   CURRICULUM_SUBJECTS = data.subjects.map(s => {
     const term = SCHOOL_TERMS.find(t => t.id === Number(s.term_id));
@@ -100,7 +105,6 @@ function applyServerState(data) {
       floor: `${r.floor_level}F`,
       type: r.room_type,
       cap: Number(r.capacity),
-      util: previous ? previous.util : 70,
       name: previous ? previous.name : r.room_name_number
     };
   });
@@ -112,7 +116,8 @@ function applyServerState(data) {
       title: s.subject_title,
       dept: s.department,
       itOnly: Number(s.it_only) === 1,
-      units: Number(s.units)
+      units: Number(s.units),
+      addedOrder: Number(s.catalog_id) || undefined
     }));
   }
   applyServerFaculty(data);
@@ -121,6 +126,7 @@ function applyServerState(data) {
 
   saveStateToStorage();
   refreshAllSchedulingViews();
+  updateUndoButton();
   updateRoomDropdown();
   updateTeacherDropdown();
   renderRoomTable();
@@ -138,11 +144,17 @@ function applyServerFaculty(data) {
     const email = row.email.toLowerCase();
     let fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email);
     if (!fac) {
-      fac = { email, status: 'Full-time', load: 18, maxLoad: 24, bg: colors[index % colors.length] };
+      fac = { email, status: 'Full-time', maxLoad: 24, bg: colors[index % colors.length] };
       FACULTY.push(fac);
     }
     fac.name = `${row.first_name} ${row.last_name}`.trim();
     if (DEPARTMENTS.includes(row.subject_role) || !fac.dept) fac.dept = row.subject_role || DEPARTMENTS[0];
+    fac.status = row.employment_status || 'Full-time';
+    fac.maxLoad = Number(row.max_load) || 24;
+    fac.availableDays = (row.available_days || '').split(',').filter(Boolean);
+    fac.availableShifts = (row.available_shifts || '').split(',').filter(Boolean);
+    const account = USERS.find(u => u.email.toLowerCase() === email);
+    if (account) account.employmentType = fac.status;
     fac.mainQuals = data.qualifications
       .filter(q => q.email.toLowerCase() === email)
       .map(q => q.subject_code);
@@ -223,6 +235,31 @@ function handleApiWriteSaved(url, body) {
   if (RELOAD_AFTER_ACTIONS.has(action) || /rooms\.php/.test(url)) queueServerReload();
 }
 
+// Saves run one at a time, each carrying the version it was based on.
+// If someone else saved first the server refuses, and the latest schedule is loaded.
+let scheduleSaveChain = Promise.resolve();
+
+function saveTermSchedule(action, termId, schedules, extra = {}) {
+  if (IS_STANDALONE) return Promise.resolve({ ok: true });
+  const result = scheduleSaveChain.then(async () => {
+    const term = SCHOOL_TERMS.find(t => t.id === termId);
+    const res = await fetch('api/schedules.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, term_id: termId, schedules, expected_version: term ? term.scheduleVersion : undefined, ...extra })
+    });
+    if (res.ok) {
+      const body = await res.clone().json();
+      if (term && body.schedule_version !== undefined) term.scheduleVersion = body.schedule_version;
+    } else if (res.status === 409) {
+      await loadServerState();
+    }
+    return res;
+  });
+  scheduleSaveChain = result.catch(() => {});
+  return result;
+}
+
 // Saves the active term's timetable after a manual change
 function queueScheduleSave() {
   if (IS_STANDALONE) return;
@@ -230,15 +267,7 @@ function queueScheduleSave() {
   scheduleSaveTimer = setTimeout(async () => {
     const { activeTerm } = getActiveAcademicContext();
     try {
-      await fetch('api/schedules.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'bulk_save_schedules',
-          term_id: activeTerm.id,
-          schedules: MASTER_SCHEDULE_DATA.filter(c => !c.termId || c.termId === activeTerm.id)
-        })
-      });
+      await saveTermSchedule('bulk_save_schedules', activeTerm.id, MASTER_SCHEDULE_DATA.filter(c => !c.termId || c.termId === activeTerm.id));
     } catch (e) {
       alert('Could not reach the server, so this schedule change exists only in this browser.');
     }
@@ -257,6 +286,10 @@ function postScheduleAction(body) {
 
 function saveFacultyQualifications(fac) {
   postScheduleAction({ action: 'save_faculty_qualifications', email: fac.email, subjects: fac.mainQuals || [] });
+}
+
+function saveFacultyAvailability(fac) {
+  postScheduleAction({ action: 'save_faculty_availability', email: fac.email, status: fac.status, days: fac.availableDays || [], shifts: fac.availableShifts || [], max_load: fac.maxLoad || 24 });
 }
 
 function saveCatalogSubject(subj) {

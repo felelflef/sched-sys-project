@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="assets/css/variables.css" />
   <link rel="stylesheet" href="assets/css/layout.css" />
   <link rel="stylesheet" href="assets/css/schedule.css" />
-  <link rel="stylesheet" href="assets/css/campus_map.css" />
   <link rel="stylesheet" href="assets/css/modules.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
@@ -54,13 +53,6 @@
             </div>
           </div>
 
-          <div class="login-extras">
-            <label class="login-remember">
-              <input type="checkbox" checked /> Remember me
-            </label>
-
-          </div>
-
           <button type="submit" class="btn-login" id="btnLogin">
             <span class="spinner"></span>
             <span class="btn-text">Sign In</span>
@@ -88,17 +80,21 @@
           <div class="nav-item active" data-module="schedule">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             Master Schedule
-            <span class="nav-badge">3</span>
           </div>
 
-          <div class="nav-item" data-module="minimap">
+          <div class="nav-item" data-module="viewer">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-            Campus Map
+            View Schedule
+          </div>
+
+          <div class="nav-item" data-module="reports">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Schedule Overview
           </div>
 
           <div class="nav-item" data-module="ai">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>
-            AI Optimization
+            AI Assistant
           </div>
         </div>
 
@@ -156,6 +152,12 @@
 
     <!-- ═══════════════════════ MAIN ═══════════════════════ -->
     <div class="main">
+
+      <!-- ─── PAGE HEADING (filled in by navigation.js) ─── -->
+      <div class="page-heading">
+        <h2 id="headerTitle">Master Schedule</h2>
+        <p id="headerSubtitle">Set up the term and build the weekly timetable</p>
+      </div>
 
       <!-- ─── CONTENT ─── -->
       <div class="content">
@@ -442,7 +444,7 @@
                 <div style="border:1px solid var(--border-subtle); border-radius:8px; padding:14px; background:#FFFFFF;">
                   <div style="font-size:13px; font-weight:800; color:#1C3664; margin-bottom:10px; display:flex; justify-content:space-between;">
                     <span>Classroom Inventory & Capacity</span>
-                    <span style="font-size:11px; color:var(--text-secondary);">21 Campus Rooms</span>
+                    <span style="font-size:11px; color:var(--text-secondary);">Campus Rooms</span>
                   </div>
                   <div style="max-height:260px; overflow-y:auto;">
                     <table class="lifecycle-table" style="font-size:11.5px;">
@@ -592,7 +594,7 @@
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 </div>
                 <div>
-                  <div class="stat-value" id="statTotalSections">342</div>
+                  <div class="stat-value" id="statTotalSections">0</div>
                   <div class="stat-label">Total Sections</div>
                 </div>
               </div>
@@ -601,8 +603,8 @@
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
                 <div>
-                  <div class="stat-value" id="statAssignedSections">318</div>
-                  <div class="stat-label">Successfully Assigned</div>
+                  <div class="stat-value" id="statAssignedSections">0</div>
+                  <div class="stat-label">Fully Scheduled</div>
                 </div>
               </div>
             </div>
@@ -678,9 +680,11 @@
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                       Export All Sections (Batch PDF)
                     </a>
+                    <a href="javascript:void(0)" onclick="exportTermCsv()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none;">Export Term to Excel (CSV)</a>
                   </div>
                 </div>
 
+                <button class="btn btn-outline" id="btnUndoGenerate" onclick="undoLastGenerate()" style="display:none; font-size:12px; padding:6px 14px;">Undo Last Generate</button>
                 <button class="btn btn-outline" id="btnGenerateAi" onclick="openAiDraftModal()" style="font-size:12px; padding:6px 14px;">Generate with AI</button>
                 <button class="btn btn-primary" id="btnGenerate" onclick="openConfirmRegenerateModal()" style="font-size:12px; padding:6px 14px;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -763,154 +767,85 @@
         </div>
 
         <!-- ══════════════════════════════════════════════
-             MODULE 2: CAMPUS MINI MAP
+             MODULE 2: VIEW SCHEDULE (READ-ONLY)
              ══════════════════════════════════════════════ -->
-        <div class="module-page" id="page-minimap">
-          <div class="stats-row">
-            <div class="stat-card">
-              <div class="stat-icon green">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              </div>
-              <div>
-                <div class="stat-value" id="statAvailableRooms">11</div>
-                <div class="stat-label">Available Now</div>
-              </div>
+        <div class="module-page" id="page-viewer">
+          <div class="viewer-controls">
+            <div class="viewer-mode-buttons" role="group" aria-label="View schedule by">
+              <button class="btn btn-primary" data-viewer-mode="section" onclick="setViewerMode('section')">Section</button>
+              <button class="btn btn-outline" data-viewer-mode="teacher" onclick="setViewerMode('teacher')">Professor</button>
+              <button class="btn btn-outline" data-viewer-mode="room" onclick="setViewerMode('room')">Room</button>
             </div>
-            <div class="stat-card">
-              <div class="stat-icon red">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-              </div>
-              <div>
-                <div class="stat-value" id="statOccupiedRooms">6</div>
-                <div class="stat-label">Occupied</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon orange">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              </div>
-              <div>
-                <div class="stat-value" id="statEndingSoonRooms">2</div>
-                <div class="stat-label">Ending in ≤15 min</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon blue">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-              </div>
-              <div>
-                <div class="stat-value" id="statOverallUtil">78%</div>
-                <div class="stat-label">Overall Utilization</div>
-              </div>
+            <label for="viewerSelect" id="viewerSelectLabel">Section:</label>
+            <select id="viewerSelect" onchange="setViewerSelection(this.value)"></select>
+            <div class="viewer-export-buttons">
+              <button class="btn btn-outline" onclick="window.print()">Print</button>
+              <button class="btn btn-outline" onclick="exportViewerCsv()">Export to Excel (CSV)</button>
             </div>
           </div>
 
-          <div class="minimap-layout">
-            <div class="floor-map">
-              <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px 0 16px; flex-wrap:wrap; gap:10px;">
-                <div class="floor-tabs" style="margin-bottom:0; padding:0;">
-                  <div class="floor-tab active" data-floor="1">1st Floor</div>
-                  <div class="floor-tab" data-floor="2">2nd Floor</div>
-                  <div class="floor-tab" data-floor="3">3rd Floor</div>
-                </div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">Academic Year:</span>
-                  <select id="campusMapSyFilter" class="form-input" style="font-size:12px; font-weight:700; padding:4px 8px; border-radius:6px; min-width:140px; color:var(--accent-primary);" onchange="handleActiveYearFilter(this)">
-                    <!-- Populated dynamically via JS -->
-                  </select>
-                </div>
+          <div class="card timetable-sheet-card schedule-viewer-sheet">
+            <div class="timetable-sheet-header">
+              <div class="sheet-header-left">
+                <div class="section-badge-program" id="viewerSheetSubtitle"></div>
+                <div class="section-title-large" id="viewerSheetTitle"></div>
               </div>
-              <div class="floor-canvas" id="floorCanvas">
-                <!-- Populated by JS -->
-              </div>
-              <div style="padding: 12px 20px; border-top: 1px solid var(--border-subtle);">
-                <div class="legend-row">
-                  <div class="legend-item"><div class="legend-dot" style="background:var(--success-bg); border:1px solid var(--success);"></div> Available</div>
-                  <div class="legend-item"><div class="legend-dot" style="background:var(--danger-bg); border:1px solid #E8A9A3;"></div> Occupied</div>
-                  <div class="legend-item"><div class="legend-dot" style="background:var(--warning-bg); border:1px solid #E0C07A;"></div> Ending Soon</div>
+              <div class="sheet-header-right">
+                <div class="sheet-stat-pill">
+                  <span class="sheet-stat-label" id="viewerStatLabel1"></span>
+                  <span class="sheet-stat-value" id="viewerStatValue1"></span>
+                </div>
+                <div class="sheet-stat-pill">
+                  <span class="sheet-stat-label" id="viewerStatLabel2"></span>
+                  <span class="sheet-stat-value" id="viewerStatValue2"></span>
+                </div>
+                <div class="sheet-stat-pill adviser-pill">
+                  <span class="sheet-stat-label" id="viewerStatLabel3"></span>
+                  <span class="sheet-stat-value" id="viewerStatValue3"></span>
                 </div>
               </div>
             </div>
 
-            <div class="utilization-panel">
-              <div class="util-card">
-                <h4>Utilization by Floor</h4>
-                <div class="util-bar-row">
-                  <span class="util-bar-label">1F</span>
-                  <div class="util-bar-track"><div class="util-bar-fill" id="utilBar1F" style="width:78%; background:var(--accent-primary);"></div></div>
-                  <span class="util-bar-value" id="utilVal1F" style="color:var(--accent-primary);">78%</span>
-                </div>
-                <div class="util-bar-row">
-                  <span class="util-bar-label">2F</span>
-                  <div class="util-bar-track"><div class="util-bar-fill" id="utilBar2F" style="width:85%; background:var(--accent-primary);"></div></div>
-                  <span class="util-bar-value" id="utilVal2F" style="color:var(--accent-primary);">85%</span>
-                </div>
-                <div class="util-bar-row">
-                  <span class="util-bar-label">3F</span>
-                  <div class="util-bar-track"><div class="util-bar-fill" id="utilBar3F" style="width:72%; background:var(--success);"></div></div>
-                  <span class="util-bar-value" id="utilVal3F" style="color:var(--success);">72%</span>
-                </div>
-              </div>
+            <div class="timetable-table-container">
+              <table class="section-spreadsheet-table">
+                <thead>
+                  <tr>
+                    <th class="time-col-header">TIME</th>
+                    <th class="day-col-header">MON</th>
+                    <th class="day-col-header">TUE</th>
+                    <th class="day-col-header">WED</th>
+                    <th class="day-col-header">THU</th>
+                    <th class="day-col-header">FRI</th>
+                    <th class="day-col-header">SAT</th>
+                  </tr>
+                </thead>
+                <tbody id="viewerGridBody"></tbody>
+                <tfoot>
+                  <tr class="footer-hours-row">
+                    <th class="time-col-footer"># of Hrs</th>
+                    <td id="viewerHrs-Mon">0.0 hrs</td>
+                    <td id="viewerHrs-Tue">0.0 hrs</td>
+                    <td id="viewerHrs-Wed">0.0 hrs</td>
+                    <td id="viewerHrs-Thu">0.0 hrs</td>
+                    <td id="viewerHrs-Fri">0.0 hrs</td>
+                    <td id="viewerHrs-Sat">0.0 hrs</td>
+                  </tr>
+                  <tr class="footer-weekly-row">
+                    <td colspan="7" class="weekly-total-cell">
+                      <span>Weekly Schedule Total:</span>
+                      <strong id="viewerWeeklyTotal">0.0 hrs / week</strong>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
 
-              <div class="util-card">
-                <h4>Peak Hours Today</h4>
-                <div style="display:flex; gap:4px; align-items:flex-end; height:100px; padding-top:10px;">
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:#EEF1F7; border-radius:4px 4px 0 0; min-height:20%; max-height:30%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">7a</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:#EEF1F7; border-radius:4px 4px 0 0; min-height:60%; max-height:65%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">8a</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:var(--accent-primary); border-radius:4px 4px 0 0; min-height:95%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">9a</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:var(--accent-primary); border-radius:4px 4px 0 0; min-height:90%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">10a</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:#EEF1F7; border-radius:4px 4px 0 0; min-height:40%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">11a</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:#EEF1F7; border-radius:4px 4px 0 0; min-height:50%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">12p</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:var(--accent-primary); border-radius:4px 4px 0 0; min-height:88%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">1p</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:#EEF1F7; border-radius:4px 4px 0 0; min-height:72%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">2p</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:#EEF1F7; border-radius:4px 4px 0 0; min-height:55%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">3p</span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                    <div style="flex:1; width:100%; background:#EEF1F7; border-radius:4px 4px 0 0; min-height:35%;"></div>
-                    <span style="font-size:9px; color:var(--text-secondary);">4p</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="util-card">
-                <h4>Room Type Breakdown</h4>
-                <div style="display:flex; gap:12px; margin-top:6px;">
-                  <div style="flex:1; text-align:center; padding:12px; background:var(--bg-primary); border-radius:var(--radius-sm);">
-                    <div style="font-size:22px; font-weight:800; color:var(--accent-primary);">15</div>
-                    <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Lecture Rooms</div>
-                  </div>
-                  <div style="flex:1; text-align:center; padding:12px; background:var(--bg-primary); border-radius:var(--radius-sm);">
-                    <div style="font-size:22px; font-weight:800; color:#6C3483;">4</div>
-                    <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Computer Labs</div>
-                  </div>
-                </div>
-              </div>
+            <div class="timetable-legend-bar">
+              <span class="legend-label">Class Types:</span>
+              <div class="legend-item"><span class="legend-swatch lecture"></span> Lecture</div>
+              <div class="legend-item"><span class="legend-swatch lab"></span> Laboratory</div>
+              <div class="legend-item"><span class="legend-swatch pe"></span> PE / Special / NSTP</div>
+              <div class="legend-item"><span class="class-ai-badge" style="margin-left:0;">AI</span> Placed by AI</div>
             </div>
           </div>
         </div>
@@ -918,23 +853,27 @@
         <!-- ══════════════════════════════════════════════
              MODULE 3: ROOM & FACILITY INVENTORY
              ══════════════════════════════════════════════ -->
+        <div class="module-page" id="page-reports">
+          <div id="reportsContent"></div>
+        </div>
+
         <div class="module-page" id="page-rooms">
           <div class="stats-row">
             <div class="stat-card">
               <div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
-              <div><div class="stat-value">19</div><div class="stat-label">Total Rooms</div></div>
+              <div><div class="stat-value" id="statTotalRooms">0</div><div class="stat-label">Total Rooms</div></div>
             </div>
             <div class="stat-card">
               <div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-              <div><div class="stat-value">15</div><div class="stat-label">Lecture Rooms</div></div>
+              <div><div class="stat-value" id="statLectureRooms">0</div><div class="stat-label">Lecture Rooms</div></div>
             </div>
             <div class="stat-card">
               <div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
-              <div><div class="stat-value">4</div><div class="stat-label">Computer Labs</div></div>
+              <div><div class="stat-value" id="statComputerLabs">0</div><div class="stat-label">Computer Labs</div></div>
             </div>
             <div class="stat-card">
               <div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
-              <div><div class="stat-value">835</div><div class="stat-label">Total Capacity</div></div>
+              <div><div class="stat-value" id="statTotalCapacity">0</div><div class="stat-label">Total Capacity</div></div>
             </div>
           </div>
 
@@ -942,9 +881,20 @@
             <div class="card-header">
               <div>
                 <h3>Room Information</h3>
-                <p>Manage 15 lecture rooms and 4 computer labs across Floors 1, 2, and 3</p>
+                <p id="roomSummaryText"></p>
               </div>
-              <button class="btn btn-primary" id="btnAddRoom" onclick="openAddRoomModal()" style="font-size:12px; padding:7px 16px;">+ Add Room</button>
+              <div class="card-header-tools">
+                <div class="filter-group">
+                  <label for="roomSortSelect">Sort by:</label>
+                  <select id="roomSortSelect" onchange="clearTableSort('roomTableBody'); renderRoomTable()">
+                    <option value="az">A–Z</option>
+                    <option value="za">Z–A</option>
+                    <option value="first">First Added</option>
+                    <option value="recent">Recently Added</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" id="btnAddRoom" onclick="openAddRoomModal()" style="font-size:12px; padding:7px 16px;">+ Add Room</button>
+              </div>
             </div>
             <div class="card-body" style="padding:0;">
               <div class="data-table-wrapper">
@@ -1005,18 +955,26 @@
             <div class="card-header">
               <div>
                 <h3>Subject Catalog & Specialization</h3>
-                <p>Manage curriculum courses, credit units, and teaching department eligibility constraints</p>
+                <p>Manage curriculum courses, credit units and qualified professors</p>
               </div>
               <button class="btn btn-primary" id="btnAddSubject" onclick="openAddSubjectModal()" style="font-size:12px; padding:7px 16px;">+ Add Subject</button>
             </div>
             <div class="card-body" style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); background:#FAFCFF;">
               <div class="grid-controls" style="margin-bottom:0;">
                 <div class="filter-group">
-                  <label>Department / Eligibility:</label>
+                  <label>Department:</label>
                   <select id="subjectDeptFilter" onchange="renderSubjectTable()">
                     <option value="all">All Departments & Subjects</option>
-                    <option value="it-only">💻 IT / CS Professor Only</option>
                     <!-- Populated dynamically with DEPARTMENTS -->
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label for="subjectSortSelect">Sort by:</label>
+                  <select id="subjectSortSelect" onchange="clearTableSort('subjectTableBody'); renderSubjectTable()">
+                    <option value="az">A–Z</option>
+                    <option value="za">Z–A</option>
+                    <option value="first">First Added</option>
+                    <option value="recent">Recently Added</option>
                   </select>
                 </div>
                 <div class="filter-group">
@@ -1033,7 +991,6 @@
                       <th style="width:130px;">Course Code</th>
                       <th>Subject Title</th>
                       <th style="width:170px;">Department</th>
-                      <th style="width:230px;">Teaching Eligibility</th>
                       <th style="width:260px;">Qualified Professors</th>
                       <th style="width:80px; text-align:center;">Units</th>
                       <th style="width:140px; text-align:right;">Actions</th>
@@ -1059,15 +1016,7 @@
             </div>
             <div class="stat-card">
               <div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-              <div><div class="stat-value">3</div><div class="stat-label">Roles Defined</div></div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-              <div><div class="stat-value" id="onlineUsersCount">3</div><div class="stat-label">Online Now</div></div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-              <div><div class="stat-value">48</div><div class="stat-label">Audit Log Entries</div></div>
+              <div><div class="stat-value">4</div><div class="stat-label">Roles Defined</div></div>
             </div>
           </div>
 
@@ -1081,7 +1030,7 @@
               <div class="data-table-wrapper">
                 <table class="data-table" id="userTable">
                   <thead>
-                    <tr><th>User</th><th>Email</th><th>Role</th><th>Last Active</th><th>Employment Status</th><th>Status</th><th style="width:130px; text-align:right;">Actions</th></tr>
+                    <tr><th>User</th><th>Email</th><th>Role</th><th>Employment Status</th><th style="width:130px; text-align:right;">Actions</th></tr>
                   </thead>
                   <tbody id="userTableBody">
                     <!-- Populated dynamically by JS -->
@@ -1189,7 +1138,7 @@
         <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Employment Status</label>
-            <select id="newFacStatus" class="form-input">
+            <select id="newFacStatus" class="form-input" onchange="toggleAvailabilityPicker('newFac', this.value)">
               <option value="Full-time">Full-time</option>
               <option value="Part-time">Part-time</option>
             </select>
@@ -1199,9 +1148,10 @@
             <input type="number" id="newFacMaxLoad" class="form-input" value="24" min="6" max="30" />
           </div>
         </div>
+        <div id="newFacAvailability" class="availability-picker" style="display:none;"></div>
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label" style="font-weight:600; font-size:12.5px;">Main Qualifications (comma-separated)</label>
-          <input type="text" id="newFacMainQuals" class="form-input" placeholder="e.g. ITE 101, CC 103" />
+          <div class="form-label" style="font-weight:600; font-size:12.5px;">Main Qualifications</div>
+          <div id="newFacQualPicker" class="availability-options qual-picker"></div>
           <span style="font-size:11px; color:var(--text-secondary); margin-top:2px; display:block;">The subjects this teacher is allowed to teach</span>
         </div>
       </div>
@@ -1251,90 +1201,6 @@
       <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
         <button class="btn btn-outline" onclick="closeRoomModal()">Cancel</button>
         <button class="btn btn-primary" id="roomModalSubmitBtn" onclick="submitRoomForm()">Save Room</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ ROOM SCHEDULE MODAL (CAMPUS MAP INTERACTION) ═══ -->
-  <div class="modal-overlay" id="roomScheduleModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
-    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:640px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
-      <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
-        <div>
-          <h3 id="schedModalRoomCode" style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);">Room Schedule</h3>
-          <p id="schedModalRoomMeta" style="margin:2px 0 0; font-size:12px; color:var(--text-secondary);">Floor & Utilization</p>
-        </div>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:12px;" onclick="closeRoomScheduleModal()">✕</button>
-      </div>
-      <div style="padding:16px 24px; max-height:420px; overflow-y:auto;">
-        <table class="data-table" style="width:100%;">
-          <thead>
-            <tr>
-              <th style="width:25%;">Time Slot</th>
-              <th style="width:30%;">Subject</th>
-              <th style="width:25%;">Faculty</th>
-              <th style="width:20%;">Section</th>
-            </tr>
-          </thead>
-          <tbody id="schedModalTableBody">
-            <!-- Populated dynamically -->
-          </tbody>
-        </table>
-      </div>
-      <div style="padding:12px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; background:#F8FAFD;">
-        <button class="btn btn-outline" onclick="closeRoomScheduleModal()">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ GEMINI API KEY SETUP & CONNECTION MODAL ═══ -->
-  <div class="modal-overlay" id="geminiKeyModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
-    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:540px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
-      <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:22px;">🔑</span>
-          <div>
-            <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);">Configure Google Gemini API Key</h3>
-            <p style="margin:2px 0 0; font-size:11.5px; color:var(--text-secondary);">Connect the AI Scheduling & Optimization Assistant</p>
-          </div>
-        </div>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:12px;" onclick="closeGeminiKeyModal()">✕</button>
-      </div>
-      <div style="padding:20px 24px;">
-        <div id="geminiKeyAlert" style="display:none; padding:10px 14px; border-radius:8px; font-size:12.5px; margin-bottom:16px; line-height:1.45;"></div>
-
-        <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
-            <span>Google Gemini API Key</span>
-            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="font-size:11.5px; color:var(--accent-primary); font-weight:700; text-decoration:none;">
-              Get free key at Google AI Studio ↗
-            </a>
-          </label>
-          <div style="position:relative; display:flex; align-items:center;">
-            <input type="password" id="geminiApiKeyInput" class="form-input" placeholder="AIzaSy..." style="padding-right:40px; font-family:monospace; font-size:13px;" />
-            <button type="button" onclick="toggleGeminiKeyVisibility()" style="position:absolute; right:8px; background:none; border:none; cursor:pointer; color:var(--text-secondary); padding:4px;" title="Show or hide key">
-              👁️
-            </button>
-          </div>
-          <span style="font-size:11.5px; color:var(--text-secondary); margin-top:5px; display:block;">
-            Your key is saved locally in your browser and used strictly for STI classroom timetable operations.
-          </span>
-        </div>
-
-        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px 14px; font-size:12px; color:var(--text-secondary); line-height:1.5;">
-          <strong style="color:var(--text-primary); display:block; margin-bottom:4px;">⚡ How to Verify Connection:</strong>
-          1. Paste your key above from <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent-primary); font-weight:600;">Google AI Studio</a>.<br/>
-          2. Click <strong>Test Connection</strong> to ping Google Gemini live.<br/>
-          3. Click <strong>Save & Connect</strong>. Your AI Assistant is immediately ready to run space audits and answer schedule queries!
-        </div>
-      </div>
-      <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
-        <button class="btn btn-outline" id="btnTestGeminiKey" onclick="handleTestGeminiKey()" style="font-size:12px; padding:6px 14px; display:inline-flex; align-items:center; gap:6px;">
-          <span>⚡ Test Connection</span>
-        </button>
-        <div style="display:flex; gap:8px;">
-          <button class="btn btn-outline" onclick="closeGeminiKeyModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="handleSaveGeminiKey()">Save & Connect</button>
-        </div>
       </div>
     </div>
   </div>
@@ -1512,11 +1378,12 @@
         </div>
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label" style="font-weight:600; font-size:13px; margin-bottom:6px; display:block;">Employment Status</label>
-          <select id="changeFacultyStatusSelect" class="form-input" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--border-subtle); font-size:13px;">
+          <select id="changeFacultyStatusSelect" class="form-input" onchange="toggleAvailabilityPicker('changeFaculty', this.value)" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--border-subtle); font-size:13px;">
             <option value="Full-time">Full-time</option>
             <option value="Part-time">Part-time</option>
           </select>
         </div>
+        <div id="changeFacultyAvailability" class="availability-picker" style="display:none;"></div>
         <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:600; font-size:13px; margin-bottom:6px; display:block;">Academic Department</label>
           <select id="changeFacultyDeptSelect" class="form-input" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--border-subtle); font-size:13px;">
@@ -1647,28 +1514,6 @@
     </div>
   </div>
 
-  <!-- ═══ MASTER SCHEDULE CONTEXT MENU (RIGHT-CLICK) ═══ -->
-  <div id="scheduleContextMenu" style="display:none; position:fixed; z-index:2500; background:#fff; border-radius:10px; border:1px solid var(--border-subtle); box-shadow:0 12px 32px rgba(15,23,42,0.18); min-width:220px; overflow:hidden; font-size:13px;">
-    <div id="ctxMenuHeader" style="padding:10px 14px; background:#F8FAFD; border-bottom:1px solid var(--border-subtle);">
-      <div id="ctxMenuRoomSlot" style="font-weight:700; color:var(--text-primary); font-size:12px;"></div>
-      <div id="ctxMenuDetails" style="font-size:11px; color:var(--text-secondary); margin-top:2px;"></div>
-    </div>
-    <div style="padding:6px 0;">
-      <div id="ctxBtnAdd" onclick="triggerCtxAdd()" style="display:none; padding:9px 14px; cursor:pointer; color:var(--accent-primary); font-weight:600; align-items:center; gap:8px;" onmouseover="this.style.background='#EEF2FF'" onmouseout="this.style.background='transparent'">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span>+ Add Professor to Slot</span>
-      </div>
-      <div id="ctxBtnEdit" onclick="triggerCtxEdit()" style="display:none; padding:9px 14px; cursor:pointer; color:var(--accent-primary); font-weight:600; align-items:center; gap:8px;" onmouseover="this.style.background='#EEF2FF'" onmouseout="this.style.background='transparent'">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        <span>Change Professor</span>
-      </div>
-      <div id="ctxBtnRemove" onclick="triggerCtxRemove()" style="display:none; padding:9px 14px; cursor:pointer; color:var(--danger); font-weight:600; align-items:center; gap:8px;" onmouseover="this.style.background='#FFF1F2'" onmouseout="this.style.background='transparent'">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        <span>Remove Professor (Clear Slot)</span>
-      </div>
-    </div>
-  </div>
-
   <!-- ═══ SLOT ASSIGNMENT / CHANGE PROFESSOR MODAL ═══ -->
   <div class="modal-overlay" id="slotModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:450px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
@@ -1679,17 +1524,22 @@
       <div style="padding:20px 24px;">
         <div id="slotModalError" style="display:none; color:var(--danger); font-size:12px; margin-bottom:14px; padding:9px 14px; background:#FFF5F5; border-radius:6px; border:1px solid #FADBD8;"></div>
         
-        <input type="hidden" id="slotTargetRoom" value="" />
-        <input type="hidden" id="slotTargetIdx" value="" />
-
         <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Classroom</label>
-            <input type="text" id="slotRoomDisplay" class="form-input" disabled style="background:#F1F5F9; font-weight:700;" />
+            <label class="form-label" for="slotRoomSelect">Classroom</label>
+            <select id="slotRoomSelect" class="form-input"></select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Time Frame</label>
-            <input type="text" id="slotTimeDisplay" class="form-input" disabled style="background:#F1F5F9; font-weight:700;" />
+            <label class="form-label" for="slotDaySelect">Day</label>
+            <select id="slotDaySelect" class="form-input"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" for="slotStartSelect">Start Time</label>
+            <select id="slotStartSelect" class="form-input"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" for="slotEndSelect">End Time</label>
+            <select id="slotEndSelect" class="form-input"></select>
           </div>
         </div>
 
@@ -2166,11 +2016,13 @@
   </div>
 
   <!-- Scripts -->
+  <script src="assets/js/ui_helpers.js"></script>
   <script src="assets/js/state.js"></script>
   <script src="assets/js/auth.js"></script>
   <script src="assets/js/navigation.js"></script>
   <script src="assets/js/schedule.js"></script>
-  <script src="assets/js/campus_map.js"></script>
+  <script src="assets/js/schedule_viewer.js"></script>
+  <script src="assets/js/schedule_reports.js"></script>
   <script src="assets/js/rooms.js"></script>
   <script src="assets/js/faculty.js"></script>
   <script src="assets/js/subjects.js"></script>

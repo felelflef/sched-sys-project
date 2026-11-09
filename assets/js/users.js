@@ -44,9 +44,7 @@ function renderUserTable() {
       <td style="font-weight:600;">${escapeHtml(u.name)}</td>
       <td>${escapeHtml(u.email)}</td>
       <td><span class="role-badge ${roleBadgeClass}">${escapeHtml(u.roleLabel)}</span></td>
-      <td style="color:var(--text-secondary);">${escapeHtml(u.lastActive)}</td>
       <td><span class="badge" style="${empBadgeStyle} font-size:10.5px; font-weight:700;">${escapeHtml(empStatus)}</span></td>
-      <td><span class="badge ${u.status === 'Online' ? 'badge-success' : ''}" style="${u.status === 'Offline' ? 'background:#F2F2F2; color:var(--text-secondary);' : ''}">● ${u.status}</span></td>
       <td style="text-align:right;">
         ${actionCellHtml}
       </td>
@@ -56,8 +54,6 @@ function renderUserTable() {
 
   const activeCount = document.getElementById('activeUsersCount');
   if (activeCount) activeCount.textContent = USERS.length;
-  const onlineCount = document.getElementById('onlineUsersCount');
-  if (onlineCount) onlineCount.textContent = USERS.filter(u => u.status === 'Online').length;
 }
 
 function showAddUserError(msg) {
@@ -221,11 +217,11 @@ window.submitAddUser = async function() {
         email,
         dept: dept || 'IT / CS',
         status: status,
-        load: status === 'Part-time' ? 12 : 18,
         maxLoad: status === 'Part-time' ? 15 : 24,
         mainQuals: [],
         bg: colors[Math.floor(Math.random() * colors.length)]
       });
+      saveFacultyAvailability(FACULTY[FACULTY.length - 1]);
       renderFacultyCards();
     }
   }
@@ -319,6 +315,10 @@ window.submitEditUser = function() {
   if (fac) {
     fac.name = newName;
     fac.status = newStatus;
+    if (newStatus === 'Full-time') {
+      fac.availableDays = [];
+      fac.availableShifts = [];
+    }
     if (newDept) fac.dept = newDept;
     if (newStatus === 'Part-time' && fac.maxLoad > 18) {
       fac.maxLoad = 15;
@@ -356,6 +356,7 @@ window.submitEditUser = function() {
       subject_role: newDept
     })
   }).catch(() => {});
+  if (fac) saveFacultyAvailability(fac);
 
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   closeEditUserModal();
@@ -496,17 +497,7 @@ window.confirmDeleteUser = function() {
       email: email
     })
   })
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      console.log('[MySQL DB] User account deleted successfully:', email);
-    } else {
-      console.warn('[MySQL DB] User delete notice:', data.message);
-    }
-  })
-  .catch(err => {
-    console.log('[Database deletion offline/standalone mode]:', err);
-  });
+  .catch(() => {});
 
   USERS = USERS.filter(u => u.email.toLowerCase() !== email.toLowerCase());
   delete VALID_USERS[email.toLowerCase()];
@@ -514,15 +505,6 @@ window.confirmDeleteUser = function() {
   // Remove corresponding faculty profile and clear any assigned schedule slots
   if (userName) {
     FACULTY = FACULTY.filter(f => f.email.toLowerCase() !== email.toLowerCase() && f.name !== userName);
-    if (typeof scheduleData !== 'undefined' && scheduleData) {
-      Object.keys(scheduleData).forEach(roomCode => {
-        Object.keys(scheduleData[roomCode]).forEach(slotIdx => {
-          if (scheduleData[roomCode][slotIdx]?.faculty === userName) {
-            delete scheduleData[roomCode][slotIdx];
-          }
-        });
-      });
-    }
     if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
       MASTER_SCHEDULE_DATA.forEach(c => {
         if (c.instructor === userName) c.instructor = 'TBA';

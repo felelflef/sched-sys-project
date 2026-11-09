@@ -6,7 +6,7 @@ function renderSubjectDeptFilterOptions() {
   const select = document.getElementById('subjectDeptFilter');
   if (!select) return;
   const currentVal = select.value;
-  select.innerHTML = '<option value="all">All Departments & Subjects</option><option value="it-only">💻 IT / CS Professor Only</option>';
+  select.innerHTML = '<option value="all">All Departments & Subjects</option>';
   DEPARTMENTS.forEach(dept => {
     const opt = document.createElement('option');
     opt.value = dept;
@@ -45,9 +45,7 @@ function renderSubjectTable() {
   const filtered = SUBJECTS.filter(s => {
     // Department / eligibility filter
     let matchDept = true;
-    if (filterVal === 'it-only') {
-      matchDept = s.itOnly === true;
-    } else if (filterVal !== 'all') {
+    if (filterVal !== 'all') {
       matchDept = s.dept === filterVal;
     }
 
@@ -63,7 +61,7 @@ function renderSubjectTable() {
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" style="text-align:center; padding:32px 16px; color:var(--text-secondary);">
+        <td colspan="6" style="text-align:center; padding:32px 16px; color:var(--text-secondary);">
           No subjects found matching the selected criteria.
         </td>
       </tr>
@@ -71,12 +69,9 @@ function renderSubjectTable() {
     return;
   }
 
-  filtered.forEach(subj => {
+  const sortChoice = document.getElementById('subjectSortSelect')?.value || 'az';
+  sortByChoice(filtered, sortChoice, s => s.addedOrder, s => s.code).forEach(subj => {
     const tr = document.createElement('tr');
-
-    const eligBadge = subj.itOnly
-      ? `<span class="badge" style="background:#EEF2FF; color:var(--accent-primary); border:1px solid #C7D2FE; font-weight:600;">💻 IT / CS Professor Only</span>`
-      : `<span class="badge" style="background:#F1F5F9; color:var(--text-secondary); border:1px solid #CBD5E1;">🌐 Other Department (${escapeHtml(subj.dept)})</span>`;
 
     const actionButtons = isAdmin
       ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditSubjectModal(${jsArg(subj.code)})">Edit</button>
@@ -89,7 +84,6 @@ function renderSubjectTable() {
         <div style="font-weight:600; color:var(--text-primary); font-size:13px;">${escapeHtml(subj.title)}</div>
       </td>
       <td><span class="badge" style="background:#F8FAFC; border:1px solid var(--border-subtle); color:var(--text-primary);">${escapeHtml(subj.dept)}</span></td>
-      <td>${eligBadge}</td>
       <td>${qualifiedProfessorsHtml(subj)}</td>
       <td style="text-align:center; font-weight:600;">${subj.units || 3}</td>
       <td style="text-align:right;">${actionButtons}</td>
@@ -152,13 +146,21 @@ window.removeSubjectFormProfessor = function(button) {
 };
 
 // Runs after the subject is saved, because the server only accepts subjects it already knows
+// A professor can't be taken off a subject they still teach this term
+function subjectFormRemovalProblem(form, code) {
+  const target = code.toUpperCase();
+  const selected = subjectFormProfessors[form];
+  const teaching = FACULTY.find(fac => !selected.includes(fac.email) && isFacultyQualified(fac, target)
+    && activeTermClasses().some(c => c.instructor === fac.name && (c.subjectCode || '').toUpperCase() === target));
+  return teaching ? `${teaching.name} still teaches ${target} this term. Reassign those classes before removing them.` : null;
+}
+
 function saveSubjectFormProfessors(form, code, subjectSaved) {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') return;
 
   const target = code.toUpperCase();
   const selected = subjectFormProfessors[form];
   const changed = [];
-  let affectedClasses = 0;
 
   FACULTY.forEach(fac => {
     const wanted = selected.includes(fac.email);
@@ -167,7 +169,6 @@ function saveSubjectFormProfessors(form, code, subjectSaved) {
       fac.mainQuals = [...(fac.mainQuals || []), target];
     } else {
       fac.mainQuals = fac.mainQuals.filter(q => q.trim().toUpperCase() !== target);
-      affectedClasses += MASTER_SCHEDULE_DATA.filter(c => c.instructor === fac.name && (c.subjectCode || '').toUpperCase() === target).length;
     }
     changed.push(fac);
   });
@@ -176,9 +177,6 @@ function saveSubjectFormProfessors(form, code, subjectSaved) {
   saveStateToStorage();
   renderSubjectTable();
   renderFacultyCards();
-  if (affectedClasses > 0) {
-    alert(`${affectedClasses} scheduled ${target} class(es) now have a professor who isn't qualified. They are marked as conflicts until reassigned, and schedule saves will be refused until then.`);
-  }
 
   Promise.resolve(subjectSaved).then(response => {
     if (response && !response.ok) return;
@@ -266,6 +264,12 @@ window.submitSubjectForm = function() {
   }
   if (!title) {
     alert('Please enter a subject title.');
+    return;
+  }
+
+  const subjectQualProblem = origCode ? subjectFormRemovalProblem('subject', origCode) : null;
+  if (subjectQualProblem) {
+    alert(subjectQualProblem);
     return;
   }
 

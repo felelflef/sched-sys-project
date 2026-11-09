@@ -105,20 +105,58 @@ function getActiveAcademicContext() {
   return { activeSy, activeTerm };
 }
 
+// Returns the first setup step that isn't finished, or null when Step 5 may open
+function firstIncompleteStep() {
+  const activeSy = SCHOOL_YEARS.find(y => y.isActive);
+  if (!activeSy) return { step: 1, reason: 'Set an active school year.' };
+  if (!SCHOOL_TERMS.some(t => t.yearId === activeSy.id)) return { step: 2, reason: `Add a school term for ${activeSy.yearCode}.` };
+
+  const { activeTerm } = getActiveAcademicContext();
+  if (!CURRICULUM_SUBJECTS.some(s => s.termId === activeTerm.id && s.isIncluded)) {
+    return { step: 3, reason: `Load and include subjects for ${activeTerm.termName} (${activeSy.yearCode}).` };
+  }
+
+  const readiness = evaluateResourceReadiness();
+  if (readiness.hasCritical) return { step: 4, reason: readiness.criticalReasons.join('\n• ') };
+  return null;
+}
+
+function updateStepLocks() {
+  const incomplete = firstIncompleteStep();
+  const hasCritical = evaluateResourceReadiness().hasCritical;
+  [5, 6].forEach(step => {
+    const btn = document.getElementById(`stepBtn-${step}`);
+    if (!btn) return;
+    const locked = step === 5 ? !!incomplete : hasCritical;
+    btn.classList.toggle('locked', locked);
+    if (locked) {
+      btn.title = step === 5 ? `Locked: finish Step ${incomplete.step} first` : 'Locked: Resolve critical professor and room shortages in Step 4 to unlock';
+    } else {
+      btn.removeAttribute('title');
+    }
+  });
+}
+
 function goToScheduleStep(stepNumber) {
   stepNumber = parseInt(stepNumber, 10);
   if (isNaN(stepNumber) || stepNumber < 1 || stepNumber > 6) stepNumber = 6;
+  applyScheduleRole();
+  if (!canEditSchedule()) stepNumber = 6;
 
-  // Gatekeeper: Strictly block navigation to Step 5 (Create Sections) if Step 4 has critical resource shortages.
+  // Gatekeeper: Step 5 (Create Sections) opens only once Steps 1 to 4 are finished.
   // Note: Only block when user explicitly attempts to proceed during the workflow; NEVER block or alert during initial page startup.
+  if (isScheduleInitialized && stepNumber === 5) {
+    const incomplete = firstIncompleteStep();
+    if (incomplete) {
+      alert(`\u26A0 Cannot open Step 5 (Create Sections) yet.\n\nFinish Step ${incomplete.step} first:\n\u2022 ${incomplete.reason}`);
+      goToScheduleStep(incomplete.step);
+      return;
+    }
+  }
   if (isScheduleInitialized && typeof evaluateResourceReadiness === 'function') {
     const readiness = evaluateResourceReadiness();
     if (readiness.hasCritical) {
-      if (stepNumber === 5) {
-        alert(`\u26A0 Cannot proceed to Step 5 (Create Sections):\n\nCritical Resource Deficit Detected in Step 4:\n\u2022 ` + readiness.criticalReasons.join('\n\u2022 ') + '\n\nPlease resolve professor shortages or course qualification requirements in Step 4 before creating sections.');
-        goToScheduleStep(4);
-        return;
-      } else if (stepNumber === 6 && (typeof ACADEMIC_SECTIONS === 'undefined' || ACADEMIC_SECTIONS.filter(s => s.termId === (getActiveAcademicContext().activeTerm.id)).length === 0)) {
+      if (stepNumber === 6 && (typeof ACADEMIC_SECTIONS === 'undefined' || ACADEMIC_SECTIONS.filter(s => s.termId === (getActiveAcademicContext().activeTerm.id)).length === 0)) {
         alert(`\u26A0 Cannot proceed to Step 6 (Master Schedule & Timetable):\n\nNo sections have been created and critical resource deficits were detected in Step 4.\n\nPlease resolve shortages in Step 4 and create sections in Step 5 first.`);
         goToScheduleStep(4);
         return;
@@ -127,7 +165,9 @@ function goToScheduleStep(stepNumber) {
   }
   ACTIVE_SCHEDULE_STEP = stepNumber;
 
-  const currentReadiness = typeof evaluateResourceReadiness === 'function' ? evaluateResourceReadiness() : { hasCritical: false };
+  // A step only shows as done when it really is finished
+  const incompleteStep = firstIncompleteStep();
+  const isStepDone = i => i < stepNumber && !(incompleteStep && incompleteStep.step <= i);
 
   // Update Stepper Bar Indicators
   for (let i = 1; i <= 6; i++) {
@@ -135,23 +175,18 @@ function goToScheduleStep(stepNumber) {
     const num = document.getElementById(`stepNum-${i}`);
     if (btn) {
       btn.classList.toggle('active', i === stepNumber);
-      btn.classList.toggle('completed', i < stepNumber);
-      if (i >= 5 && currentReadiness.hasCritical) {
-        btn.classList.add('locked');
-        btn.title = 'Locked: Resolve critical professor and room shortages in Step 4 to unlock';
-      } else {
-        btn.classList.remove('locked');
-        btn.removeAttribute('title');
-      }
+      btn.classList.toggle('completed', isStepDone(i));
     }
     if (num) {
-      if (i < stepNumber) {
+      if (isStepDone(i)) {
         num.innerHTML = '&check;';
       } else {
         num.textContent = String(i);
       }
     }
   }
+
+  updateStepLocks();
 
   // Update Active Panel
   for (let i = 1; i <= 6; i++) {
@@ -259,13 +294,8 @@ function refreshAllSchedulingViews() {
   updateScheduleStats();
   syncAllSyFilters();
 
-  if (typeof renderFloorMap === 'function') {
-    const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
-    renderFloorMap(activeFloor + 'F');
-  }
-  if (typeof updateCampusMapStats === 'function') {
-    updateCampusMapStats();
-  }
+  if (typeof renderScheduleViewer === 'function') renderScheduleViewer();
+  if (typeof renderScheduleReports === 'function') renderScheduleReports();
 }
 
 function syncAllSyFilters() {
@@ -273,8 +303,7 @@ function syncAllSyFilters() {
   const activeSy = SCHOOL_YEARS.find(y => y.isActive) || SCHOOL_YEARS[0];
 
   const selects = [
-    document.getElementById('masterScheduleSyFilter'),
-    document.getElementById('campusMapSyFilter')
+    document.getElementById('masterScheduleSyFilter')
   ];
 
   selects.forEach(sel => {
@@ -392,40 +421,6 @@ function setActiveSchoolYear(id) {
     SCHOOL_TERMS.forEach(t => {
       t.isActive = (t.yearId === id && t.id === term1.id);
     });
-  }
-
-  // Ensure sections exist for this academic year if not already present
-  const { activeSy, activeTerm } = getActiveAcademicContext();
-  if (typeof ACADEMIC_SECTIONS !== 'undefined') {
-    const existingSections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id);
-    if (existingSections.length === 0 && activeTerm.id === 4) {
-      const default2728 = [
-        { id: 10, termId: 4, code: 'IT701M',  name: 'BSIT 1A',  program: 'BSIT',  year: 1, studentCount: 38, shift: 'AM', adviser: 'Prof. Academic Head' },
-        { id: 11, termId: 4, code: 'IT702M',  name: 'BSIT 1B',  program: 'BSIT',  year: 1, studentCount: 36, shift: 'AM', adviser: 'Prof. Faculty Member' },
-        { id: 12, termId: 4, code: 'IT801M',  name: 'BSIT 2A',  program: 'BSIT',  year: 2, studentCount: 35, shift: 'AM', adviser: 'Prof. Program Head' },
-        { id: 13, termId: 4, code: 'IT802M',  name: 'BSIT 2B',  program: 'BSIT',  year: 2, studentCount: 34, shift: 'AM', adviser: 'Prof. Faculty Member' },
-        { id: 14, termId: 4, code: 'CS701M',  name: 'BSCS 1A',  program: 'BSCS',  year: 1, studentCount: 32, shift: 'AM', adviser: 'Prof. Program Head' },
-        { id: 15, termId: 4, code: 'CPE701M', name: 'BSCpE 1A', program: 'BSCpE', year: 1, studentCount: 30, shift: 'AM', adviser: 'Engr. Faculty Member' },
-        { id: 16, termId: 4, code: 'HM701M',  name: 'BSHM 1A',  program: 'BSHM',  year: 1, studentCount: 40, shift: 'AM', adviser: 'Chef Faculty Member' },
-        { id: 17, termId: 4, code: 'TM701M',  name: 'BSTM 1A',  program: 'BSTM',  year: 1, studentCount: 34, shift: 'AM', adviser: 'Prof. Academic Head' },
-        { id: 18, termId: 4, code: 'BA701M',  name: 'BSBA 1A',  program: 'BSBA',  year: 1, studentCount: 35, shift: 'AM', adviser: 'Prof. Academic Head' }
-      ];
-      default2728.forEach(sec => {
-        if (!ACADEMIC_SECTIONS.some(s => s.code === sec.code && s.termId === sec.termId)) {
-          ACADEMIC_SECTIONS.push(sec);
-        }
-      });
-    }
-  }
-
-  // Ensure baseline schedules are generated for the active term if none exist
-  if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
-    const existingScheds = MASTER_SCHEDULE_DATA.filter(c => c.termId === activeTerm.id);
-    if (existingScheds.length === 0) {
-      const newScheds = generateSmartBaselineSchedules();
-      MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(newScheds);
-      queueScheduleSave();
-    }
   }
 
   saveStateToStorage();
@@ -659,17 +654,7 @@ function renderSubjectOfferingTable() {
 
   if (termFilter !== 'all') {
     const termNum = parseInt(termFilter, 10);
-    const selectedTermObj = SCHOOL_TERMS.find(t => t.id === termNum);
-    const targetTermName = selectedTermObj ? selectedTermObj.termName : null;
-
-    list = list.filter(s => {
-      if (s.termId === termNum) return true;
-      if (targetTermName && s.termName === targetTermName) return true;
-      if (targetTermName === '1st Sem' && (s.termId === 1 || s.termName === '1st Sem')) return true;
-      if (targetTermName === '2nd Sem' && (s.termId === 2 || s.termName === '2nd Sem')) return true;
-      if (targetTermName === 'Summer' && (s.termId === 3 || s.termName === 'Summer')) return true;
-      return false;
-    });
+    list = list.filter(s => s.termId === termNum);
   }
   if (progFilter !== 'all') {
     list = list.filter(s => s.program === progFilter);
@@ -684,7 +669,7 @@ function renderSubjectOfferingTable() {
   const countLabel = document.getElementById('subjectOfferingCountLabel');
   const includedCount = list.filter(s => s.isIncluded).length;
   if (countLabel) {
-    countLabel.textContent = `Showing ${list.length} subjects (${includedCount} included, ${list.length - includedCount} excluded)`;
+    countLabel.textContent = `Showing ${list.length} subject${list.length === 1 ? '' : 's'} (${includedCount} included, ${list.length - includedCount} excluded)`;
   }
 
   if (list.length === 0) {
@@ -808,6 +793,12 @@ function submitAddSubjectModal() {
     return;
   }
 
+  const curricQualProblem = subjectFormRemovalProblem('curricSubj', code);
+  if (curricQualProblem) {
+    alert(curricQualProblem);
+    return;
+  }
+
   const curricProblem = INPUT_RULES.code('Subject code', code) || INPUT_RULES.text('Subject name', name)
     || INPUT_RULES.int('Units', document.getElementById('curricSubjUnits').value, 1, 6)
     || INPUT_RULES.hours('Lecture hours', document.getElementById('curricSubjLecHrs').value)
@@ -907,28 +898,21 @@ function evaluateResourceReadiness() {
   const tourismRooms = (typeof ROOMS !== 'undefined' ? ROOMS : []).filter(r => (r.code && r.code.toLowerCase().includes('tourism')) || (r.name && r.name.toLowerCase().includes('tourism')));
 
   const { activeSy, activeTerm } = getActiveAcademicContext();
-  const targetTermName = activeTerm ? activeTerm.termName : null;
-  const targetTermId = activeTerm ? activeTerm.id : null;
 
-  const includedSubjects = (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).filter(s => {
-    if (!s.isIncluded) return false;
-    if (targetTermId && s.termId === targetTermId) return true;
-    if (targetTermName && (s.termName === targetTermName || (targetTermName === '1st Sem' && (s.termId === 1 || s.termName === '1st Sem')) || (targetTermName === '2nd Sem' && (s.termId === 2 || s.termName === '2nd Sem')) || (targetTermName === 'Summer' && (s.termId === 3 || s.termName === 'Summer')))) return true;
-    return false;
-  });
+  const includedSubjects = CURRICULUM_SUBJECTS.filter(s => s.isIncluded && s.termId === activeTerm.id);
   const compLabSubjects = includedSubjects.filter(s => s.type === 'lab' || (s.labHours && s.labHours > 0));
   const culinarySubjects = includedSubjects.filter(s => s.program === 'BSHM' && (s.type === 'special' || (s.code && s.code.includes('HM'))));
   const tourismSubjects = includedSubjects.filter(s => s.program === 'BSTM' && (s.type === 'special' || (s.code && s.code.includes('TM'))));
 
   const totalMaxLoad = (typeof FACULTY !== 'undefined' ? FACULTY : []).reduce((sum, f) => sum + (f.maxLoad || 24), 0);
-  const totalRequiredUnits = includedSubjects.reduce((sum, s) => sum + (s.units || 3), 0);
+  const totalRequiredHours = includedSubjects.reduce((sum, s) => sum + subjectWeeklyMinutes(s) / 60, 0);
 
   function checkSubjectHasQualifiedFaculty(subj) {
     return (typeof FACULTY !== 'undefined' ? FACULTY : []).some(f => isFacultyQualified(f, subj.code));
   }
 
   const unqualifiedSubjects = includedSubjects.filter(s => !checkSubjectHasQualifiedFaculty(s));
-  const overloadedTeachers = (typeof FACULTY !== 'undefined' ? FACULTY : []).filter(f => (f.load || 0) > (f.maxLoad || 24));
+  const overloadedTeachers = (typeof FACULTY !== 'undefined' ? FACULTY : []).filter(f => facultyWeeklyHours(f.name) > (f.maxLoad || 24));
 
   const checks = [];
   const criticalReasons = [];
@@ -1000,13 +984,13 @@ function evaluateResourceReadiness() {
       desc: `No faculty member has these ${uniqueUnqualifiedCodes.length} subject(s) in their main qualifications: ${uniqueUnqualifiedCodes.join(', ')}.`
     });
     criticalReasons.push(`Insufficient professors: ${uniqueUnqualifiedCodes.length} course(s) lack qualified faculty (${uniqueUnqualifiedCodes.join(', ')}).`);
-  } else if (totalMaxLoad < totalRequiredUnits) {
+  } else if (totalMaxLoad < totalRequiredHours) {
     checks.push({
       status: 'critical',
       title: 'Insufficient Total Teaching Capacity',
-      desc: `Total faculty load limit is ${totalMaxLoad} units, but included curriculum courses require ${totalRequiredUnits} units. Please assign more professors.`
+      desc: `Total faculty load limit is ${totalMaxLoad} hours, but included curriculum courses require ${totalRequiredHours} hours. Please assign more professors.`
     });
-    criticalReasons.push(`Insufficient faculty capacity: ${totalRequiredUnits} units needed vs ${totalMaxLoad} units total max faculty capacity.`);
+    criticalReasons.push(`Insufficient faculty capacity: ${totalRequiredHours} hours needed vs ${totalMaxLoad} hours total max faculty capacity.`);
   } else if (overloadedTeachers.length > 0) {
     checks.push({
       status: 'warning',
@@ -1055,7 +1039,7 @@ function evaluateResourceReadiness() {
     lecRoomsCount: lecRooms.length,
     labRoomsCount: labRooms.length + specialRooms.length,
     totalMaxLoad,
-    totalRequiredUnits
+    totalRequiredHours
   };
 }
 
@@ -1074,9 +1058,9 @@ function renderResourceValidation() {
   const elLab = document.getElementById('valLabRoomsCount');
   if (elLab) elLab.textContent = `${readiness.labRoomsCount} Labs`;
 
-  const totalCurrentLoad = (typeof FACULTY !== 'undefined' ? FACULTY : []).reduce((sum, f) => sum + (f.load || 18), 0);
+  const totalCurrentLoad = (typeof FACULTY !== 'undefined' ? FACULTY : []).reduce((sum, f) => sum + facultyWeeklyHours(f.name), 0);
   const elFac = document.getElementById('valFacultyCapacity');
-  if (elFac) elFac.textContent = `${readiness.totalMaxLoad} Units Max (${totalCurrentLoad} Assigned)`;
+  if (elFac) elFac.textContent = `${readiness.totalMaxLoad} Hours Max (${totalCurrentLoad.toFixed(1)} Assigned)`;
 
   // Populate Room Table
   if (roomTbody && typeof ROOMS !== 'undefined') {
@@ -1093,13 +1077,14 @@ function renderResourceValidation() {
   // Populate Faculty Table
   if (facTbody && typeof FACULTY !== 'undefined') {
     facTbody.innerHTML = FACULTY.map(f => {
-      const isOverloaded = (f.load || 0) > (f.maxLoad || 24);
+      const weeklyHours = facultyWeeklyHours(f.name);
+      const isOverloaded = weeklyHours > (f.maxLoad || 24);
       return `
         <tr>
           <td style="font-weight:700; color:var(--text-primary);">${escapeHtml(f.name)}</td>
           <td><span class="badge" style="font-size:10.5px;">${escapeHtml(f.dept || 'IT / CS')}</span></td>
-          <td style="${isOverloaded ? 'color:#DC2626; font-weight:800;' : ''}">${f.load || 18} units</td>
-          <td>${f.maxLoad || 24} max</td>
+          <td style="${isOverloaded ? 'color:#DC2626; font-weight:800;' : ''}">${weeklyHours.toFixed(1)} hrs</td>
+          <td>${f.maxLoad || 24} hrs max</td>
         </tr>
       `;
     }).join('');
@@ -1150,18 +1135,7 @@ function renderResourceValidation() {
   }
 
   // Also update stepper locked indicators
-  for (let i = 5; i <= 6; i++) {
-    const btn = document.getElementById(`stepBtn-${i}`);
-    if (btn) {
-      if (readiness.hasCritical) {
-        btn.classList.add('locked');
-        btn.title = 'Locked: Resolve critical professor and room shortages in Step 4 to unlock';
-      } else {
-        btn.classList.remove('locked');
-        btn.removeAttribute('title');
-      }
-    }
-  }
+  updateStepLocks();
 }
 
 /* ==========================================================================
@@ -1182,7 +1156,7 @@ function renderSectionsTable() {
 
   tbody.innerHTML = termSections.map(sec => {
     // Count attached included curriculum subjects
-    const attachedCount = CURRICULUM_SUBJECTS.filter(s => s.isIncluded && s.program === sec.program && s.year === sec.year && (s.termId === activeTerm.id || s.termName === activeTerm.termName || !s.termId)).length;
+    const attachedCount = CURRICULUM_SUBJECTS.filter(s => s.isIncluded && s.program === sec.program && s.year === sec.year && s.termId === activeTerm.id).length;
 
     return `
       <tr>
@@ -1192,7 +1166,7 @@ function renderSectionsTable() {
         <td>Year ${sec.year}</td>
         <td><span class="badge" style="${sec.shift === 'PM' ? 'background:#FEF3C7; color:#92400E;' : (sec.shift === 'MIDSHIFT' ? 'background:#EDE9FE; color:#5B21B6;' : 'background:#E0F2FE; color:#0369A1;')} font-size:11px; font-weight:700;">${escapeHtml(sec.shift || 'AM')}</span></td>
         <td><strong>${sec.studentCount}</strong> students</td>
-        <td><span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-size:11px;">${attachedCount} subjects</span></td>
+        <td><span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-size:11px;">${attachedCount} subject${attachedCount === 1 ? '' : 's'}</span></td>
         <td style="color:var(--text-secondary); font-size:12px;">${escapeHtml(sec.adviser || '—')}</td>
         <td style="text-align:right;">
           <div style="display:inline-flex; gap:6px;">
@@ -1221,7 +1195,6 @@ function executeQuickGenerateSections() {
     return;
   }
 
-  const advisers = ['Prof. Academic Head', 'Prof. Program Head', 'Prof. Faculty Member', 'Engr. Faculty Member'];
   const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
   for (let i = 0; i < count; i++) {
@@ -1240,7 +1213,7 @@ function executeQuickGenerateSections() {
         program: prog,
         year: yr,
         studentCount: students,
-        adviser: advisers[i % advisers.length],
+        adviser: '',
         shift: 'AM'
       });
     }
@@ -1353,7 +1326,6 @@ function submitAutoGenerateSections() {
   const targetYears = yrVal === 'all' ? [1, 2, 3, 4] : [parseInt(yrVal, 10)];
 
   const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-  const advisers = ['Prof. Academic Head', 'Prof. Program Head', 'Prof. Faculty Member', 'Engr. Faculty Member', 'Chef Faculty Member'];
 
   let createdCount = 0;
 
@@ -1378,7 +1350,7 @@ function submitAutoGenerateSections() {
             program: prog,
             year: yr,
             studentCount: studentsPerSec,
-            adviser: advisers[i % advisers.length],
+            adviser: '',
         shift: 'AM'
           });
           createdCount++;
@@ -1500,6 +1472,16 @@ function submitSectionModal() {
     return;
   }
 
+  // An adviser can't teach their own section, so they can't take over one they already teach
+  const savedSection = idVal ? ACADEMIC_SECTIONS.find(s => s.id === parseInt(idVal, 10)) : null;
+  const previousCode = savedSection ? savedSection.code : null;
+  const adviserClash = savedSection && MASTER_SCHEDULE_DATA.find(c =>
+    c.section === savedSection.code && c.termId === activeTerm.id && isSameProfessor(c.instructor, adviser));
+  if (adviserClash) {
+    alert(`${adviser} teaches ${adviserClash.subjectCode} for this section, so they can't be its adviser. Reassign that class first.`);
+    return;
+  }
+
   if (ACADEMIC_SECTIONS.some(s => s.termId === activeTerm.id && s.code.toLowerCase() === code.toLowerCase() && String(s.id) !== idVal)) {
     alert(`Section code ${code} already exists in this term.`);
     return;
@@ -1508,6 +1490,13 @@ function submitSectionModal() {
   if (idVal) {
     const sec = ACADEMIC_SECTIONS.find(s => s.id === parseInt(idVal, 10));
     if (sec) {
+      // Classes follow the section when its code changes
+      if (previousCode !== code) {
+        MASTER_SCHEDULE_DATA.forEach(c => {
+          if (c.section === previousCode && (!c.termId || c.termId === sec.termId)) c.section = code;
+        });
+        if (currentSelectedSection === previousCode) currentSelectedSection = code;
+      }
       sec.code = code;
       sec.name = name;
       sec.program = prog;
@@ -1703,7 +1692,14 @@ function deleteSectionItem(id) {
     alert('At least one academic section must remain.');
     return;
   }
-  if (!confirm('Are you sure you want to delete this section?')) return;
+  const target = ACADEMIC_SECTIONS.find(s => s.id === id);
+  const inSection = c => target && c.section === target.code && (!c.termId || c.termId === target.termId);
+  const classCount = MASTER_SCHEDULE_DATA.filter(inSection).length;
+  const warning = classCount > 0
+    ? `Delete this section and its ${classCount} scheduled class${classCount === 1 ? '' : 'es'}? This can't be undone.`
+    : 'Are you sure you want to delete this section?';
+  if (!confirm(warning)) return;
+  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !inSection(c));
   ACADEMIC_SECTIONS = ACADEMIC_SECTIONS.filter(s => s.id !== id);
   saveStateToStorage();
   renderSectionsTable();
@@ -1771,28 +1767,42 @@ function executeGenerateBaseline() {
     }
   }
 
-  // Persist to DB
-  fetch('api/schedules.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'generate_baseline',
-      term_id: activeTerm.id,
-      schedules: newSchedules
-    })
-  }).catch(() => {});
+  // Persist to DB, then reload to pick up saved IDs and the Undo option
+  saveTermSchedule('generate_baseline', activeTerm.id, newSchedules, { strict: true })
+    .then(res => { if (res.ok && !IS_STANDALONE) loadServerState(); })
+    .catch(() => alert('Could not reach the server, so this schedule exists only in this browser.'));
 
   alert(`Master schedule successfully generated (${newSchedules.length} classes scheduled across ${sectionsToSchedule.length} sections for ${activeTerm.termName}).`);
 }
 
+function updateUndoButton() {
+  const btn = document.getElementById('btnUndoGenerate');
+  if (!btn) return;
+  const { activeTerm } = getActiveAcademicContext();
+  const snapshot = SCHEDULE_SNAPSHOTS.find(s => Number(s.term_id) === activeTerm.id);
+  btn.style.display = snapshot ? 'inline-flex' : 'none';
+  btn.title = snapshot ? `Go back to the schedule saved before the last generate (${snapshot.saved_at})` : '';
+}
+
+window.undoLastGenerate = async function() {
+  const { activeTerm } = getActiveAcademicContext();
+  if (!confirm(`Replace the current ${activeTerm.termName} schedule with the one saved before the last generate? You can undo this too.`)) return;
+  const res = await fetch('api/schedules.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'restore_schedule', term_id: activeTerm.id, expected_version: activeTerm.scheduleVersion })
+  });
+  await loadServerState();
+  if (res.ok) alert('The previous schedule has been restored.');
+};
+
 /* ─── Smart Constraint-Honoring Baseline Schedule Generator ─── */
-// Options are used by the AI draft: seed keeps classes already placed, enforceLoad applies teaching limits
-function generateSmartBaselineSchedules({ seed = [], enforceLoad = false } = {}) {
+// The AI draft passes seed to keep the classes it already placed
+function generateSmartBaselineSchedules({ seed = [] } = {}) {
   UNASSIGNED_CLASSES = [];
   const schedules = [...seed];
 
   function fitsTeacherLoad(teacher, addedMinutes) {
-    if (!enforceLoad) return true;
     const usedMinutes = schedules
       .filter(c => c.instructor === teacher.name)
       .reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
@@ -1831,22 +1841,7 @@ function generateSmartBaselineSchedules({ seed = [], enforceLoad = false } = {})
     { start: '17:00', end: '19:00' },
     { start: '17:30', end: '19:00' }
   ];
-  const slotPresets = [
-    { start: '08:00', end: '10:00' },
-    { start: '10:00', end: '12:00' },
-    { start: '13:00', end: '15:00' },
-    { start: '15:00', end: '17:00' },
-    { start: '08:30', end: '11:00' },
-    { start: '13:30', end: '16:00' }
-  ];
 
-  // Helper trackers for collision prevention
-  // key: room + day + start + end
-  const roomBookings = new Set();
-  // key: instructor + day + start + end
-  const teacherBookings = new Set();
-  // key: section + day + start + end
-  const sectionBookings = new Set();
 
   function hasOverlap(day, start, end, room, teacher, section) {
     const sMin = timeToMinutes(start);
@@ -1869,43 +1864,12 @@ function generateSmartBaselineSchedules({ seed = [], enforceLoad = false } = {})
 
   const { activeSy, activeTerm } = getActiveAcademicContext();
   const sectionsToSchedule = (typeof ACADEMIC_SECTIONS !== 'undefined' ? ACADEMIC_SECTIONS : []).filter(s => s.termId === activeTerm.id);
-  const _ignored = [
-    { code: 'IT701M', program: 'BSIT', year: 1, studentCount: 38, adviser: 'Prof. Academic Head' },
-    { code: 'IT702M', program: 'BSIT', year: 1, studentCount: 36, adviser: 'Prof. Faculty Member' }
-  ];
 
   let schedCounter = 100;
 
   sectionsToSchedule.forEach(sec => {
-    // Subjects matching this section's program & year that are marked included
-    // Flexible curriculum subject matching for active term
-    let subjects = (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).filter(s => {
-      if (s.isIncluded === false) return false;
-      if (s.program !== sec.program) return false;
-      if (String(s.year) !== String(sec.year)) return false;
-      if (s.termId === activeTerm.id) return true;
-      if (!s.termId) return true;
-      const sName = (s.termName || '').toLowerCase().trim();
-      const tName = (activeTerm.termName || '').toLowerCase().trim();
-      if (sName === tName) return true;
-      if (tName.includes('1st') || tName.includes('first')) return sName.includes('1st') || s.termId === 1;
-      if (tName.includes('2nd') || tName.includes('second')) return sName.includes('2nd') || s.termId === 2;
-      if (tName.includes('summer')) return sName.includes('summer') || s.termId === 3;
-      return true;
-    });
-
-    if (subjects.length === 0) {
-      subjects = (typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).filter(s => s.program === sec.program && s.isIncluded !== false);
-    }
-    // Placeholders are only for programs with no curriculum, not ones whose subjects were excluded
-    if (subjects.length === 0 && !(typeof CURRICULUM_SUBJECTS !== 'undefined' ? CURRICULUM_SUBJECTS : []).some(s => s.program === sec.program)) {
-      subjects = [
-        { code: `${sec.program} 101`, name: `${sec.program} Core Foundations`, units: 3, type: 'lecture' },
-        { code: `${sec.program} 102`, name: `${sec.program} Methods & Applications`, units: 3, type: 'lecture' },
-        { code: `GE 201`, name: `Purposive Communication`, units: 3, type: 'lecture' },
-        { code: `PE 102`, name: `Physical Fitness`, units: 2, type: 'pe' }
-      ];
-    }
+    // Only the subjects included for this section in the active term
+    const subjects = CURRICULUM_SUBJECTS.filter(s => s.isIncluded !== false && s.termId === activeTerm.id && s.program === sec.program && Number(s.year) === Number(sec.year));
 
     subjects.forEach((subj, subjIdx) => {
       if (seed.some(c => c.section === sec.code && c.subjectCode === subj.code)) return;
@@ -1950,9 +1914,7 @@ function generateSmartBaselineSchedules({ seed = [], enforceLoad = false } = {})
           const fClean = (f.name || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
           return fClean !== adviserNameClean && !fClean.includes(adviserNameClean) && !adviserNameClean.includes(fClean);
         });
-        if (nonAdviserTeachers.length > 0) {
-          candidateTeachers = nonAdviserTeachers;
-        }
+        candidateTeachers = nonAdviserTeachers;
       }
 
       // Determine slot search prioritized by section shift
@@ -1979,107 +1941,83 @@ function generateSmartBaselineSchedules({ seed = [], enforceLoad = false } = {})
         ['Wed', 'Sat']
       ];
 
-      const isTwoDaySubject = (subj.units >= 3 || (!subj.type || subj.type === 'lecture'));
-      const unitsPerMeeting = isTwoDaySubject ? 1.5 : (subj.units || 1.5);
+      // Meetings add up to the subject's full weekly hours
+      const weeklyMinutes = subjectWeeklyMinutes(subj);
+      const meetingLengths = splitIntoMeetings(weeklyMinutes);
 
-      if (isTwoDaySubject) {
-        for (const slotGroup of slotGroups) for (const [day1, day2] of orderedDayPairs) {
-          if (placed) break;
-          for (const slot of slotGroup) {
-            if (placed) break;
-            for (const roomObj of candidateRooms) {
-              if (placed) break;
-              for (const teacherObj of candidateTeachers) {
-                const free1 = !hasOverlap(day1, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code);
-                const free2 = !hasOverlap(day2, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code);
+      // Day combinations to try, best first
+      const dayPlans = meetingLengths.length === 1
+        ? [['Wed'], ['Sat'], ['Fri'], ['Thu'], ['Tue'], ['Mon']]
+        : [...(meetingLengths.length === 2 ? orderedDayPairs : [['Mon', 'Wed', 'Fri'], ['Tue', 'Thu', 'Sat']]), ...dayCombinations(workDays, meetingLengths.length)];
 
-                if (free1 && free2 && fitsTeacherLoad(teacherObj, (timeToMinutes(slot.end) - timeToMinutes(slot.start)) * 2)) {
-                  schedCounter++;
-                  schedules.push({
-                    id: `SCH-${schedCounter}`,
-                    termId: activeTerm.id,
-                    section: sec.code,
-                    program: sec.program,
-                    year: String(sec.year),
-                    subjectCode: subj.code,
-                    subjectTitle: subj.name,
-                    type: subj.type,
-                    units: unitsPerMeeting,
-                    room: roomObj.code,
-                    instructor: teacherObj.name,
-                    day: day1,
-                    startTime: slot.start,
-                    endTime: slot.end
+      // In-shift times are tried on every day before any out-of-shift time is used
+      const firstLength = meetingLengths[0];
+      const startsFor = (slots, fromMin, toMin) => {
+        const starts = slots.filter(s => timeToMinutes(s.end) - timeToMinutes(s.start) === firstLength).map(s => s.start);
+        for (let m = fromMin; m + firstLength <= toMin; m += 30) starts.push(minutesToTime(m));
+        return [...new Set(starts)];
+      };
+      const [shiftFrom, shiftTo] = SHIFT_WINDOWS[secShift] || SHIFT_WINDOWS.AM;
+      const inShiftStarts = startsFor(shiftSlots, shiftFrom, Math.min(shiftTo, LAST_GENERATED_MINUTE));
+      const otherStarts = startsFor(slotGroups[1], 7 * 60, LAST_GENERATED_MINUTE).filter(s => !inShiftStarts.includes(s));
+
+      // The least-loaded qualified professor goes first, so classes spread out
+      const usedMinutes = t => schedules.filter(c => c.instructor === t.name)
+        .reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
+      const teachersToTry = candidateTeachers
+        .filter(t => fitsTeacherLoad(t, weeklyMinutes))
+        .sort((a, b) => usedMinutes(a) - usedMinutes(b));
+
+      const tryPlace = () => {
+        for (const starts of [inShiftStarts, otherStarts]) {
+          for (const days of dayPlans) {
+            for (const start of starts) {
+              const meetings = days.map((day, i) => ({ day, start, end: minutesToTime(timeToMinutes(start) + meetingLengths[i]) }));
+              if (meetings.some(m => timeToMinutes(m.end) > LAST_GENERATED_MINUTE)) continue;
+              for (const roomObj of candidateRooms) {
+                for (const teacherObj of teachersToTry) {
+                  const fits = meetings.every(m =>
+                    !hasOverlap(m.day, m.start, m.end, roomObj.code, teacherObj.name, sec.code)
+                    && !facultyAvailabilityProblem(teacherObj.name, m.day, m.start, m.end));
+                  if (!fits) continue;
+                  meetings.forEach((m, i) => {
+                    schedCounter++;
+                    schedules.push({
+                      id: `SCH-${schedCounter}`,
+                      termId: activeTerm.id,
+                      section: sec.code,
+                      program: sec.program,
+                      year: String(sec.year),
+                      subjectCode: subj.code,
+                      subjectTitle: subj.name,
+                      type: subj.type,
+                      units: Math.round(((subj.units || 3) * meetingLengths[i] / weeklyMinutes) * 100) / 100,
+                      room: roomObj.code,
+                      instructor: teacherObj.name,
+                      day: m.day,
+                      startTime: m.start,
+                      endTime: m.end
+                    });
                   });
-
-                  schedCounter++;
-                  schedules.push({
-                    id: `SCH-${schedCounter}`,
-                    termId: activeTerm.id,
-                    section: sec.code,
-                    program: sec.program,
-                    year: String(sec.year),
-                    subjectCode: subj.code,
-                    subjectTitle: subj.name,
-                    type: subj.type,
-                    units: unitsPerMeeting,
-                    room: roomObj.code,
-                    instructor: teacherObj.name,
-                    day: day2,
-                    startTime: slot.start,
-                    endTime: slot.end
-                  });
-
-                  placed = true;
-                  break;
+                  return true;
                 }
               }
             }
           }
         }
-      }
-      if (!placed) {
-      } const fallbackDays = isTwoDaySubject ? ['Wed', 'Sat', 'Mon', 'Tue', 'Thu', 'Fri'] : ['Wed', 'Sat', 'Fri', 'Thu', 'Tue', 'Mon'];
-        for (const slotGroup of slotGroups) for (const day of fallbackDays) {
-        if (placed) break;
-        for (const slot of slotGroup) {
-          if (placed) break;
-          for (const roomObj of candidateRooms) {
-            if (placed) break;
-            for (const teacherObj of candidateTeachers) {
-              if (!hasOverlap(day, slot.start, slot.end, roomObj.code, teacherObj.name, sec.code) && fitsTeacherLoad(teacherObj, timeToMinutes(slot.end) - timeToMinutes(slot.start))) {
-                schedCounter++;
-                schedules.push({
-                  id: `SCH-${schedCounter}`,
-                  termId: activeTerm.id,
-                  section: sec.code,
-                  program: sec.program,
-                  year: String(sec.year),
-                  subjectCode: subj.code,
-                  subjectTitle: subj.name,
-                  type: subj.type,
-                  units: subj.units,
-                  room: roomObj.code,
-                  instructor: teacherObj.name,
-                  day,
-                  startTime: slot.start,
-                  endTime: slot.end
-                });
-                placed = true;
-                break;
-              }
-            }
-          }
-        }
-      }
+        return false;
+      };
+      placed = tryPlace();
 
       if (!placed) {
         UNASSIGNED_CLASSES.push({
           section: sec.code,
           code: subj.code,
-          reason: hasQualifiedFaculty
-            ? `No conflict-free slot found matching capacity (seats: ${sec.studentCount}) and faculty availability.`
-            : `No faculty member has ${subj.code} in their main qualifications.`
+          reason: !hasQualifiedFaculty
+            ? `No faculty member has ${subj.code} in their main qualifications.`
+            : candidateTeachers.length === 0
+              ? `The only professor qualified for ${subj.code} is this section's adviser, who cannot teach their own section.`
+              : `No conflict-free ${weeklyMinutes / 60}-hour weekly schedule fits the room capacity (${sec.studentCount} seats), professor availability and teaching limits.`
         });
       }
     });
@@ -2164,6 +2102,112 @@ function updateTeacherDropdown() {
 }
 
 /* ─── Faculty Qualification & Department Eligibility Conflict Checker ─── */
+// Matches the server's SHIFT_WINDOWS, in minutes from midnight
+const SHIFT_WINDOWS = { AM: [420, 780], MIDSHIFT: [600, 960], PM: [780, 1230] };
+
+// Generated classes finish by 7:00 PM
+const LAST_GENERATED_MINUTE = 19 * 60;
+
+function subjectWeeklyMinutes(subj) {
+  const hours = (subj.lecHours || 0) + (subj.labHours || 0);
+  return Math.round((hours || subj.units || 3) * 60);
+}
+
+// Under 3 hours is one meeting; longer subjects split into meetings of at most 4 hours
+function splitIntoMeetings(totalMinutes) {
+  if (totalMinutes < 180) return [totalMinutes];
+  const count = totalMinutes <= 480 ? 2 : Math.ceil(totalMinutes / 240);
+  const longest = Math.ceil(totalMinutes / count / 30) * 30;
+  const lengths = [];
+  let left = totalMinutes;
+  for (let i = 0; i < count; i++) {
+    const length = i === count - 1 ? left : Math.min(longest, left);
+    lengths.push(length);
+    left -= length;
+  }
+  return lengths;
+}
+
+function dayCombinations(days, size) {
+  if (size === 0) return [[]];
+  return days.flatMap((day, i) => dayCombinations(days.slice(i + 1), size - 1).map(rest => [day, ...rest]));
+}
+
+function activeTermClasses() {
+  const { activeTerm } = getActiveAcademicContext();
+  return MASTER_SCHEDULE_DATA.filter(c => !c.termId || c.termId === activeTerm.id);
+}
+
+function classMinutes(c) {
+  return timeToMinutes(c.endTime) - timeToMinutes(c.startTime);
+}
+
+function facultyWeeklyHours(name) {
+  return activeTermClasses().filter(c => c.instructor === name).reduce((sum, c) => sum + classMinutes(c), 0) / 60;
+}
+
+// Subjects a section still needs hours for this term, with how many are scheduled
+function sectionSubjectProgress(section) {
+  const { activeTerm } = getActiveAcademicContext();
+  const classes = activeTermClasses().filter(c => c.section === section.code);
+  return CURRICULUM_SUBJECTS
+    .filter(s => s.isIncluded !== false && s.termId === activeTerm.id && s.program === section.program && Number(s.year) === Number(section.year))
+    .map(subject => ({
+      subject,
+      requiredMinutes: subjectWeeklyMinutes(subject),
+      scheduledMinutes: classes.filter(c => (c.subjectCode || '').toUpperCase() === subject.code.toUpperCase()).reduce((sum, c) => sum + classMinutes(c), 0)
+    }));
+}
+
+function isSectionFullyScheduled(section) {
+  const progress = sectionSubjectProgress(section);
+  return progress.length > 0 && progress.every(p => p.scheduledMinutes >= p.requiredMinutes);
+}
+
+// Faculty accounts can view schedules but not change them
+function canEditSchedule() {
+  return !CURRENT_USER || CURRENT_USER.role !== 'faculty';
+}
+
+function applyScheduleRole() {
+  document.body.classList.toggle('role-faculty', !canEditSchedule());
+}
+
+// Selected shifts that touch or overlap count as one continuous window
+function isWithinAvailability(days, shifts, day, startTime, endTime) {
+  if (!days.includes(day)) return false;
+  const start = timeToMinutes(startTime);
+  const end = timeToMinutes(endTime);
+  let from = null;
+  let to = null;
+  for (const [shift, [shiftStart, shiftEnd]] of Object.entries(SHIFT_WINDOWS)) {
+    if (!shifts.includes(shift)) continue;
+    if (from !== null && shiftStart > to) {
+      if (start >= from && end <= to) return true;
+      from = null;
+    }
+    if (from === null) from = shiftStart;
+    to = shiftEnd;
+  }
+  return from !== null && start >= from && end <= to;
+}
+
+// A part-time professor with no days or shifts set has no limit yet
+function facultyAvailabilityProblem(instructorName, day, startTime, endTime) {
+  const fac = FACULTY.find(f => f.name && f.name.toLowerCase() === (instructorName || '').toLowerCase());
+  if (!fac || fac.status !== 'Part-time' || !(fac.availableDays || []).length || !(fac.availableShifts || []).length) return null;
+  if (isWithinAvailability(fac.availableDays, fac.availableShifts, day, startTime, endTime)) return null;
+  return `Not Available: ${fac.name} only teaches ${fac.availableDays.join(', ')} during ${fac.availableShifts.join(', ')} shift`;
+}
+
+// Compares two professor names, ignoring titles such as Prof. or Engr.
+function isSameProfessor(nameA, nameB) {
+  const clean = name => (name || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
+  const a = clean(nameA);
+  const b = clean(nameB);
+  return !!a && !!b && (a === b || a.includes(b) || b.includes(a));
+}
+
 function checkFacultySubjectConflict(instructorName, subjectCode, sectionCode) {
   if (!instructorName || instructorName === 'TBA' || instructorName === 'Unassigned') {
     return 'Instructor Unassigned';
@@ -2200,26 +2244,14 @@ window.checkFacultySubjectConflict = checkFacultySubjectConflict;
 function renderGrid() {
   const tbody = document.getElementById('sectionGridBody');
   if (!tbody) return;
+  applyScheduleRole();
+  if (!canEditSchedule() && ACTIVE_SCHEDULE_STEP !== 6) {
+    goToScheduleStep(6);
+    return;
+  }
 
   const { activeSy, activeTerm } = getActiveAcademicContext();
   let filteredClasses = [];
-
-  // Ensure that no scheduled class displays the section adviser as its instructor
-  MASTER_SCHEDULE_DATA.forEach(c => {
-    const sec = ACADEMIC_SECTIONS.find(s => s.code === c.section);
-    if (!sec) return;
-    const advClean = (sec.adviser || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
-    const instClean = (c.instructor || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
-    if (advClean && instClean && (instClean === advClean || instClean.includes(advClean) || advClean.includes(instClean))) {
-      const allowableNonAdviser = FACULTY.filter(f => isFacultyQualified(f, c.subjectCode)).filter(f => {
-        const fc = (f.name || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
-        return fc !== advClean && !fc.includes(advClean) && !advClean.includes(fc);
-      });
-      if (allowableNonAdviser.length > 0) {
-        c.instructor = allowableNonAdviser[0].name;
-      }
-    }
-  });
 
   // Section View
   if (CURRENT_TIMETABLE_VIEW === 'section') {
@@ -2296,9 +2328,15 @@ function renderGrid() {
     document.getElementById('sheetStatLabel2').textContent = 'Weekly Teaching';
     document.getElementById('sheetStudentsCount').textContent = `${(totalWeeklyMins / 60).toFixed(1)} hrs`;
     document.getElementById('sheetStatLabel3').textContent = 'Max Load';
-    document.getElementById('sheetAdviser').textContent = `${facMeta.maxLoad || 24} Units`;
+    document.getElementById('sheetAdviser').textContent = `${facMeta.maxLoad || 24} hrs`;
   }
 
+  tbody.innerHTML = timetableRowsHtml(filteredClasses, !canEditSchedule());
+  renderTimetableHours(filteredClasses, 'hrs-', 'weeklyTotalHours');
+}
+
+// Builds the timetable rows. readOnly leaves out editing, dragging and conflict notes.
+function timetableRowsHtml(filteredClasses, readOnly = false) {
   // Auto-trim used range: Calculate earliest start & latest end
   let minMinutes = 7 * 60; // 07:00
   let maxMinutes = 19 * 60; // 19:00
@@ -2371,7 +2409,7 @@ function renderGrid() {
 
     const qualConflict = checkFacultySubjectConflict(classItem.instructor, classItem.subjectCode, classItem.section);
     if (qualConflict) return qualConflict;
-    return null;
+    return facultyAvailabilityProblem(classItem.instructor, classItem.day, classItem.startTime, classItem.endTime);
   }
 
   // Render HTML rows
@@ -2391,21 +2429,21 @@ function renderGrid() {
 
       if (cell && cell.type === 'class') {
         const item = cell.classItem;
-        const conflictReason = checkClassConflict(item);
+        const conflictReason = readOnly ? null : checkClassConflict(item);
         const conflictClass = conflictReason ? 'has-conflict' : '';
         const itemType = (item.type || 'lecture').toLowerCase();
 
         rowsHtml += `
           <td class="class-block-cell type-${itemType} ${conflictClass}"
               rowspan="${cell.rowspan}"
-              draggable="true"
+              ${readOnly ? '' : `draggable="true"
               ondragstart="handleClassDragStart(event, '${item.id}')"
-              onclick="showClassDetails('${item.id}')"
+              onclick="showClassDetails('${item.id}')"`}
               title="${escapeHtml(item.subjectCode)}: ${escapeHtml(item.subjectTitle || '')} (${formatTime12(item.startTime)} – ${formatTime12(item.endTime)})">
             <div class="class-cell-inner">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
                 <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}</span>
-                <button class="cell-quick-edit-btn" onclick="event.stopPropagation(); openEditClassScheduleModal('${item.id}')" title="Edit Subject or Time">✏️</button>
+                ${readOnly ? '' : `<button class="cell-quick-edit-btn" onclick="event.stopPropagation(); openEditClassScheduleModal('${item.id}')" title="Edit Subject or Time">✏️</button>`}
               </div>
               <span class="class-subj-title">${escapeHtml(item.subjectCode)}</span>
               <span class="class-subj-name">${escapeHtml(item.subjectTitle || '')}</span>
@@ -2415,6 +2453,8 @@ function renderGrid() {
             </div>
           </td>
         `;
+      } else if (readOnly) {
+        rowsHtml += `<td class="empty-cell"></td>`;
       } else {
         // Empty cell: Droppable target & clickable manual schedule slot
         rowsHtml += `
@@ -2432,21 +2472,23 @@ function renderGrid() {
     rowsHtml += `</tr>`;
   });
 
-  tbody.innerHTML = rowsHtml;
+  return rowsHtml;
+}
 
-  // Render Footer Daily & Weekly Hours
+// Fills in a timetable's daily and weekly hour totals
+function renderTimetableHours(filteredClasses, dayIdPrefix, totalId) {
   let weeklyTotalMins = 0;
   DAYS.forEach(day => {
     const dayClasses = filteredClasses.filter(c => c.day === day);
     const dayMins = dayClasses.reduce((sum, c) => sum + (timeToMinutes(c.endTime) - timeToMinutes(c.startTime)), 0);
     weeklyTotalMins += dayMins;
-    const hrsEl = document.getElementById(`hrs-${day}`);
+    const hrsEl = document.getElementById(`${dayIdPrefix}${day}`);
     if (hrsEl) {
       hrsEl.textContent = `${(dayMins / 60).toFixed(1)} hrs`;
     }
   });
 
-  const totalEl = document.getElementById('weeklyTotalHours');
+  const totalEl = document.getElementById(totalId);
   if (totalEl) {
     totalEl.textContent = `${(weeklyTotalMins / 60).toFixed(1)} hrs / week`;
   }
@@ -2517,8 +2559,8 @@ function showClassDetails(classId) {
         <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Classroom</div>
         <div style="font-weight:700; color:var(--text-primary); margin-top:2px; display:flex; align-items:center; gap:6px;">
           <span>${escapeHtml(item.room)}</span>
-          <button class="btn btn-outline" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px; font-weight:600;" onclick="viewRoomOnCampusMap(${jsArg(item.room)})">
-            📍 Map ↗
+          <button class="btn btn-outline" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px; font-weight:600;" onclick="viewRoomSchedule(${jsArg(item.room)})">
+            📅 Schedule ↗
           </button>
         </div>
       </div>
@@ -2735,6 +2777,15 @@ function submitEditClassSchedule() {
     return;
   }
 
+  const availabilityProblem = facultyAvailabilityProblem(instructor, day, startTime, endTime);
+  if (availabilityProblem) {
+    if (errDiv) {
+      errDiv.textContent = availabilityProblem;
+      errDiv.style.display = 'block';
+    }
+    return;
+  }
+
   // Apply updates
   item.subjectCode = subjCode;
   item.subjectTitle = subjTitle || subjCode;
@@ -2777,28 +2828,6 @@ function closeClassDetailModal() {
   if (modal) modal.style.display = 'none';
 }
 
-function viewRoomOnCampusMap(roomCode) {
-  closeClassDetailModal();
-  if (typeof switchPage === 'function') {
-    switchPage('minimap');
-    const room = ROOMS.find(r => r.code.toUpperCase() === (roomCode || '').toUpperCase());
-    if (room && typeof selectFloor === 'function') {
-      selectFloor(room.floor);
-      setTimeout(() => {
-        const cellId = `map-room-${room.code.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        const roomEl = document.getElementById(cellId);
-        if (roomEl) {
-          roomEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          roomEl.style.boxShadow = '0 0 0 4px #2563EB, 0 10px 25px rgba(37,99,235,0.4)';
-          setTimeout(() => {
-            roomEl.style.boxShadow = '';
-          }, 3000);
-        }
-      }, 300);
-    }
-  }
-}
-
 /* ─── HTML5 Drag-and-Drop Schedule Rescheduling ─── */
 let activeDraggedClassId = null;
 
@@ -2836,9 +2865,17 @@ function handleSlotDrop(event, targetDay, targetSlotMin) {
   const durationMin = Math.max(30, timeToMinutes(item.endTime) - timeToMinutes(item.startTime));
   const targetEndMin = targetSlotMin + durationMin;
 
-  const oldDay = item.day;
-  const oldStart = item.startTime;
-  const oldEnd = item.endTime;
+  const availabilityProblem = facultyAvailabilityProblem(item.instructor, targetDay, minutesToTime(targetSlotMin), minutesToTime(targetEndMin));
+  if (availabilityProblem) {
+    alert(`This class can't move there. ${availabilityProblem}.`);
+    return;
+  }
+
+  const conflict = checkGlobalClassConflict({ ...item, day: targetDay, startTime: minutesToTime(targetSlotMin), endTime: minutesToTime(targetEndMin) });
+  if (conflict) {
+    alert(`This class can't move there. ${conflict}.`);
+    return;
+  }
 
   item.day = targetDay;
   item.startTime = minutesToTime(targetSlotMin);
@@ -2848,11 +2885,6 @@ function handleSlotDrop(event, targetDay, targetSlotMin) {
   saveStateToStorage();
   renderGrid();
   updateScheduleStats();
-
-  const conflict = checkGlobalClassConflict(item);
-  if (conflict) {
-    alert(`⚠️ Warning: Class moved to ${targetDay} ${formatTime12(item.startTime)}–${formatTime12(item.endTime)}, but conflicts detected: ${conflict}. Cell is highlighted in red.`);
-  }
 }
 
 /* ─── Manual Slot Scheduling via Modal ─── */
@@ -2860,8 +2892,7 @@ function openManualSlotModal(day, timeStr) {
   const modal = document.getElementById('slotModal');
   if (!modal) return;
 
-  const roomDisp = document.getElementById('slotRoomDisplay');
-  const timeDisp = document.getElementById('slotTimeDisplay');
+  const roomSel = document.getElementById('slotRoomSelect');
   const facSel = document.getElementById('slotFacultySelect');
   const subInput = document.getElementById('slotSubjectInput');
   const datalist = document.getElementById('subjectDatalist');
@@ -2871,14 +2902,6 @@ function openManualSlotModal(day, timeStr) {
 
   if (errDiv) errDiv.style.display = 'none';
 
-  // Target Room
-  let targetRoom = 'LR-101';
-  if (CURRENT_TIMETABLE_VIEW === 'room' && currentSelectedRoom) {
-    targetRoom = currentSelectedRoom;
-  } else if (ROOMS.length > 0) {
-    targetRoom = ROOMS[0].code;
-  }
-  if (roomDisp) roomDisp.value = targetRoom;
 
   // Target Section
   let targetSection = currentSelectedSection || 'IT701M';
@@ -2890,15 +2913,26 @@ function openManualSlotModal(day, timeStr) {
 
   // Target Time & Duration (default 1.5 hrs)
   const startMin = timeToMinutes(timeStr);
-  const endMin = Math.min(21 * 60, startMin + 90);
-  const endTimeStr = minutesToTime(endMin);
+  const endTimeStr = minutesToTime(Math.min(20 * 60 + 30, startMin + 90));
 
-  if (timeDisp) {
-    timeDisp.value = `${day} · ${formatTime12(timeStr)} – ${formatTime12(endTimeStr)}`;
-    timeDisp.dataset.day = day;
-    timeDisp.dataset.start = timeStr;
-    timeDisp.dataset.end = endTimeStr;
+  const timeOptions = [];
+  for (let m = 7 * 60; m <= 20 * 60 + 30; m += 30) {
+    const value = minutesToTime(m);
+    timeOptions.push(`<option value="${value}">${formatTime12(value)}</option>`);
   }
+  document.getElementById('slotDaySelect').innerHTML = DAYS.map(d => `<option value="${d}">${d}</option>`).join('');
+  document.getElementById('slotDaySelect').value = day;
+  document.getElementById('slotStartSelect').innerHTML = timeOptions.join('');
+  document.getElementById('slotStartSelect').value = timeStr;
+  document.getElementById('slotEndSelect').innerHTML = timeOptions.join('');
+  document.getElementById('slotEndSelect').value = endTimeStr;
+
+  // Starts on the first room that's free at this time; the user can change it
+  const isRoomFree = room => !activeTermClasses().some(c => c.room === room.code && c.day === day
+    && startMin < timeToMinutes(c.endTime) && timeToMinutes(endTimeStr) > timeToMinutes(c.startTime));
+  roomSel.innerHTML = ROOMS.map(r => `<option value="${escapeHtml(r.code)}">${escapeHtml(r.code)} (${escapeHtml(r.type)}, ${r.cap} seats)</option>`).join('');
+  const firstFree = ROOMS.find(isRoomFree);
+  if (firstFree) roomSel.value = firstFree.code;
 
   // Populate Faculty Select
   if (facSel) {
@@ -2927,18 +2961,22 @@ function closeSlotModal() {
 }
 
 function submitSlotAssignment() {
-  const timeDisp = document.getElementById('slotTimeDisplay');
-  const roomDisp = document.getElementById('slotRoomDisplay');
   const facSel = document.getElementById('slotFacultySelect');
   const subInput = document.getElementById('slotSubjectInput');
   const progSel = document.getElementById('slotProgramSelect');
   const secInput = document.getElementById('slotSectionInput');
   const errDiv = document.getElementById('slotModalError');
 
-  const day = timeDisp?.dataset.day || 'Mon';
-  const startTime = timeDisp?.dataset.start || '08:00';
-  const endTime = timeDisp?.dataset.end || '09:30';
-  const room = roomDisp?.value.trim() || 'LR-101';
+  const showError = message => {
+    if (errDiv) {
+      errDiv.textContent = message;
+      errDiv.style.display = 'block';
+    }
+  };
+  const day = document.getElementById('slotDaySelect').value;
+  const startTime = document.getElementById('slotStartSelect').value;
+  const endTime = document.getElementById('slotEndSelect').value;
+  const room = document.getElementById('slotRoomSelect').value;
   const instructor = facSel?.value || (FACULTY.length > 0 ? FACULTY[0].name : 'Prof. Academic Head');
   const subjectCode = (subInput?.value || '').trim().toUpperCase();
   const program = progSel?.value || 'BSIT';
@@ -2952,11 +2990,30 @@ function submitSlotAssignment() {
     return;
   }
 
+  if (timeToMinutes(startTime) >= timeToMinutes(endTime)) {
+    showError('Start time must be earlier than end time.');
+    return;
+  }
+  const sectionProblem = INPUT_RULES.code('Section', section);
+  if (sectionProblem) {
+    showError(sectionProblem);
+    return;
+  }
+
   // Same eligibility rule as editing a class
   const eligibility = checkFacultySubjectConflict(instructor, subjectCode, section);
   if (eligibility) {
     if (errDiv) {
       errDiv.textContent = eligibility;
+      errDiv.style.display = 'block';
+    }
+    return;
+  }
+
+  const availabilityProblem = facultyAvailabilityProblem(instructor, day, startTime, endTime);
+  if (availabilityProblem) {
+    if (errDiv) {
+      errDiv.textContent = availabilityProblem;
       errDiv.style.display = 'block';
     }
     return;
@@ -2986,6 +3043,12 @@ function submitSlotAssignment() {
     endTime
   };
 
+  const conflict = checkGlobalClassConflict(newClass);
+  if (conflict) {
+    showError(conflict);
+    return;
+  }
+
   MASTER_SCHEDULE_DATA.push(newClass);
   queueScheduleSave();
   saveStateToStorage();
@@ -2995,11 +3058,6 @@ function submitSlotAssignment() {
 
   if (typeof syncMasterScheduleRoomsWithCatalog === 'function') {
     syncMasterScheduleRoomsWithCatalog();
-  }
-
-  const conflict = checkGlobalClassConflict(newClass);
-  if (conflict) {
-    alert(`⚠️ Notice: Class scheduled with warning: ${conflict}. Cell is highlighted in red on the timetable.`);
   }
 }
 
@@ -3053,16 +3111,14 @@ function updateScheduleStats() {
     || { termName: '1st Sem' };
   const termSections = (typeof ACADEMIC_SECTIONS !== 'undefined' ? ACADEMIC_SECTIONS : []).filter(s => s.termId === activeTerm.id);
   const totalSections = termSections.length;
-  const distinctAssignedSections = (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA))
-    ? new Set(MASTER_SCHEDULE_DATA.filter(c => (!c.termId || c.termId === activeTerm.id) && termSections.some(s => s.code === c.section)).map(c => c.section)).size
-    : 0;
+  const fullyScheduledSections = termSections.filter(isSectionFullyScheduled).length;
   const totalRooms = typeof ROOMS !== 'undefined' ? ROOMS.length : 0;
 
   const statTotal = document.getElementById('statTotalSections');
   if (statTotal) statTotal.textContent = String(totalSections);
 
   const statAssigned = document.getElementById('statAssignedSections');
-  if (statAssigned) statAssigned.textContent = String(distinctAssignedSections);
+  if (statAssigned) statAssigned.textContent = String(fullyScheduledSections);
 
   const headerSub = document.getElementById('headerSubtitle');
   if (headerSub) {
@@ -3269,10 +3325,11 @@ function exportAllSectionsBatchPDF() {
    ══════════════════════════════════════════════════════════════════════════ */
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Generate default baseline schedules
+  // The offline demo starts with a generated schedule; a signed-in app loads the saved one
   const { activeSy, activeTerm } = getActiveAcademicContext();
-  const newSchedules = generateSmartBaselineSchedules();
-  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(newSchedules);
+  if (IS_STANDALONE) {
+    MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(generateSmartBaselineSchedules());
+  }
 
   // Filter bindings
   const progFilter = document.getElementById('programFilter');
@@ -3413,7 +3470,6 @@ window.openEditClassScheduleModal = openEditClassScheduleModal;
 window.handleEditSubjectChange = handleEditSubjectChange;
 window.submitEditClassSchedule = submitEditClassSchedule;
 window.deleteClassSchedule = deleteClassSchedule;
-window.viewRoomOnCampusMap = viewRoomOnCampusMap;
 window.handleClassDragStart = handleClassDragStart;
 window.handleSlotDragOver = handleSlotDragOver;
 window.handleSlotDragLeave = handleSlotDragLeave;
