@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderSubjectDeptFilterOptions();
   renderSubjectDatalist();
   renderGrid();
-  renderFloorMap('1F');
+  renderScheduleViewer();
   renderRoomTable();
   renderFacultyCards();
   renderSubjectTable();

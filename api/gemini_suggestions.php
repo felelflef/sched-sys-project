@@ -17,10 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Use the user's own key if supplied, otherwise the server-configured key
-$clientKey = trim($input['apiKey'] ?? ($_SERVER['HTTP_X_GEMINI_API_KEY'] ?? ''));
+// Only the server-configured key is used
 $serverKey = (defined('GEMINI_API_KEY') && GEMINI_API_KEY !== 'your_gemini_api_key_here') ? GEMINI_API_KEY : getenv('GEMINI_API_KEY');
-$apiKey = !empty($clientKey) ? $clientKey : $serverKey;
+$apiKey = $serverKey;
 
 if (empty($apiKey)) {
     jsonResponse([
@@ -33,7 +32,6 @@ if (empty($apiKey)) {
 $action = $input['action'] ?? ($_GET['action'] ?? 'full_audit');
 $userQuestion = trim($input['question'] ?? ($_GET['question'] ?? ''));
 
-$logsText = "";
 $schedText = "";
 $roomsText = "";
 
@@ -41,24 +39,7 @@ $roomsText = "";
 try {
     $db = getDB();
 
-    // 1. Fetch recent actual classroom session logs
-    $stmtLogs = $db->prepare("
-        SELECT c.room_name_number, u.first_name, u.last_name, sl.session_date, sl.actual_start_time, sl.actual_end_time 
-        FROM session_logs sl 
-        JOIN classrooms c ON sl.room_id = c.room_id 
-        JOIN users u ON sl.faculty_id = u.user_id 
-        WHERE sl.session_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-        ORDER BY sl.session_date DESC
-    ");
-    $stmtLogs->execute();
-    $logs = $stmtLogs->fetchAll();
-
-    foreach ($logs as $log) {
-        $endTime = $log['actual_end_time'] ?? 'Ongoing';
-        $logsText .= "Room {$log['room_name_number']} | Faculty: {$log['first_name']} {$log['last_name']} | Date: {$log['session_date']} | Start: {$log['actual_start_time']} | End: {$endTime}\n";
-    }
-
-    // 2. Fetch all current scheduled classes
+    // Fetch all current scheduled classes
     $stmtSched = $db->prepare("
         SELECT c.room_name_number, s.day_of_week, s.start_time, s.end_time, s.subject_code, s.section_name, u.first_name, u.last_name 
         FROM schedules s 
@@ -74,24 +55,14 @@ try {
         $schedText .= "Room {$sched['room_name_number']} | Day: {$sched['day_of_week']} | Time: {$sched['start_time']}-{$sched['end_time']} | Subject: {$sched['subject_code']} | Section: {$sched['section_name']} | Faculty: {$sched['first_name']} {$sched['last_name']}\n";
     }
 
-    // 3. Fetch campus classroom inventory
+    // Fetch campus classroom inventory
     $stmtRooms = $db->query("SELECT room_name_number, room_type, capacity, floor_level FROM classrooms ORDER BY floor_level, room_name_number");
     $rooms = $stmtRooms->fetchAll();
     foreach ($rooms as $r) {
         $roomsText .= "Room {$r['room_name_number']} (Floor {$r['floor_level']}, Type: {$r['room_type']}, Capacity: {$r['capacity']})\n";
     }
 } catch (\Throwable $dbErr) {
-    // Database connection offline or unconfigured; use schedule and room payload if provided
-    if (!empty($input['rooms']) && is_array($input['rooms'])) {
-        foreach ($input['rooms'] as $r) {
-            $roomsText .= "Room {$r['code']} (Floor {$r['floor']}, Type: {$r['type']}, Capacity: {$r['cap']})\n";
-        }
-    }
-    if (!empty($input['schedule']) && is_array($input['schedule'])) {
-        foreach ($input['schedule'] as $s) {
-            $schedText .= "Room {$s['room']} | Section: {$s['section']} | Subject: {$s['subjectCode']} | Day: {$s['day']} | Time: {$s['startTime']}-{$s['endTime']} | Faculty: {$s['instructor']}\n";
-        }
-    }
+    // The AI still answers general questions if schedule data can't be read
 }
 
 // Strict system guardrail instruction: Only scheduling system domain
@@ -102,9 +73,6 @@ CAMPUS ROOM DIRECTORY:
 
 CURRENT MASTER SCHEDULES:
 " . (!empty($schedText) ? $schedText : "Schedules across BSIT, BSCS, BSCpE, BSHM, BSTM, and BSBA collegiate sections.") . "
-
-RECENT ACTUAL OCCUPANCY LOGS (Last 7 Days):
-" . (!empty($logsText) ? $logsText : "No manual check-in logs recorded yet.") . "
 
 STRICT DOMAIN GUARDRAILS:
 1. You are an expert AI dedicated EXCLUSIVELY to STI College classroom scheduling, room space utilization, faculty timetable assignments, conflict detection, and academic scheduling logistics.

@@ -14,6 +14,11 @@ set_exception_handler(function (Throwable $e): void {
 const VALID_PROGRAMS = ['BSIT', 'BSCS', 'BSCpE', 'BSHM', 'BSTM', 'BSBA'];
 const SCHOOL_DAY_START = '07:00:00';
 const SCHOOL_DAY_END = '20:30:00';
+const SHIFT_WINDOWS = [
+    'AM' => ['07:00:00', '13:00:00'],
+    'MIDSHIFT' => ['10:00:00', '16:00:00'],
+    'PM' => ['13:00:00', '20:30:00'],
+];
 
 function rejectInput(string $message): void {
     jsonResponse(['success' => false, 'message' => $message], 400);

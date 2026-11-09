@@ -51,13 +51,15 @@ $rooms = $db->query("SELECT room_name_number, room_type, capacity, floor_level F
 
 $teachers = [];
 foreach ($db->query("
-    SELECT u.email, CONCAT(u.first_name, ' ', u.last_name) AS name, q.subject_code
+    SELECT u.email, CONCAT(u.first_name, ' ', u.last_name) AS name, q.subject_code, u.employment_status, u.available_days, u.available_shifts
     FROM users u JOIN faculty_qualifications q ON q.user_id = u.user_id
     WHERE u.role IN ('faculty', 'academic-head', 'program-head')
     ORDER BY u.email
 ")->fetchAll() as $row) {
     $teachers[$row['email']]['name'] = $row['name'];
     $teachers[$row['email']]['subjects'][] = $row['subject_code'];
+    $teachers[$row['email']]['availability'] = ($row['employment_status'] === 'Part-time' && $row['available_days'] !== '' && $row['available_shifts'] !== '')
+        ? " [only {$row['available_days']}, shifts {$row['available_shifts']}]" : '';
 }
 
 // Short teacher IDs keep the response small; emails are never sent to the AI
@@ -67,7 +69,7 @@ foreach (array_values($teachers) as $index => $teacher) {
     $id = 'T' . ($index + 1);
     $teacherNames[$id] = $teacher['name'];
     $maxHours = (int)($limits[$teacher['name']] ?? 24);
-    $teacherLines[] = "{$id} = {$teacher['name']} (max {$maxHours} hrs/week): " . implode(', ', $teacher['subjects']);
+    $teacherLines[] = "{$id} = {$teacher['name']} (max {$maxHours} hrs/week){$teacher['availability']}: " . implode(', ', $teacher['subjects']);
 }
 $teacherIds = array_flip($teacherNames);
 
@@ -109,6 +111,7 @@ $prompt = "Create a weekly class timetable.\n\n"
     . "- Use only days Mon, Tue, Wed, Thu, Fri, Sat and times from 07:00 to 19:00 in 24-hour HH:MM format.\n"
     . "- A room, teacher or section can never be in two classes at overlapping times.\n"
     . "- A teacher may only be given subjects listed for them, and must stay within their maximum weekly hours.\n"
+    . "- A teacher marked [only ...] may only teach on those days and within those shifts: AM is 07:00-13:00, MIDSHIFT is 10:00-16:00, PM is 13:00-19:00.\n"
     . "- A section's adviser must not teach that section, even when qualified. Ignore titles like Prof., Engr. or Chef when matching names.\n"
     . "- The room must seat all the section's students. Lab subjects use CompLab rooms, except BSHM uses the Kitchen Lab and BSTM uses the Tourism Lab.\n"
     . "- Keep each section mostly within its shift: AM is morning, MIDSHIFT is midday, PM is afternoon and evening.\n"

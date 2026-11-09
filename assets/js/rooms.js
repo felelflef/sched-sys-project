@@ -29,7 +29,16 @@ function renderRoomTable() {
     btnAddRoom.style.display = isAdmin ? 'inline-flex' : 'none';
   }
 
-  ROOMS.forEach(room => {
+  const countOf = type => ROOMS.filter(r => r.type === type).length;
+  const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  setText('statTotalRooms', ROOMS.length);
+  setText('statLectureRooms', countOf('Lecture'));
+  setText('statComputerLabs', countOf('CompLab'));
+  setText('statTotalCapacity', ROOMS.reduce((sum, r) => sum + r.cap, 0));
+  setText('roomSummaryText', `${countOf('Lecture')} lecture rooms, ${countOf('CompLab')} computer labs and ${countOf('Special')} specialized labs`);
+
+  const sortChoice = document.getElementById('roomSortSelect')?.value || 'az';
+  sortByChoice(ROOMS, sortChoice, r => r.dbId, r => r.code).forEach(room => {
     const tr = document.createElement('tr');
     let typeBadge = 'badge-lecture';
     let typeLabel = '📚 Lecture Room';
@@ -45,10 +54,10 @@ function renderRoomTable() {
     }
 
     const actionButtons = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="viewRoomOnCampusMap(${jsArg(room.code)})">View on Map</button>
+      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>
          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditRoomModal(${jsArg(room.code)})">Edit</button>
          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteRoom(${jsArg(room.code)})">Remove</button>`
-      : `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px;" onclick="viewRoomOnCampusMap(${jsArg(room.code)})">View on Map</button>`;
+      : `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>`;
 
     tr.innerHTML = `
       <td style="font-weight:700;">${escapeHtml(room.code)}</td>
@@ -141,8 +150,7 @@ window.submitRoomForm = function() {
       code,
       floor,
       type,
-      cap,
-      util: Math.floor(Math.random() * 30 + 60)
+      cap
     });
     saveRoomToServer('add', ROOMS[ROOMS.length - 1]);
   }
@@ -150,8 +158,7 @@ window.submitRoomForm = function() {
   saveStateToStorage();
   closeRoomModal();
   renderRoomTable();
-  const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
-  renderFloorMap(activeFloor + 'F');
+  renderScheduleViewer();
   renderGrid();
 };
 
@@ -187,9 +194,6 @@ window.confirmDeleteRoom = function() {
   }
   if (deletedRoom) saveRoomToServer('delete', deletedRoom);
   ROOMS = ROOMS.filter(r => r.code !== code);
-  if (typeof scheduleData !== 'undefined' && scheduleData && scheduleData[code]) {
-    delete scheduleData[code];
-  }
   if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
     MASTER_SCHEDULE_DATA.forEach(c => {
       if (c.room === code) c.room = 'TBA';
@@ -198,8 +202,7 @@ window.confirmDeleteRoom = function() {
   saveStateToStorage();
   closeDeleteRoomModal();
   renderRoomTable();
-  const activeFloor = document.querySelector('.floor-tab.active')?.dataset.floor || '1';
-  renderFloorMap(activeFloor + 'F');
+  renderScheduleViewer();
   renderGrid();
 };
 

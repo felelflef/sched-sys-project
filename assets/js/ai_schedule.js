@@ -53,6 +53,8 @@ function aiDraftRejectReason(raw, accepted, sections, termId) {
   const end = timeToMinutes(raw.end);
   if (start < 7 * 60 || end > 19 * 60 || end - start < 60 || end - start > 240) return 'Time is outside school hours or an invalid length';
 
+  if (facultyAvailabilityProblem(raw.teacher, raw.day, raw.start, raw.end)) return 'Teacher is not available at that time';
+
   for (const other of accepted) {
     if (other.day !== raw.day) continue;
     if (start < timeToMinutes(other.endTime) && end > timeToMinutes(other.startTime)) {
@@ -243,7 +245,7 @@ window.runAiDraft = async function() {
   }
 
   // The normal generator fills anything Gemini missed or got wrong, within teaching limits
-  const schedules = generateSmartBaselineSchedules({ seed: complete, enforceLoad: true });
+  const schedules = generateSmartBaselineSchedules({ seed: complete });
   aiDraftResult = { schedules, termId: activeTerm.id };
   aiDraftRenderPreview({
     schedules,
@@ -323,11 +325,7 @@ window.applyAiDraft = async function() {
   const { schedules, termId } = aiDraftResult;
   btn.disabled = true;
   try {
-    const res = await fetch('api/schedules.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'generate_baseline', term_id: termId, strict: true, schedules })
-    });
+    const res = await saveTermSchedule('generate_baseline', termId, schedules, { strict: true });
     if (!res.ok) return; // The save helper has already shown the server's message
     closeAiDraftModal();
     await loadServerState();

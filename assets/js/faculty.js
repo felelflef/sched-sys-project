@@ -78,7 +78,10 @@ function renderFacultyCards() {
           <div class="faculty-dept" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span>${escapeHtml(fac.dept)} · ${escapeHtml(fac.status)}</span>
             <span class="badge badge-success" style="font-size:10px; padding:1px 6px;">✓ Account: ${escapeHtml(fac.email)}</span>
-            ${facultyActionBtns}
+            ${fac.status === 'Part-time' ? `<div class="faculty-availability">${(fac.availableDays || []).length
+              ? `Available: ${escapeHtml(fac.availableDays.join(', '))} · ${escapeHtml(fac.availableShifts.join(', ').replace('MIDSHIFT', 'Midshift'))}`
+              : 'Availability not set: can be scheduled any time'}</div>` : ''}
+            <div class="faculty-card-actions">${facultyActionBtns}</div>
           </div>
         </div>
       </div>
@@ -117,6 +120,20 @@ function getAllCatalogSubjects() {
   return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
 }
 window.getAllCatalogSubjects = getAllCatalogSubjects;
+
+// A subject can't be taken away while the professor still teaches it this term
+function qualificationRemovalProblem(fac, removedCodes) {
+  const removed = removedCodes.map(c => c.toUpperCase());
+  const teaching = activeTermClasses().find(c => c.instructor === fac.name && removed.includes((c.subjectCode || '').toUpperCase()));
+  return teaching ? `${fac.name} still teaches ${teaching.subjectCode} this term. Reassign those classes before removing it.` : null;
+}
+
+function renderQualificationPicker(selected = []) {
+  const chosen = selected.map(c => c.toUpperCase());
+  document.getElementById('newFacQualPicker').innerHTML = getAllCatalogSubjects().map(s =>
+    `<label class="availability-option" title="${escapeHtml(s.title)}"><input type="checkbox" data-group="newFac-qual" value="${escapeHtml(s.code.toUpperCase())}" ${chosen.includes(s.code.toUpperCase()) ? 'checked' : ''} /> ${escapeHtml(s.code)}</label>`
+  ).join('');
+}
 
 window.toggleAddQualDropdown = function(email, type, event) {
   if (event) event.stopPropagation();
@@ -183,7 +200,6 @@ window.confirmAddFacultyQual = function(email, type) {
 
   renderFacultyCards();
   if (typeof renderGrid === 'function') renderGrid();
-  if (typeof renderGlobalScheduleTable === 'function') renderGlobalScheduleTable();
 };
 
 window.removeFacultyQual = function(email, type, subjectCode, event) {
@@ -192,19 +208,18 @@ window.removeFacultyQual = function(email, type, subjectCode, event) {
   if (!fac) return;
 
   const target = (subjectCode || '').toUpperCase();
+  const removalProblem = qualificationRemovalProblem(fac, [target]);
+  if (removalProblem) {
+    alert(removalProblem);
+    return;
+  }
   fac.mainQuals = (fac.mainQuals || []).filter(q => q.toUpperCase() !== target);
 
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   saveFacultyQualifications(fac);
 
-  const affected = MASTER_SCHEDULE_DATA.filter(c => c.instructor === fac.name && (c.subjectCode || '').toUpperCase() === target).length;
-  if (affected > 0) {
-    alert(`${fac.name} still has ${affected} ${target} class(es). They are marked as conflicts until reassigned, and schedule saves will be refused until then.`);
-  }
-
   renderFacultyCards();
   if (typeof renderGrid === 'function') renderGrid();
-  if (typeof renderGlobalScheduleTable === 'function') renderGlobalScheduleTable();
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -367,6 +382,46 @@ window.removeModalQual = function(code) {
   populateModalQualSelects();
 };
 
+const AVAILABILITY_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const AVAILABILITY_SHIFTS = [
+  { value: 'AM', label: 'AM', hours: '7:00 AM – 1:00 PM' },
+  { value: 'MIDSHIFT', label: 'Midshift', hours: '10:00 AM – 4:00 PM' },
+  { value: 'PM', label: 'PM', hours: '1:00 PM onward' }
+];
+
+function renderAvailabilityPicker(prefix, status, days = [], shifts = []) {
+  const option = (group, value, text, checked) =>
+    `<label class="availability-option"><input type="checkbox" data-group="${prefix}-${group}" value="${value}" ${checked ? 'checked' : ''} /> ${text}</label>`;
+  document.getElementById(`${prefix}Availability`).innerHTML = `
+    <div class="form-label">Available Days</div>
+    <div class="availability-options">${AVAILABILITY_DAYS.map(d => option('day', d, d, days.includes(d))).join('')}</div>
+    <div class="form-label" style="margin-top:10px;">Available Shifts</div>
+    <div class="availability-options">${AVAILABILITY_SHIFTS.map(s => option('shift', s.value, `${s.label} <small>${s.hours}</small>`, shifts.includes(s.value))).join('')}</div>
+  `;
+  toggleAvailabilityPicker(prefix, status);
+}
+
+window.toggleAvailabilityPicker = function(prefix, status) {
+  document.getElementById(`${prefix}Availability`).style.display = status === 'Part-time' ? 'block' : 'none';
+};
+
+function readAvailabilityPicker(prefix) {
+  const checked = group => [...document.querySelectorAll(`input[data-group="${prefix}-${group}"]:checked`)].map(i => i.value);
+  return { days: checked('day'), shifts: checked('shift') };
+}
+
+// Returns an error message, or null if this availability can be saved for the professor
+function availabilityFormProblem(name, status, picked) {
+  if (status !== 'Part-time') return null;
+  if (!picked.days.length || !picked.shifts.length) return 'Choose at least one day and one shift for a part-time professor.';
+  const { activeTerm } = getActiveAcademicContext();
+  const outside = MASTER_SCHEDULE_DATA.find(c => c.instructor === name && (!c.termId || c.termId === activeTerm.id)
+    && !isWithinAvailability(picked.days, picked.shifts, c.day, c.startTime, c.endTime));
+  return outside
+    ? `${name} teaches ${outside.subjectCode} on ${outside.day} at ${formatTime12(outside.startTime)}, outside this availability. Reassign that class first.`
+    : null;
+}
+
 window.openChangeFacultyDeptModal = function(identifier) {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
     alert('Access Denied: Only system administrators are authorized to edit faculty profiles.');
@@ -384,8 +439,6 @@ window.openChangeFacultyDeptModal = function(identifier) {
   renderModalQualBadges();
   populateModalQualSelects();
 
-  const nameDisplay = document.getElementById('changeFacultyDeptNameDisplay');
-  if (nameDisplay) nameDisplay.textContent = fac.name;
   const emailDisplay = document.getElementById('changeFacultyDeptEmailDisplay');
   if (emailDisplay) emailDisplay.textContent = `${fac.email} · Current Dept: ${fac.dept}`;
 
@@ -403,6 +456,7 @@ window.openChangeFacultyDeptModal = function(identifier) {
   if (statusSelect) {
     statusSelect.value = fac.status || 'Full-time';
   }
+  renderAvailabilityPicker('changeFaculty', fac.status || 'Full-time', fac.availableDays || [], fac.availableShifts || []);
 
   document.getElementById('changeFacultyDeptModal').style.display = 'flex';
 };
@@ -437,6 +491,20 @@ window.submitChangeFacultyDept = function() {
     return;
   }
 
+  const pickedAvailability = readAvailabilityPicker('changeFaculty');
+  const availabilityProblem = availabilityFormProblem(fac.name, document.getElementById('changeFacultyStatusSelect').value, pickedAvailability);
+  if (availabilityProblem) {
+    alert(availabilityProblem);
+    return;
+  }
+
+  const keptQuals = document.getElementById('changeFacultyMainQualsInput').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  const qualRemovalProblem = qualificationRemovalProblem(fac, (fac.mainQuals || []).filter(q => !keptQuals.includes(q.toUpperCase())));
+  if (qualRemovalProblem) {
+    alert(qualRemovalProblem);
+    return;
+  }
+
   const oldName = fac.name;
 
   // 1. Update faculty profile
@@ -445,6 +513,8 @@ window.submitChangeFacultyDept = function() {
   const statusSelect = document.getElementById('changeFacultyStatusSelect');
   const newStatus = statusSelect ? statusSelect.value : (fac.status || 'Full-time');
   fac.status = newStatus;
+  fac.availableDays = newStatus === 'Part-time' ? pickedAvailability.days : [];
+  fac.availableShifts = newStatus === 'Part-time' ? pickedAvailability.shifts : [];
   if (newStatus === 'Part-time' && fac.maxLoad > 18) {
     fac.maxLoad = 15;
   } else if (newStatus === 'Full-time' && fac.maxLoad < 20) {
@@ -454,6 +524,7 @@ window.submitChangeFacultyDept = function() {
   fac.mainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   saveFacultyQualifications(fac);
+  saveFacultyAvailability(fac);
 
   // 2. Update registered account in USERS list
   const user = USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -469,37 +540,12 @@ window.submitChangeFacultyDept = function() {
   }
 
   // 4. Update assigned timetable slots if name changed
-  if (oldName !== newName && typeof scheduleData !== 'undefined') {
-    Object.keys(scheduleData).forEach(roomCode => {
-      Object.keys(scheduleData[roomCode]).forEach(slotIdx => {
-        if (scheduleData[roomCode][slotIdx]?.faculty === oldName) {
-          scheduleData[roomCode][slotIdx].faculty = newName;
-        }
-      });
-    });
-  }
 
-  // Synchronize and re-evaluate MASTER_SCHEDULE_DATA assignments for this faculty member
+  // A renamed professor keeps their classes
   if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
     MASTER_SCHEDULE_DATA.forEach(c => {
       if (c.instructor === oldName) {
         c.instructor = newName;
-      }
-      if (c.instructor === newName) {
-        if (typeof checkFacultySubjectConflict === 'function') {
-          const conflict = checkFacultySubjectConflict(newName, c.subjectCode, c.section);
-          if (conflict) {
-            // Move the class to a teacher who has this subject in their qualifications
-            const targetCode = (c.subjectCode || '').toUpperCase();
-            const eligible = (typeof FACULTY !== 'undefined' ? FACULTY : []).filter(other => {
-              if (other.name === newName) return false;
-              return !checkFacultySubjectConflict(other.name, targetCode, c.section);
-            });
-            if (eligible.length > 0) {
-              c.instructor = eligible[0].name;
-            }
-          }
-        }
       }
     });
     queueScheduleSave();
@@ -530,16 +576,12 @@ window.submitChangeFacultyDept = function() {
       last_name: lastName,
       subject_role: newDept
     })
-  }).catch(err => {
-    console.log('[Database update offline/standalone mode]:', err);
-  });
+  }).catch(() => {});
 
   closeChangeFacultyDeptModal();
   renderFacultyCards();
   renderUserTable();
   renderGrid();
-  if (typeof renderTimetable === 'function') renderTimetable();
-  if (typeof renderGlobalScheduleTable === 'function') renderGlobalScheduleTable();
   renderDeptList();
   renderDeptFilterOptions();
 };
@@ -587,8 +629,9 @@ window.openAddFacultyModal = function() {
   });
 
   document.getElementById('newFacStatus').value = 'Full-time';
+  renderAvailabilityPicker('newFac', 'Full-time');
   document.getElementById('newFacMaxLoad').value = '24';
-  if (document.getElementById('newFacMainQuals')) document.getElementById('newFacMainQuals').value = '';
+  renderQualificationPicker();
 
   if (userSelect && userSelect.value) {
     window.handleFacultyUserDropdownChange(userSelect.value);
@@ -618,8 +661,9 @@ window.handleFacultyUserDropdownChange = function(email) {
   if (existingFac) {
     if (existingFac.dept) deptSelect.value = existingFac.dept;
     if (existingFac.status) document.getElementById('newFacStatus').value = existingFac.status;
+    renderAvailabilityPicker('newFac', existingFac.status || 'Full-time', existingFac.availableDays || [], existingFac.availableShifts || []);
     if (existingFac.maxLoad) document.getElementById('newFacMaxLoad').value = existingFac.maxLoad;
-    if (document.getElementById('newFacMainQuals')) document.getElementById('newFacMainQuals').value = (existingFac.mainQuals || []).join(', ');
+    renderQualificationPicker(existingFac.mainQuals || []);
   }
 };
 
@@ -648,11 +692,26 @@ window.submitAddFaculty = function() {
     alert(maxLoadProblem);
     return;
   }
+  const picked = readAvailabilityPicker('newFac');
+  const availabilityProblem = availabilityFormProblem(user.name, status, picked);
+  if (availabilityProblem) {
+    alert(availabilityProblem);
+    return;
+  }
+  const availableDays = status === 'Part-time' ? picked.days : [];
+  const availableShifts = status === 'Part-time' ? picked.shifts : [];
   const maxLoad = parseInt(document.getElementById('newFacMaxLoad').value, 10) || 24;
-  const mainQualsRaw = document.getElementById('newFacMainQuals')?.value.trim() || '';
-  const mainQuals = [...new Set(mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean))];
+  const mainQuals = [...document.querySelectorAll('input[data-group="newFac-qual"]:checked')].map(i => i.value);
 
   const existingFacIndex = FACULTY.findIndex(f => f.email.toLowerCase() === email.toLowerCase());
+  if (existingFacIndex >= 0) {
+    const removedQuals = (FACULTY[existingFacIndex].mainQuals || []).filter(q => !mainQuals.includes(q.toUpperCase()));
+    const removalProblem = qualificationRemovalProblem(FACULTY[existingFacIndex], removedQuals);
+    if (removalProblem) {
+      alert(removalProblem);
+      return;
+    }
+  }
   const colors = ['#25447A', '#2E7D5B', '#6C3483', '#C27A1A', '#2980B9', '#C0392B'];
 
   if (existingFacIndex >= 0) {
@@ -661,6 +720,8 @@ window.submitAddFaculty = function() {
     FACULTY[existingFacIndex].status = status;
     FACULTY[existingFacIndex].maxLoad = maxLoad;
     FACULTY[existingFacIndex].mainQuals = mainQuals;
+    FACULTY[existingFacIndex].availableDays = availableDays;
+    FACULTY[existingFacIndex].availableShifts = availableShifts;
   } else {
     // Create profile
     FACULTY.push({
@@ -668,9 +729,10 @@ window.submitAddFaculty = function() {
       email: user.email,
       dept,
       status,
-      load: Math.floor(maxLoad * 0.75),
       maxLoad,
       mainQuals,
+      availableDays,
+      availableShifts,
       bg: colors[Math.floor(Math.random() * colors.length)]
     });
   }
@@ -685,6 +747,7 @@ window.submitAddFaculty = function() {
 
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   saveFacultyQualifications({ email: user.email, mainQuals });
+  saveFacultyAvailability({ email: user.email, status, availableDays, availableShifts, maxLoad });
   closeAddFacultyModal();
   renderFacultyCards();
   renderUserTable();
@@ -728,15 +791,6 @@ window.confirmDeleteFacultyProfile = function() {
   saveFacultyQualifications({ email, mainQuals: [] });
   FACULTY = FACULTY.filter(f => !f.email || f.email.toLowerCase() !== email.toLowerCase());
   if (facName) {
-    if (typeof scheduleData !== 'undefined' && scheduleData) {
-      Object.keys(scheduleData).forEach(roomCode => {
-        Object.keys(scheduleData[roomCode]).forEach(slotIdx => {
-          if (scheduleData[roomCode][slotIdx]?.faculty === facName) {
-            delete scheduleData[roomCode][slotIdx];
-          }
-        });
-      });
-    }
     if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
       MASTER_SCHEDULE_DATA.forEach(c => {
         if (c.instructor === facName) c.instructor = 'TBA';
