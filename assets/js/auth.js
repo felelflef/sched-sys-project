@@ -47,8 +47,9 @@ window.fetch = async function(input, init = {}) {
   if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
 
   const res = await nativeFetch(input, { ...init, headers });
-  if (!res.ok) reportApiWriteFailure(res.clone());
-  else if (typeof handleApiWriteSaved === 'function') handleApiWriteSaved(url, init.body);
+  // quietFailure means the caller shows the error itself; an expired session is still handled here
+  if (!res.ok && (res.status === 401 || !init.quietFailure)) reportApiWriteFailure(res.clone());
+  else if (res.ok && typeof handleApiWriteSaved === 'function') handleApiWriteSaved(url, init.body);
   return res;
 };
 

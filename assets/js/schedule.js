@@ -43,6 +43,43 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+// Encodes a value for use as an argument inside an inline onclick attribute
+function jsArg(value) {
+  return escapeHtml(JSON.stringify(String(value ?? '')));
+}
+
+// Form checks matching includes/functions.php. Each returns an error message, or null if valid.
+const INPUT_RULES = {
+  name: (label, v) => /^\p{L}[\p{L}\p{M} .'\-]*$/u.test(v) ? null : `${label} can only contain letters, spaces, periods, apostrophes and hyphens.`,
+  code: (label, v) => /^[A-Za-z0-9][A-Za-z0-9 \-]*$/.test(v) ? null : `${label} can only contain letters, numbers, spaces and hyphens.`,
+  text: (label, v) => (/^[\p{L}\p{N}][\p{L}\p{M}\p{N} .,:;&\/()'+#\-]*$/u.test(v) && /\p{L}/u.test(v)) ? null : `${label} must contain a letter and only ordinary punctuation.`,
+  int: (label, raw, min, max) => {
+    const text = String(raw).trim();
+    const n = Number(text);
+    return text !== '' && Number.isInteger(n) && n >= min && n <= max ? null : `${label} must be a whole number from ${min} to ${max}.`;
+  },
+  hours: (label, raw) => {
+    const text = String(raw).trim();
+    const n = Number(text);
+    return text !== '' && n >= 0 && n <= 6 && Number.isInteger(n * 2) ? null : `${label} must be from 0 to 6, in steps of 0.5.`;
+  },
+  schoolYear: v => {
+    const m = /^AY (20\d{2})-(20\d{2})$/.exec(v);
+    return m && Number(m[2]) === Number(m[1]) + 1 ? null : 'School year must look like AY 2026-2027, and the second year must follow the first.';
+  },
+  password: v => {
+    if (v.length < 8) return 'Password must be at least 8 characters.';
+    if (v.length > 72) return 'Password must be 72 characters or fewer.';
+    return /[A-Za-z]/.test(v) && /\d/.test(v) ? null : 'Password must include at least one letter and one number.';
+  },
+  // Full names are stored as a first word and the remainder, each up to 50 characters
+  fullName: v => {
+    const [first, ...rest] = v.split(/\s+/);
+    if (first.length > 50 || rest.join(' ').length > 50) return 'First and last name must each be 50 characters or fewer.';
+    return INPUT_RULES.name('Full name', v);
+  }
+};
+
 /* ══════════════════════════════════════════════════════════════════════════
    STEP NAVIGATION CONTROLLER
    ══════════════════════════════════════════════════════════════════════════ */
@@ -257,6 +294,12 @@ function submitSchoolYearModal() {
 
   if (!codeVal) {
     alert('Please enter an academic school year code (e.g., AY 2026-2027).');
+    return;
+  }
+
+  const yearCodeProblem = INPUT_RULES.schoolYear(codeVal);
+  if (yearCodeProblem) {
+    alert(yearCodeProblem);
     return;
   }
 
@@ -723,6 +766,7 @@ function openAddCurriculumSubjectModal() {
   document.getElementById('curricSubjType').value = 'lecture';
   document.getElementById('curricSubjProgram').value = 'BSIT';
   document.getElementById('curricSubjYear').value = '1';
+  openSubjectFormProfessors('curricSubj', '');
   document.getElementById('manualSubjectModal').style.display = 'flex';
 }
 
@@ -739,6 +783,7 @@ function openEditCurriculumSubjectModal(id) {
   document.getElementById('curricSubjType').value = subj.type || 'lecture';
   document.getElementById('curricSubjProgram').value = subj.program || 'BSIT';
   document.getElementById('curricSubjYear').value = String(subj.year || 1);
+  openSubjectFormProfessors('curricSubj', subj.code);
   document.getElementById('manualSubjectModal').style.display = 'flex';
 }
 
@@ -760,6 +805,15 @@ function submitAddSubjectModal() {
 
   if (!code || !name) {
     alert('Please enter both subject code and subject name.');
+    return;
+  }
+
+  const curricProblem = INPUT_RULES.code('Subject code', code) || INPUT_RULES.text('Subject name', name)
+    || INPUT_RULES.int('Units', document.getElementById('curricSubjUnits').value, 1, 6)
+    || INPUT_RULES.hours('Lecture hours', document.getElementById('curricSubjLecHrs').value)
+    || INPUT_RULES.hours('Lab hours', document.getElementById('curricSubjLabHrs').value);
+  if (curricProblem) {
+    alert(curricProblem);
     return;
   }
 
@@ -804,7 +858,7 @@ function submitAddSubjectModal() {
   closeAddSubjectModal();
   renderSubjectOfferingTable();
 
-  fetch('api/schedules.php', {
+  const subjectSaved = fetch('api/schedules.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -823,6 +877,8 @@ function submitAddSubjectModal() {
       is_included: 1
     })
   }).catch(() => {});
+
+  saveSubjectFormProfessors('curricSubj', code, subjectSaved);
 }
 
 function deleteSubjectOffering(id) {
@@ -1158,6 +1214,13 @@ function executeQuickGenerateSections() {
   const count = parseInt(document.getElementById('quickSecCount').value, 10) || 2;
   const students = parseInt(document.getElementById('quickSecStudents').value, 10) || 38;
 
+  const quickProblem = INPUT_RULES.int('Number of sections', document.getElementById('quickSecCount').value, 1, 10)
+    || INPUT_RULES.int('Students per section', document.getElementById('quickSecStudents').value, 15, 50);
+  if (quickProblem) {
+    alert(quickProblem);
+    return;
+  }
+
   const advisers = ['Prof. Academic Head', 'Prof. Program Head', 'Prof. Faculty Member', 'Engr. Faculty Member'];
   const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -1273,6 +1336,17 @@ function submitAutoGenerateSections() {
   } else {
     countPerGroup = parseInt(document.getElementById('autoGenDirectCount')?.value, 10) || 3;
     studentsPerSec = parseInt(document.getElementById('autoGenDirectStudents')?.value, 10) || 35;
+  }
+
+  const autoGenValue = id => document.getElementById(id)?.value ?? '';
+  const autoGenProblem = isProj
+    ? INPUT_RULES.int('Total students', autoGenValue('autoGenTotalStudents'), 15, 1000)
+      || INPUT_RULES.int('Maximum students per section', autoGenValue('autoGenMaxStudentsPerSec'), 20, 60)
+    : INPUT_RULES.int('Number of sections', autoGenValue('autoGenDirectCount'), 1, 10)
+      || INPUT_RULES.int('Students per section', autoGenValue('autoGenDirectStudents'), 15, 60);
+  if (autoGenProblem || countPerGroup > 26) {
+    alert(autoGenProblem || `This would create ${countPerGroup} sections per group. The limit is 26, so please raise the maximum students per section.`);
+    return;
   }
 
   const targetProgs = progVal === 'all' ? ['BSIT', 'BSCS', 'BSCpE', 'BSHM', 'BSTM', 'BSBA'] : [progVal];
@@ -1419,8 +1493,10 @@ function submitSectionModal() {
     return;
   }
 
-  if (document.getElementById('secStudentsInput').value.trim() !== '' && parseInt(document.getElementById('secStudentsInput').value, 10) < 1) {
-    alert('Student count must be at least 1.');
+  const sectionProblem = INPUT_RULES.code('Section code', code) || INPUT_RULES.text('Section name', name)
+    || INPUT_RULES.int('Student count', document.getElementById('secStudentsInput').value, 1, 60);
+  if (sectionProblem) {
+    alert(sectionProblem);
     return;
   }
 
@@ -1505,8 +1581,14 @@ function submitSplitSection() {
   const sec = ACADEMIC_SECTIONS.find(s => s.id === secId);
   if (!sec) return;
 
-  if (splitCount <= 0 || splitCount >= sec.studentCount) {
+  if (!(splitCount > 0) || splitCount >= sec.studentCount) {
     alert(`Split count must be between 1 and ${sec.studentCount - 1}.`);
+    return;
+  }
+
+  const splitProblem = (newCode && INPUT_RULES.code('Section code', newCode)) || (newName && INPUT_RULES.text('Section name', newName));
+  if (splitProblem) {
+    alert(splitProblem);
     return;
   }
 
@@ -1584,6 +1666,11 @@ function submitMergeSections() {
   const sec2 = ACADEMIC_SECTIONS.find(s => s.id === secId);
 
   if (!sec1 || !sec2) return;
+
+  if (sec1.studentCount + sec2.studentCount > 60) {
+    alert(`Merging would make ${sec1.studentCount + sec2.studentCount} students. A section can have at most 60.`);
+    return;
+  }
 
   sec1.studentCount += sec2.studentCount;
   // Re-link any schedules from sec2 to sec1
@@ -2044,7 +2131,7 @@ function updateSectionDropdown() {
   }
 
   secSelect.innerHTML = list.map(s => `
-    <option value="${s.code}" ${s.code === currentSelectedSection ? 'selected' : ''}>
+    <option value="${escapeHtml(s.code)}" ${s.code === currentSelectedSection ? 'selected' : ''}>
       ${escapeHtml(s.code)} (${escapeHtml(s.name)})
     </option>
   `).join('');
@@ -2059,7 +2146,7 @@ function updateRoomDropdown() {
   if (!roomSelect) return;
 
   roomSelect.innerHTML = ROOMS.map(r => `
-    <option value="${r.code}" ${r.code === currentSelectedRoom ? 'selected' : ''}>
+    <option value="${escapeHtml(r.code)}" ${r.code === currentSelectedRoom ? 'selected' : ''}>
       ${escapeHtml(r.code)} (${escapeHtml(r.type)}, Cap: ${r.cap})
     </option>
   `).join('');
@@ -2070,7 +2157,7 @@ function updateTeacherDropdown() {
   if (!teacherSelect) return;
 
   teacherSelect.innerHTML = FACULTY.map(f => `
-    <option value="${f.name}" ${f.name === currentSelectedTeacher ? 'selected' : ''}>
+    <option value="${escapeHtml(f.name)}" ${f.name === currentSelectedTeacher ? 'selected' : ''}>
       ${escapeHtml(f.name)} (${escapeHtml(f.dept || 'IT')})
     </option>
   `).join('');
@@ -2317,7 +2404,7 @@ function renderGrid() {
               title="${escapeHtml(item.subjectCode)}: ${escapeHtml(item.subjectTitle || '')} (${formatTime12(item.startTime)} – ${formatTime12(item.endTime)})">
             <div class="class-cell-inner">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
-                <span class="class-sec-badge">${escapeHtml(item.section)}</span>
+                <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}</span>
                 <button class="cell-quick-edit-btn" onclick="event.stopPropagation(); openEditClassScheduleModal('${item.id}')" title="Edit Subject or Time">✏️</button>
               </div>
               <span class="class-subj-title">${escapeHtml(item.subjectCode)}</span>
@@ -2413,7 +2500,7 @@ function showClassDetails(classId) {
         <div style="font-size:13.5px; color:var(--text-secondary); margin-top:2px;">${escapeHtml(item.subjectTitle || 'No title available')}</div>
       </div>
       <span class="badge" style="background:#EEF1F7; color:var(--accent-primary); font-weight:700; font-size:11.5px; text-transform:uppercase;">
-        ${escapeHtml(item.type || 'Lecture')}
+        ${escapeHtml(item.type || 'Lecture')}${item.aiPlaced ? ' · Placed by AI' : ''}
       </span>
     </div>
 
@@ -2430,7 +2517,7 @@ function showClassDetails(classId) {
         <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Classroom</div>
         <div style="font-weight:700; color:var(--text-primary); margin-top:2px; display:flex; align-items:center; gap:6px;">
           <span>${escapeHtml(item.room)}</span>
-          <button class="btn btn-outline" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px; font-weight:600;" onclick="viewRoomOnCampusMap('${escapeHtml(item.room)}')">
+          <button class="btn btn-outline" style="font-size:10.5px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px; font-weight:600;" onclick="viewRoomOnCampusMap(${jsArg(item.room)})">
             📍 Map ↗
           </button>
         </div>
@@ -2599,6 +2686,12 @@ function submitEditClassSchedule() {
 
   if (!subjCode) {
     if (errDiv) { errDiv.textContent = 'Subject is required.'; errDiv.style.display = 'block'; }
+    return;
+  }
+
+  const classSectionProblem = INPUT_RULES.code('Section', section || '');
+  if (classSectionProblem) {
+    if (errDiv) { errDiv.textContent = classSectionProblem; errDiv.style.display = 'block'; }
     return;
   }
 

@@ -684,7 +684,7 @@
                 <button class="btn btn-outline" id="btnGenerateAi" onclick="openAiDraftModal()" style="font-size:12px; padding:6px 14px;">Generate with AI</button>
                 <button class="btn btn-primary" id="btnGenerate" onclick="openConfirmRegenerateModal()" style="font-size:12px; padding:6px 14px;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                  Generate Schedule
+                  Quick Generate
                 </button>
               </div>
             </div>
@@ -756,6 +756,7 @@
                 <div class="legend-item"><span class="legend-swatch lecture"></span> Lecture</div>
                 <div class="legend-item"><span class="legend-swatch lab"></span> Laboratory</div>
                 <div class="legend-item"><span class="legend-swatch pe"></span> PE / Special / NSTP</div>
+                <div class="legend-item"><span class="class-ai-badge" style="margin-left:0;">AI</span> Placed by AI</div>
               </div>
             </div>
           </div>
@@ -1033,6 +1034,7 @@
                       <th>Subject Title</th>
                       <th style="width:170px;">Department</th>
                       <th style="width:230px;">Teaching Eligibility</th>
+                      <th style="width:260px;">Qualified Professors</th>
                       <th style="width:80px; text-align:center;">Units</th>
                       <th style="width:140px; text-align:right;">Actions</th>
                     </tr>
@@ -1599,26 +1601,20 @@
         </div>
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Academic Department</label>
-          <select id="subjectDeptSelect" class="form-input" onchange="handleSubjectDeptChange(this.value)">
+          <select id="subjectDeptSelect" class="form-input">
             <!-- Populated dynamically with DEPARTMENTS -->
           </select>
         </div>
-        <div class="form-group" style="margin-bottom:0; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; padding:12px 14px;">
-          <label class="form-label" style="margin-bottom:6px; font-weight:700;">Teaching Eligibility Constraint</label>
-          <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-size:13px; color:var(--text-primary); margin-bottom:8px;">
-            <input type="radio" name="subjectEligibility" id="eligibilityITOnly" value="it-only" checked style="margin-top:2px;" />
-            <div>
-              <strong>💻 IT / CS Professor Only Class</strong>
-              <div style="font-size:11.5px; color:var(--text-secondary);">Restricted: only professors from the IT / CS department are eligible to teach this class.</div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label class="form-label" for="subjectProfSelect" style="font-weight:600; font-size:13px; margin:0; color:#0369a1;">★ Main Qualification</label>
+            <div id="subjectProfAddRow" style="display:flex; gap:6px; align-items:center;">
+              <select id="subjectProfSelect" class="form-input" style="font-size:11.5px; padding:2px 6px; height:26px; max-width:180px;"></select>
+              <button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 8px; height:26px; color:#0369a1; border-color:#bae6fd;" onclick="addSubjectFormProfessor('subject')">+ Add</button>
             </div>
-          </label>
-          <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-size:13px; color:var(--text-primary);">
-            <input type="radio" name="subjectEligibility" id="eligibilityOther" value="other" style="margin-top:2px;" />
-            <div>
-              <strong>🌐 Other Department / Open Class</strong>
-              <div style="font-size:11.5px; color:var(--text-secondary);">General/interdisciplinary or assigned to the designated non-IT academic department.</div>
-            </div>
-          </label>
+          </div>
+          <div id="subjectProfBadges" style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; padding:6px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:4px;"></div>
+          <span style="font-size:11px; color:var(--text-secondary); display:block;">The professors allowed to teach this subject</span>
         </div>
       </div>
       <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
@@ -1883,6 +1879,17 @@
             </select>
           </div>
         </div>
+        <div class="form-group" style="margin:14px 0 0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label class="form-label" for="curricSubjProfSelect" style="font-weight:600; font-size:13px; margin:0; color:#0369a1;">★ Main Qualification</label>
+            <div id="curricSubjProfAddRow" style="display:flex; gap:6px; align-items:center;">
+              <select id="curricSubjProfSelect" class="form-input" style="font-size:11.5px; padding:2px 6px; height:26px; max-width:180px;"></select>
+              <button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 8px; height:26px; color:#0369a1; border-color:#bae6fd;" onclick="addSubjectFormProfessor('curricSubj')">+ Add</button>
+            </div>
+          </div>
+          <div id="curricSubjProfBadges" style="display:flex; flex-wrap:wrap; gap:6px; min-height:32px; padding:6px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:4px;"></div>
+          <span style="font-size:11px; color:var(--text-secondary); display:block;">The professors allowed to teach this subject. This applies to this subject code in every program.</span>
+        </div>
       </div>
       <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
         <button class="btn btn-outline" onclick="closeAddSubjectModal()">Cancel</button>
@@ -2048,7 +2055,7 @@
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFFBEB;">
         <div style="display:flex; align-items:center; gap:8px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <h3 style="margin:0; font-size:16px; font-weight:800; color:#92400E;">Generate Master Schedule?</h3>
+          <h3 style="margin:0; font-size:16px; font-weight:800; color:#92400E;">Quick Generate Schedule?</h3>
         </div>
         <button onclick="closeConfirmRegenerateModal()" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
       </div>
@@ -2058,7 +2065,7 @@
       </div>
       <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
         <button class="btn btn-outline" onclick="closeConfirmRegenerateModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="executeGenerateBaseline()" style="background:#25447A; border-color:#25447A;">Yes, Generate Schedule</button>
+        <button class="btn btn-primary" onclick="executeGenerateBaseline()" style="background:#25447A; border-color:#25447A;">Yes, Quick Generate</button>
       </div>
     </div>
   </div>

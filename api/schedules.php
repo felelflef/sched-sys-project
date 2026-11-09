@@ -46,7 +46,7 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
         if (strlen($start) === 5) $start .= ':00';
         if (strlen($end) === 5) $end .= ':00';
 
-        $validTimes = preg_match('/^\d{2}:\d{2}:\d{2}$/', $start) && preg_match('/^\d{2}:\d{2}:\d{2}$/', $end) && $start < $end;
+        $validTimes = isValidClassTime($start, $end);
         if ($subCode === '' || $secName === '' || !in_array($day, $validDays, true) || !$validTimes) {
             jsonResponse(['success' => false, 'message' => "Class '{$subCode}' for section '{$secName}' has invalid details. No changes were made."], 400);
         }
@@ -58,7 +58,7 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
         }
 
         $rowTermId = $termId ?: (int)($item['termId'] ?? 0);
-        $rows[] = [$rowTermId ?: null, $roomId, $facultyId, $subCode, $subCat, $secName, $day, $start, $end];
+        $rows[] = [$rowTermId ?: null, $roomId, $facultyId, $subCode, $subCat, $secName, $day, $start, $end, empty($item['aiPlaced']) ? 0 : 1];
     }
     return $rows;
 }
@@ -92,10 +92,18 @@ function insertQualifications(PDO $db, int $userId, array $subjects): void {
     }
 }
 
+function requireTermExists(PDO $db, int $termId): void {
+    $find = $db->prepare("SELECT COUNT(*) FROM school_terms WHERE term_id = ?");
+    $find->execute([$termId]);
+    if (!(int)$find->fetchColumn()) {
+        jsonResponse(['success' => false, 'message' => 'That school term no longer exists. Please reload and try again.'], 400);
+    }
+}
+
 function insertScheduleRows(PDO $db, array $rows): void {
     $ins = $db->prepare("
-        INSERT INTO schedules (term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO schedules (term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time, ai_generated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     foreach ($rows as $row) {
         $ins->execute($row);
@@ -441,9 +449,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'Subject code, title and department are required.'], 400);
         }
         requireFieldLengths(['Subject code' => [$code, 20], 'Subject title' => [$title, 100], 'Department' => [$department, 100]]);
-        if ((int)($input['units'] ?? 3) < 1) {
-            jsonResponse(['success' => false, 'message' => 'Units must be at least 1.'], 400);
-        }
+        requireValidCode('Subject code', $code);
+        requireValidText('Subject title', $title);
+        requireKnownDepartment($db, $department);
+        requireIntInRange('Units', $input['units'] ?? 3, 1, 6);
         $stmt = $db->prepare("
             INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units) VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE subject_title = VALUES(subject_title), department = VALUES(department), it_only = VALUES(it_only), units = VALUES(units)
@@ -474,6 +483,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
 
         $existing = $db->query("SELECT department_name FROM departments")->fetchAll(PDO::FETCH_COLUMN);
+        // Only new names are checked, so an older department can't block other changes
+        foreach (array_diff($names, $existing) as $name) {
+            requireFieldLengths(['Department' => [$name, 50]]);
+            requireValidText('Department', $name);
+        }
         $db->beginTransaction();
         $moveSubjects = $db->prepare("UPDATE subject_catalog SET department = ? WHERE department = ?");
         $moveUsers = $db->prepare("UPDATE users SET subject_role = ? WHERE subject_role = ?");
@@ -504,6 +518,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $terms = is_array($input['terms'] ?? null) ? $input['terms'] : [];
 
         requireFieldLengths(['School year code' => [$year_code, 50]]);
+        requireValidSchoolYear($year_code);
         foreach ($terms as $t) {
             if (!in_array($t['termName'] ?? '', ['1st Sem', '2nd Sem', 'Summer'], true)
                 || !isValidDate($t['startDate'] ?? null) || !isValidDate($t['endDate'] ?? null)
@@ -589,6 +604,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'The term end date must be after its start date.'], 400);
         }
 
+        if ($term_id <= 0) {
+            $findYear = $db->prepare("SELECT COUNT(*) FROM school_years WHERE year_id = ?");
+            $findYear->execute([$year_id]);
+            if (!(int)$findYear->fetchColumn()) {
+                jsonResponse(['success' => false, 'message' => 'That school year no longer exists. Please reload and try again.'], 400);
+            }
+        }
+
         if ($term_id > 0) {
             // Status and date edits don't send is_active, so only change it when provided.
             if (array_key_exists('is_active', $input)) {
@@ -641,8 +664,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'Subject code and title are required'], 400);
         }
         requireFieldLengths(['Subject code' => [$subject_code, 20], 'Subject name' => [$subject_name, 100], 'Program' => [$program, 20], 'Curriculum' => [$curriculum, 50]]);
-        if ($units < 1 || $year_level < 1 || $lecture_hours < 0 || $lab_hours < 0 || $lecture_hours > 99 || $lab_hours > 99) {
-            jsonResponse(['success' => false, 'message' => 'Units, year level and hours must be valid positive numbers.'], 400);
+        requireValidCode('Subject code', $subject_code);
+        requireValidText('Subject name', $subject_name);
+        requireValidText('Curriculum', $curriculum);
+        requireValidProgram($program);
+        requireIntInRange('Units', $units, 1, 6);
+        requireIntInRange('Year level', $year_level, 1, 4);
+        requireValidHours('Lecture hours', $lecture_hours);
+        requireValidHours('Lab hours', $lab_hours);
+        if ($subject_id <= 0) {
+            requireTermExists($db, $term_id);
         }
 
         if ($subject_id > 0) {
@@ -693,8 +724,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'Section code and name are required'], 400);
         }
         requireFieldLengths(['Section code' => [$section_code, 20], 'Section name' => [$section_name, 50], 'Program' => [$program, 20], 'Adviser' => [$adviser, 100]]);
-        if ($student_count < 1 || $year_level < 1) {
-            jsonResponse(['success' => false, 'message' => 'Student count and year level must be at least 1.'], 400);
+        requireValidCode('Section code', $section_code);
+        requireValidText('Section name', $section_name);
+        requireValidProgram($program);
+        requireIntInRange('Student count', $student_count, 1, 60);
+        requireIntInRange('Year level', $year_level, 1, 4);
+        if ($adviser !== '') {
+            requireValidName('Adviser', $adviser);
+        }
+        if ($section_id <= 0) {
+            requireTermExists($db, $term_id);
         }
 
         // An edit stays in the section's own term
@@ -738,6 +777,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         if ($row1 && $row2) {
             $mergedCount = $row1['student_count'] + $row2['student_count'];
+            if ($mergedCount > 60) {
+                jsonResponse(['success' => false, 'message' => "Merging would make {$mergedCount} students. A section can have at most 60."], 400);
+            }
             $stmt = $db->prepare("UPDATE academic_sections SET student_count = ? WHERE section_id = ?");
             $stmt->execute([$mergedCount, $sec1_id]);
 
@@ -769,6 +811,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'Split count must be between 1 and ' . ($sec['student_count'] - 1)], 400);
         }
 
+        if ($new_code !== '') {
+            requireValidCode('Section code', $new_code);
+        }
+        if ($new_name !== '') {
+            requireValidText('Section name', $new_name);
+        }
         $splitCode = $new_code ?: $sec['section_code'] . '-B';
         requireFieldLengths(['Section code' => [$splitCode, 20], 'Section name' => [$new_name ?: $sec['section_name'] . ' (Split)', 50]]);
         $dupSection = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ?");
@@ -793,12 +841,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $student_count = (int)($input['students_per_section'] ?? 35);
         $term_id = (int)($input['term_id'] ?? 1);
 
-        if ($sec_count < 1 || $sec_count > 26 || $student_count < 1) {
-            jsonResponse(['success' => false, 'message' => 'Enter between 1 and 26 sections, with at least 1 student each.'], 400);
+        if ($sec_count < 1 || $sec_count > 26 || $student_count < 1 || $student_count > 60) {
+            jsonResponse(['success' => false, 'message' => 'Enter between 1 and 26 sections, with 1 to 60 students each.'], 400);
         }
         foreach ($programs as $prog) {
-            requireFieldLengths(['Program' => [$prog, 20]]);
+            requireValidProgram($prog);
         }
+        foreach ($years as $yr) {
+            requireIntInRange('Year level', $yr, 1, 4);
+        }
+        requireTermExists($db, $term_id);
 
         $letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
         $advisers = ['Prof. Academic Head', 'Prof. Program Head', 'Prof. Faculty Member', 'Engr. Faculty Member'];
@@ -896,6 +948,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $validDays = ['Mon','Tue','Wed','Thu','Fri','Sat'];
         if (!in_array($day_of_week, $validDays)) {
             jsonResponse(['success' => false, 'message' => 'Invalid day of week'], 400);
+        }
+
+        if (strlen((string)$start_time) === 5) $start_time .= ':00';
+        if (strlen((string)$end_time) === 5) $end_time .= ':00';
+        if (!isValidClassTime((string)$start_time, (string)$end_time)) {
+            jsonResponse(['success' => false, 'message' => 'Class times must be in order and between 7:00 AM and 8:30 PM.'], 400);
         }
 
         // Validate Faculty Subject Role Restriction

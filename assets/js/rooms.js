@@ -45,10 +45,10 @@ function renderRoomTable() {
     }
 
     const actionButtons = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="viewRoomOnCampusMap('${room.code}')">View on Map</button>
-         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditRoomModal('${room.code}')">Edit</button>
-         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteRoom('${room.code}')">Remove</button>`
-      : `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px;" onclick="viewRoomOnCampusMap('${room.code}')">View on Map</button>`;
+      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="viewRoomOnCampusMap(${jsArg(room.code)})">View on Map</button>
+         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditRoomModal(${jsArg(room.code)})">Edit</button>
+         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteRoom(${jsArg(room.code)})">Remove</button>`
+      : `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px;" onclick="viewRoomOnCampusMap(${jsArg(room.code)})">View on Map</button>`;
 
     tr.innerHTML = `
       <td style="font-weight:700;">${escapeHtml(room.code)}</td>
@@ -115,6 +115,12 @@ window.submitRoomForm = function() {
 
   if (!code || isNaN(cap) || cap < 1) {
     alert('Please provide a valid room code and positive capacity.');
+    return;
+  }
+
+  const roomProblem = INPUT_RULES.code('Room code', code) || INPUT_RULES.int('Capacity', document.getElementById('roomCapInput').value, 1, 100);
+  if (roomProblem) {
+    alert(roomProblem);
     return;
   }
 

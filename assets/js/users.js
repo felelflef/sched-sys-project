@@ -31,9 +31,9 @@ function renderUserTable() {
     } else if (isAdmin) {
       actionCellHtml = `
         <div style="display:inline-flex; gap:4px; align-items:center;">
-          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openEditUserModal('${u.email}')">Edit</button>
-          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openResetPasswordModal('${u.email}')">Reset Password</button>
-          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8; cursor:pointer;" onclick="window.promptDeleteUser('${u.email}')">Remove</button>
+          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openEditUserModal(${jsArg(u.email)})">Edit</button>
+          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openResetPasswordModal(${jsArg(u.email)})">Reset Password</button>
+          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8; cursor:pointer;" onclick="window.promptDeleteUser(${jsArg(u.email)})">Remove</button>
         </div>
       `;
     } else {
@@ -101,7 +101,9 @@ window.closeAddUserModal = function() {
   document.getElementById('addUserModal').style.display = 'none';
 };
 
-window.submitAddUser = function() {
+let addUserSaving = false;
+
+window.submitAddUser = async function() {
   const errDiv = document.getElementById('addUserError');
   if (errDiv) errDiv.style.display = 'none';
 
@@ -113,6 +115,11 @@ window.submitAddUser = function() {
 
   if (!name) {
     showAddUserError('Please enter the full name.');
+    return;
+  }
+  const nameProblem = INPUT_RULES.fullName(name);
+  if (nameProblem) {
+    showAddUserError(nameProblem);
     return;
   }
   if (!email) {
@@ -127,12 +134,16 @@ window.submitAddUser = function() {
     showAddUserError('Only @sti.edu institutional email addresses are permitted.');
     return;
   }
+  if (!/^[a-z0-9._-]+@sti\.edu$/.test(email)) {
+    showAddUserError('Email can only use letters, numbers, dots, hyphens and underscores before @sti.edu.');
+    return;
+  }
 
   // The blank-password default only applies to the local demo mode
   if (!password && IS_STANDALONE) {
     password = 'password';
-  } else if (password.length < 8) {
-    showAddUserError('Password must be at least 8 characters.');
+  } else if (INPUT_RULES.password(password)) {
+    showAddUserError(INPUT_RULES.password(password));
     return;
   }
 
@@ -153,30 +164,38 @@ window.submitAddUser = function() {
   const firstName = parts[0];
   const lastName = parts.slice(1).join(' ') || parts[0];
 
-  fetch('/api/users.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'add',
-      first_name: firstName,
-      last_name: lastName,
-      email: email,
-      password: password,
-      role: role,
-      subject_role: dept
-    })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      console.log('[MySQL DB] User created successfully with ID:', data.user_id);
-    } else {
-      console.warn('[MySQL DB] User notice:', data.message);
+  // The account is only shown once the server has actually saved it
+  if (!IS_STANDALONE) {
+    if (addUserSaving) return;
+    addUserSaving = true;
+    let data;
+    try {
+      const res = await fetch('/api/users.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        quietFailure: true,
+        body: JSON.stringify({
+          action: 'add',
+          first_name: firstName,
+          last_name: lastName,
+          email: email,
+          password: password,
+          role: role,
+          subject_role: dept
+        })
+      });
+      data = await res.json();
+    } catch (err) {
+      showAddUserError('Could not reach the server, so the account was not created.');
+      return;
+    } finally {
+      addUserSaving = false;
     }
-  })
-  .catch(err => {
-    console.log('[Database persistence offline/standalone mode]:', err);
-  });
+    if (!data.success) {
+      showAddUserError(data.message || 'The account could not be created.');
+      return;
+    }
+  }
 
   const status = document.getElementById('newUserStatus')?.value || 'Full-time';
 
@@ -272,6 +291,11 @@ window.submitEditUser = function() {
 
   if (!email || !newName) {
     alert('Please enter a valid user name.');
+    return;
+  }
+  const editNameProblem = INPUT_RULES.fullName(newName);
+  if (editNameProblem) {
+    alert(editNameProblem);
     return;
   }
 
@@ -388,8 +412,9 @@ window.submitPasswordModal = async function() {
   const currentPassword = document.getElementById('currentPasswordInput').value;
   const newPassword = document.getElementById('newPasswordInput').value;
 
-  if (newPassword.length < 8) {
-    showError('Password must be at least 8 characters.');
+  const newPasswordProblem = INPUT_RULES.password(newPassword);
+  if (newPasswordProblem) {
+    showError(newPasswordProblem);
     return;
   }
   if (newPassword !== document.getElementById('confirmPasswordInput').value) {

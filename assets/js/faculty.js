@@ -52,22 +52,20 @@ function renderFacultyCards() {
 
   filtered.forEach(fac => {
     const initials = fac.name.split(' ').filter(w => w.length > 1).map(w => w[0]).join('').slice(0,2);
-    const loadPct = Math.round((fac.load / fac.maxLoad) * 100);
-    const loadColor = loadPct >= 100 ? 'var(--danger)' : loadPct >= 80 ? 'var(--warning)' : 'var(--success)';
 
     const mainList = fac.mainQuals || [];
     const safeEmailId = fac.email.replace(/[^a-zA-Z0-9]/g, '_');
 
     const mainQualsHtml = mainList.length > 0
       ? mainList.map(q => {
-          const removeBtn = isAdmin ? `<span onclick="removeFacultyQual('${escapeHtml(fac.email)}', 'main', '${escapeHtml(q)}', event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(q)}">✕</span>` : '';
+          const removeBtn = isAdmin ? `<span onclick="removeFacultyQual(${jsArg(fac.email)}, 'main', ${jsArg(q)}, event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(q)}">✕</span>` : '';
           return `<span class="qual-tag locked" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center;" title="Allowed to teach this subject">★ ${escapeHtml(q)}${removeBtn}</span>`;
         }).join('')
       : `<span style="font-size:11px; color:var(--danger); font-style:italic;">None: cannot be assigned any classes</span>`;
 
     const facultyActionBtns = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal('${fac.email}')">Edit Profile</button>
-         <button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteFaculty('${fac.email}')">Remove</button>`
+      ? `<button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal(${jsArg(fac.email)})">Edit Profile</button>
+         <button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteFaculty(${jsArg(fac.email)})">Remove</button>`
       : ``;
 
     const card = document.createElement('div');
@@ -83,19 +81,11 @@ function renderFacultyCards() {
             ${facultyActionBtns}
           </div>
         </div>
-        <span class="badge" style="background:${loadColor}20; color:${loadColor}; border:1px solid ${loadColor}40; font-size:11px;">${loadPct}% Load</span>
       </div>
       <div class="faculty-body">
-        <div class="faculty-meta-row">
-          <span class="faculty-meta-label">Current Load</span>
-          <span class="faculty-meta-value">${fac.load} / ${fac.maxLoad} hrs</span>
-        </div>
-        <div style="height:6px; background:#ECEEF2; border-radius:3px; overflow:hidden; margin-bottom:14px;">
-          <div style="height:100%; width:${loadPct}%; background:${loadColor}; border-radius:3px; transition:width 0.6s ease;"></div>
-        </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; margin-bottom:4px;">
           <span class="faculty-meta-label" style="margin:0; font-weight:700; color:#0369a1;">★ Main Qualifications</span>
-          ${isAdmin ? `<button class="btn btn-outline" style="font-size:11px; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px; color:#0369a1; border-color:#bae6fd;" onclick="toggleAddQualDropdown('${escapeHtml(fac.email)}', 'main', event)" title="Add Subject Qualification">+ Add</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline" style="font-size:11px; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px; color:#0369a1; border-color:#bae6fd;" onclick="toggleAddQualDropdown(${jsArg(fac.email)}, 'main', event)" title="Add Subject Qualification">+ Add</button>` : ''}
         </div>
         <div id="addQualContainer-${safeEmailId}-main" style="display:none; margin-bottom:8px;"></div>
         <div class="qual-tags">${mainQualsHtml}</div>
@@ -158,8 +148,8 @@ window.toggleAddQualDropdown = function(email, type, event) {
         <option value="">-- Choose Subject to Add --</option>
         ${availableSubjs.map(s => `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} — ${escapeHtml(s.title)} (${escapeHtml(s.dept || 'General')})</option>`).join('')}
       </select>
-      <button class="btn btn-primary" style="font-size:11px; padding:3px 10px; height:28px; line-height:1;" onclick="confirmAddFacultyQual('${escapeHtml(fac.email)}', '${type}')">Add</button>
-      <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; height:28px; line-height:1;" onclick="closeAddQualDropdown('${escapeHtml(fac.email)}', '${type}')">✕</button>
+      <button class="btn btn-primary" style="font-size:11px; padding:3px 10px; height:28px; line-height:1;" onclick="confirmAddFacultyQual(${jsArg(fac.email)}, '${type}')">Add</button>
+      <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; height:28px; line-height:1;" onclick="closeAddQualDropdown(${jsArg(fac.email)}, '${type}')">✕</button>
     </div>
   `;
   container.style.display = 'block';
@@ -269,6 +259,11 @@ window.addDepartment = function() {
     alert('Please enter a department name.');
     return;
   }
+  const deptProblem = name.length > 50 ? 'Department must be 50 characters or fewer.' : INPUT_RULES.text('Department', name);
+  if (deptProblem) {
+    alert(deptProblem);
+    return;
+  }
   if (DEPARTMENTS.some(d => d.toLowerCase() === name.toLowerCase())) {
     alert('This department already exists.');
     return;
@@ -332,7 +327,7 @@ function renderModalQualBadges() {
   container.innerHTML = quals.map(q => {
     return `<span class="qual-tag" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px;">
       ★ ${escapeHtml(q)}
-      <span onclick="removeModalQual('${escapeHtml(q)}')" style="cursor:pointer; font-weight:800; opacity:0.6; margin-left:4px;" title="Remove ${escapeHtml(q)}">✕</span>
+      <span onclick="removeModalQual(${jsArg(q)})" style="cursor:pointer; font-weight:800; opacity:0.6; margin-left:4px;" title="Remove ${escapeHtml(q)}">✕</span>
     </span>`;
   }).join('');
 }
@@ -428,6 +423,11 @@ window.submitChangeFacultyDept = function() {
 
   if (!newName) {
     alert('Please enter a valid faculty name.');
+    return;
+  }
+  const facultyNameProblem = INPUT_RULES.fullName(newName);
+  if (facultyNameProblem) {
+    alert(facultyNameProblem);
     return;
   }
 
@@ -643,6 +643,11 @@ window.submitAddFaculty = function() {
 
   const dept = document.getElementById('newFacDept').value;
   const status = document.getElementById('newFacStatus').value;
+  const maxLoadProblem = INPUT_RULES.int('Max load', document.getElementById('newFacMaxLoad').value, 6, 30);
+  if (maxLoadProblem) {
+    alert(maxLoadProblem);
+    return;
+  }
   const maxLoad = parseInt(document.getElementById('newFacMaxLoad').value, 10) || 24;
   const mainQualsRaw = document.getElementById('newFacMainQuals')?.value.trim() || '';
   const mainQuals = [...new Set(mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean))];
