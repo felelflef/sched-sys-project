@@ -74,6 +74,10 @@ function getDB(): PDO {
                     if (!$checkTerm) {
                         $pdo->exec("ALTER TABLE schedules ADD COLUMN term_id INT NULL, ADD INDEX idx_schedules_term_day (term_id, day_of_week)");
                     }
+                    $checkAiFlag = $pdo->query("SHOW COLUMNS FROM schedules LIKE 'ai_generated'")->fetch();
+                    if (!$checkAiFlag) {
+                        $pdo->exec("ALTER TABLE schedules ADD COLUMN ai_generated TINYINT(1) NOT NULL DEFAULT 0");
+                    }
                     $checkRole = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
                     if ($checkRole && strpos($checkRole['Type'], 'academic-head') === false) {
                         $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'academic-head', 'program-head', 'faculty') NOT NULL");

@@ -8,7 +8,7 @@
 const RELOAD_AFTER_ACTIONS = new Set([
   'save_school_year', 'save_term_subject', 'save_section',
   'split_section', 'merge_sections', 'auto_generate_sections',
-  'delete_catalog_subject', 'save_departments'
+  'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications'
 ]);
 const MAX_DB_INT = 2147483647;
 
@@ -37,7 +37,8 @@ function mapServerClass(row, sections, subjects) {
     instructor: row.faculty_name,
     day: row.day_of_week,
     startTime: String(row.start_time).slice(0, 5),
-    endTime: String(row.end_time).slice(0, 5)
+    endTime: String(row.end_time).slice(0, 5),
+    aiPlaced: Number(row.ai_generated) === 1
   };
 }
 
@@ -247,7 +248,7 @@ function queueScheduleSave() {
 
 function postScheduleAction(body) {
   if (IS_STANDALONE) return;
-  fetch('api/schedules.php', {
+  return fetch('api/schedules.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -259,7 +260,7 @@ function saveFacultyQualifications(fac) {
 }
 
 function saveCatalogSubject(subj) {
-  postScheduleAction({ action: 'save_catalog_subject', subject_code: subj.code, subject_title: subj.title, department: subj.dept, it_only: subj.itOnly ? 1 : 0, units: subj.units });
+  return postScheduleAction({ action: 'save_catalog_subject', subject_code: subj.code, subject_title: subj.title, department: subj.dept, it_only: subj.itOnly ? 1 : 0, units: subj.units });
 }
 
 function deleteCatalogSubject(code) {

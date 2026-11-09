@@ -30,6 +30,9 @@ if ($action === 'add') {
         jsonResponse(['success' => false, 'message' => 'All fields are required and must have valid positive values'], 400);
     }
     requireFieldLengths(['Room name' => [$room_name_number, 50]]);
+    requireValidCode('Room name', $room_name_number);
+    requireIntInRange('Floor', $floor_level, 1, 3);
+    requireIntInRange('Capacity', $capacity, 1, 100);
 
     if (!in_array($room_type, $validTypes)) {
         jsonResponse(['success' => false, 'message' => 'Invalid room type'], 400);
@@ -58,6 +61,9 @@ if ($action === 'add') {
         jsonResponse(['success' => false, 'message' => 'All fields are required and must have valid positive values'], 400);
     }
     requireFieldLengths(['Room name' => [$room_name_number, 50]]);
+    requireValidCode('Room name', $room_name_number);
+    requireIntInRange('Floor', $floor_level, 1, 3);
+    requireIntInRange('Capacity', $capacity, 1, 100);
 
     if (!in_array($room_type, $validTypes)) {
         jsonResponse(['success' => false, 'message' => 'Invalid room type'], 400);
