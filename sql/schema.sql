@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS schedules (
     day_of_week ENUM('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat') NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
+    ai_generated TINYINT(1) NOT NULL DEFAULT 0,
     INDEX idx_schedules_term_day (term_id, day_of_week),
     FOREIGN KEY (room_id) REFERENCES classrooms(room_id) ON DELETE CASCADE,
     FOREIGN KEY (faculty_id) REFERENCES users(user_id) ON DELETE CASCADE

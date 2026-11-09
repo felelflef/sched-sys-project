@@ -310,7 +310,7 @@ window.showRoomSchedule = function(roomCode) {
           👨‍🏫 ${escapeHtml(c.instructor || 'Unassigned')}
         </td>
         <td style="vertical-align:middle; text-align:right;">
-          <button class="btn btn-outline" style="font-size:11px; padding:3px 10px; font-weight:700; display:inline-flex; align-items:center; gap:4px;" onclick="viewSectionOnMasterSchedule('${escapeHtml(c.section)}')">
+          <button class="btn btn-outline" style="font-size:11px; padding:3px 10px; font-weight:700; display:inline-flex; align-items:center; gap:4px;" onclick="viewSectionOnMasterSchedule(${jsArg(c.section)})">
             <span>${escapeHtml(c.section)}</span>
             <span style="font-size:12px;">↗</span>
           </button>

@@ -49,6 +49,11 @@ if ($action === 'add') {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         jsonResponse(['success' => false, 'message' => 'Invalid email format'], 400);
     }
+    if (!preg_match('/^[a-z0-9._-]+@sti\.edu$/i', $email)) {
+        jsonResponse(['success' => false, 'message' => 'Only @sti.edu email addresses using letters, numbers, dots, hyphens or underscores are permitted.'], 400);
+    }
+    requireValidName('First name', $firstName);
+    requireValidName('Last name', $lastName);
 
     // Validate role
     if (!in_array($role, ['admin', 'academic-head', 'program-head', 'faculty'])) {
@@ -64,6 +69,9 @@ if ($action === 'add') {
         $subjectRole = !empty($subjectRole) ? $subjectRole : 'Program Leadership';
     } elseif (empty($subjectRole)) {
         $subjectRole = 'IT';
+    }
+    if ($subjectRole !== null) {
+        requireKnownDepartment($db, $subjectRole, ['IT', 'Academic Leadership', 'Program Leadership']);
     }
 
     // Validate password length
@@ -102,6 +110,9 @@ if ($action === 'add') {
         jsonResponse(['success' => false, 'message' => 'User ID and Subject Role are required'], 400);
     }
     requireFieldLengths(['Department' => [$subjectRole, 50]]);
+    $current = $db->prepare("SELECT subject_role FROM users WHERE user_id = ?");
+    $current->execute([$userId]);
+    requireKnownDepartment($db, $subjectRole, [(string)$current->fetchColumn()]);
 
     try {
         $stmt = $db->prepare("UPDATE users SET subject_role = ? WHERE user_id = ? AND role = 'faculty'");
@@ -135,6 +146,13 @@ if ($action === 'add') {
         $lastName = $firstName;
     }
     requireFieldLengths(['First name' => [$firstName, 50], 'Last name' => [$lastName, 50], 'Department' => [$subjectRole, 50]]);
+    requireValidName('First name', $firstName);
+    requireValidName('Last name', $lastName);
+    if ($subjectRole !== null) {
+        $current = $db->prepare("SELECT subject_role FROM users WHERE email = ?");
+        $current->execute([$email]);
+        requireKnownDepartment($db, $subjectRole, [(string)$current->fetchColumn()]);
+    }
 
     try {
         if ($subjectRole !== null) {
