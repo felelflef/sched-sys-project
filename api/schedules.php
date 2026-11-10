@@ -68,6 +68,57 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
     return $rows;
 }
 
+/**
+ * Refuses a save that adds a double-booking or puts a teacher over their max load.
+ * Problems already saved before are tolerated, so a term that has one can still be edited and fixed.
+ */
+function requireNoNewClashesOrOverloads(PDO $db, array $rows, int $termId): void {
+    $old = $db->prepare("SELECT term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time FROM schedules WHERE term_id = ? OR term_id IS NULL");
+    $old->execute([$termId]);
+    $oldRows = array_map(fn($r) => [null, (int)$r['room_id'], (int)$r['faculty_id'], $r['subject_code'], $r['subject_category'], $r['section_name'], $r['day_of_week'], $r['start_time'], $r['end_time']], $old->fetchAll());
+
+    $sig = fn($r) => implode('|', [$r[2], $r[1], strtoupper($r[5]), $r[6], $r[7], $r[8], strtoupper($r[3])]);
+    $clashes = function (array $list) use ($sig): array {
+        $found = [];
+        foreach ($list as $i => $a) {
+            foreach (array_slice($list, $i + 1) as $b) {
+                if ($a[6] === $b[6] && $a[7] < $b[8] && $a[8] > $b[7]
+                    && ((int)$a[1] === (int)$b[1] || (int)$a[2] === (int)$b[2] || strtoupper($a[5]) === strtoupper($b[5]))) {
+                    $pair = [$sig($a), $sig($b)];
+                    sort($pair);
+                    $found[implode('#', $pair)] = [$a, $b];
+                }
+            }
+        }
+        return $found;
+    };
+    $newClashes = array_diff_key($clashes($rows), $clashes($oldRows));
+    if ($newClashes) {
+        [$a, $b] = reset($newClashes);
+        $time = substr($a[7], 0, 5);
+        jsonResponse(['success' => false, 'message' => "Two classes would overlap on {$a[6]} at {$time} ({$a[3]} for {$a[5]} and {$b[3]} for {$b[5]}) in the same room, teacher or section. No changes were made."], 409);
+    }
+
+    $minutes = function (array $list): array {
+        $load = [];
+        foreach ($list as $r) {
+            $load[(int)$r[2]] = ($load[(int)$r[2]] ?? 0) + (strtotime($r[8]) - strtotime($r[7])) / 60;
+        }
+        return $load;
+    };
+    $newLoad = $minutes($rows);
+    $oldLoad = $minutes($oldRows);
+    $teachers = $db->query("SELECT user_id, CONCAT(first_name, ' ', last_name) AS name, max_load FROM users")->fetchAll();
+    foreach ($teachers as $t) {
+        $id = (int)$t['user_id'];
+        $limit = ((int)$t['max_load'] ?: 24) * 60;
+        if (($newLoad[$id] ?? 0) > $limit && ($newLoad[$id] ?? 0) > ($oldLoad[$id] ?? 0)) {
+            $hours = round($newLoad[$id] / 60, 1);
+            jsonResponse(['success' => false, 'message' => "{$t['name']} would teach {$hours} hrs a week, over their " . ($limit / 60) . "-hr max load. No changes were made."], 409);
+        }
+    }
+}
+
 function isStatePublished(PDO $db): bool {
     return (bool)$db->query("SELECT COUNT(*) FROM app_settings WHERE setting_key = 'state_published'")->fetchColumn();
 }
@@ -407,7 +458,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
             $insSection = $db->prepare("INSERT INTO academic_sections (section_id, term_id, section_code, section_name, program, year_level, student_count, adviser, shift) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
             foreach ($sections as $s) {
-                $insSection->execute([(int)$s['id'], (int)$s['termId'], $s['code'], $s['name'], $s['program'], (int)$s['year'], (int)$s['studentCount'], $s['adviser'] ?? null, $s['shift'] ?? 'AM']);
+                $insSection->execute([(int)$s['id'], (int)$s['termId'], $s['code'], $s['name'], $s['program'], (int)$s['year'], (int)$s['studentCount'], null, $s['shift'] ?? 'AM']);
             }
 
             insertScheduleRows($db, $rows);
@@ -760,14 +811,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     if ($action === 'toggle_term_subject') {
         $subject_id = (int)($input['subject_id'] ?? 0);
-        $stmt = $db->prepare("UPDATE term_subjects SET is_included = NOT is_included WHERE subject_id = ?");
-        $stmt->execute([$subject_id]);
+        if (isset($input['is_included'])) {
+            // Save the value the user sees, so a missed or repeated click can't flip it the wrong way
+            $stmt = $db->prepare("UPDATE term_subjects SET is_included = ? WHERE subject_id = ?");
+            $stmt->execute([$input['is_included'] ? 1 : 0, $subject_id]);
+        } else {
+            $stmt = $db->prepare("UPDATE term_subjects SET is_included = NOT is_included WHERE subject_id = ?");
+            $stmt->execute([$subject_id]);
+        }
         jsonResponse(['success' => true, 'message' => 'Subject inclusion toggled']);
     }
 
     if ($action === 'set_all_subjects_included') {
-        $stmt = $db->prepare("UPDATE term_subjects SET is_included = ?");
-        $stmt->execute([!empty($input['is_included']) ? 1 : 0]);
+        // Only the subjects the user had listed, so other terms are never changed
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array)($input['subject_ids'] ?? [])), fn($id) => $id > 0)));
+        if (!$ids) {
+            jsonResponse(['success' => false, 'message' => 'No subjects were selected. No changes were made.'], 400);
+        }
+        $marks = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $db->prepare("UPDATE term_subjects SET is_included = ? WHERE subject_id IN ($marks)");
+        $stmt->execute(array_merge([!empty($input['is_included']) ? 1 : 0], $ids));
         jsonResponse(['success' => true, 'message' => 'Subject inclusion updated']);
     }
 
@@ -787,22 +850,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $program = trim($input['program'] ?? 'BSIT');
         $year_level = (int)($input['year_level'] ?? 1);
         $student_count = (int)($input['student_count'] ?? 35);
-        $adviser = trim($input['adviser'] ?? '');
         $shift = trim($input['shift'] ?? 'AM');
         if (!in_array($shift, ['AM', 'MIDSHIFT', 'PM'])) $shift = 'AM';
 
         if (!$section_code || !$section_name) {
             jsonResponse(['success' => false, 'message' => 'Section code and name are required'], 400);
         }
-        requireFieldLengths(['Section code' => [$section_code, 20], 'Section name' => [$section_name, 50], 'Program' => [$program, 20], 'Adviser' => [$adviser, 100]]);
+        requireFieldLengths(['Section code' => [$section_code, 20], 'Section name' => [$section_name, 50], 'Program' => [$program, 20]]);
         requireValidCode('Section code', $section_code);
         requireValidText('Section name', $section_name);
         requireValidProgram($program);
         requireIntInRange('Student count', $student_count, 1, 60);
         requireIntInRange('Year level', $year_level, 1, 4);
-        if ($adviser !== '') {
-            requireValidName('Adviser', $adviser);
-        }
         if ($section_id <= 0) {
             requireTermExists($db, $term_id);
         }
@@ -825,8 +884,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $previousCode = (string)$findCode->fetchColumn();
 
             $db->beginTransaction();
-            $stmt = $db->prepare("UPDATE academic_sections SET section_code=?, section_name=?, program=?, year_level=?, student_count=?, adviser=?, shift=? WHERE section_id=?");
-            $stmt->execute([$section_code, $section_name, $program, $year_level, $student_count, $adviser, $shift, $section_id]);
+            $stmt = $db->prepare("UPDATE academic_sections SET section_code=?, section_name=?, program=?, year_level=?, student_count=?, adviser=NULL, shift=? WHERE section_id=?");
+            $stmt->execute([$section_code, $section_name, $program, $year_level, $student_count, $shift, $section_id]);
             // Classes are matched by section code, so they follow a rename
             if ($previousCode !== '' && $previousCode !== $section_code) {
                 $db->prepare("UPDATE schedules SET section_name = ? WHERE section_name = ? AND term_id = ?")->execute([$section_code, $previousCode, $term_id]);
@@ -835,47 +894,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $db->commit();
             jsonResponse(['success' => true, 'message' => 'Section updated']);
         } else {
-            $stmt = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, adviser, shift) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$term_id, $section_code, $section_name, $program, $year_level, $student_count, $adviser, $shift]);
+            $stmt = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, shift) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$term_id, $section_code, $section_name, $program, $year_level, $student_count, $shift]);
             jsonResponse(['success' => true, 'message' => 'Section created', 'section_id' => $db->lastInsertId()]);
-        }
-    }
-
-    if ($action === 'merge_sections') {
-        $sec1_id = (int)($input['primary_section_id'] ?? 0);
-        $sec2_id = (int)($input['secondary_section_id'] ?? 0);
-
-        if (!$sec1_id || !$sec2_id) {
-            jsonResponse(['success' => false, 'message' => 'Two section IDs required to merge'], 400);
-        }
-
-        $s1 = $db->prepare("SELECT * FROM academic_sections WHERE section_id = ?");
-        $s1->execute([$sec1_id]);
-        $row1 = $s1->fetch();
-
-        $s2 = $db->prepare("SELECT * FROM academic_sections WHERE section_id = ?");
-        $s2->execute([$sec2_id]);
-        $row2 = $s2->fetch();
-
-        if ($row1 && $row2) {
-            $mergedCount = $row1['student_count'] + $row2['student_count'];
-            if ($mergedCount > 60) {
-                jsonResponse(['success' => false, 'message' => "Merging would make {$mergedCount} students. A section can have at most 60."], 400);
-            }
-            $stmt = $db->prepare("UPDATE academic_sections SET student_count = ? WHERE section_id = ?");
-            $stmt->execute([$mergedCount, $sec1_id]);
-
-            // Re-point any schedules from sec2 to sec1
-            $updSched = $db->prepare("UPDATE schedules SET section_name = ? WHERE section_name = ? AND (term_id = ? OR term_id IS NULL)");
-            $updSched->execute([$row1['section_code'], $row2['section_code'], $row2['term_id']]);
-            bumpScheduleVersion($db, (int)$row2['term_id']);
-
-            $del = $db->prepare("DELETE FROM academic_sections WHERE section_id = ?");
-            $del->execute([$sec2_id]);
-
-            jsonResponse(['success' => true, 'message' => "Sections merged into {$row1['section_code']} (Total Students: {$mergedCount})"]);
-        } else {
-            jsonResponse(['success' => false, 'message' => 'Sections not found'], 404);
         }
     }
 
@@ -912,7 +933,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $db->prepare("UPDATE academic_sections SET student_count = ? WHERE section_id = ?")->execute([$remaining, $sec_id]);
 
         $ins = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, adviser, shift) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $ins->execute([$sec['term_id'], $new_code ?: $sec['section_code'].'-B', $new_name ?: $sec['section_name'].' (Split)', $sec['program'], $sec['year_level'], $split_count, $sec['adviser'], $sec['shift'] ?? 'AM']);
+        $ins->execute([$sec['term_id'], $new_code ?: $sec['section_code'].'-B', $new_name ?: $sec['section_name'].' (Split)', $sec['program'], $sec['year_level'], $split_count, null, $sec['shift'] ?? 'AM']);
 
         jsonResponse(['success' => true, 'message' => "Section split into {$sec['section_code']} ({$remaining}) and {$new_code} ({$split_count})"]);
     }
@@ -945,7 +966,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     $prefix = substr($prog, 2) ?: $prog;
                     $code = "{$prefix}{$yr}0" . ($i + 1) . "M";
                     $name = "{$prog} {$yr}{$letter}";
-                    $adviser = '';
 
                     $check = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ?");
                     $check->execute([$code, $term_id]);
@@ -953,8 +973,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                         $upd = $db->prepare("UPDATE academic_sections SET student_count=?, section_name=? WHERE section_code=? AND term_id=?");
                         $upd->execute([$student_count, $name, $code, $term_id]);
                     } else {
-                        $ins = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, adviser) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                        $ins->execute([$term_id, $code, $name, $prog, $yr, $student_count, $adviser]);
+                        $ins = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count) VALUES (?, ?, ?, ?, ?, ?)");
+                        $ins->execute([$term_id, $code, $name, $prog, $yr, $student_count]);
                         $created++;
                     }
                 }
@@ -1007,6 +1027,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $db->beginTransaction();
         try {
             $newVersion = lockScheduleVersion($db, $term_id, $input['expected_version'] ?? null);
+            // Checked inside the lock, against the rows actually saved now
+            requireNoNewClashesOrOverloads($db, $rows, $term_id);
             // A full regenerate can be undone; ordinary edits don't replace the undo copy
             if ($action !== 'bulk_save_schedules') {
                 saveScheduleSnapshot($db, $term_id);

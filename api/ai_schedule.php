@@ -36,7 +36,7 @@ requireFieldLengths(['Instructions' => [$instructions, 500]]);
 $db = getDB();
 
 $placeholders = implode(',', array_fill(0, count($sectionCodes), '?'));
-$stmt = $db->prepare("SELECT section_code, program, year_level, student_count, adviser, shift FROM academic_sections WHERE term_id = ? AND section_code IN ($placeholders)");
+$stmt = $db->prepare("SELECT section_code, program, year_level, student_count, shift FROM academic_sections WHERE term_id = ? AND section_code IN ($placeholders)");
 $stmt->execute(array_merge([$termId], array_map('strval', $sectionCodes)));
 $sections = $stmt->fetchAll();
 if (!$sections) {
@@ -84,7 +84,7 @@ foreach ($sections as $section) {
         }
     }
     if ($needs) {
-        $sectionLines[] = "{$section['section_code']} ({$section['program']}, {$section['student_count']} students, {$section['shift']} shift, adviser: {$section['adviser']}): " . implode('; ', $needs);
+        $sectionLines[] = "{$section['section_code']} ({$section['program']}, {$section['student_count']} students, {$section['shift']} shift): " . implode('; ', $needs);
     }
 }
 if (!$sectionLines) {
@@ -112,7 +112,6 @@ $prompt = "Create a weekly class timetable.\n\n"
     . "- A room, teacher or section can never be in two classes at overlapping times.\n"
     . "- A teacher may only be given subjects listed for them, and must stay within their maximum weekly hours.\n"
     . "- A teacher marked [only ...] may only teach on those days and within those shifts: AM is 07:00-13:00, MIDSHIFT is 10:00-16:00, PM is 13:00-19:00.\n"
-    . "- A section's adviser must not teach that section, even when qualified. Ignore titles like Prof., Engr. or Chef when matching names.\n"
     . "- The room must seat all the section's students. Lab subjects use CompLab rooms, except BSHM uses the Kitchen Lab and BSTM uses the Tourism Lab.\n"
     . "- Keep each section mostly within its shift: AM is morning, MIDSHIFT is midday, PM is afternoon and evening.\n"
     . "- Spread classes across all suitable rooms and across the week.\n";

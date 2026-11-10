@@ -7,7 +7,7 @@
 // Saves that create records need a reload so the browser gets the server's IDs
 const RELOAD_AFTER_ACTIONS = new Set([
   'save_school_year', 'save_term_subject', 'save_section',
-  'split_section', 'merge_sections', 'auto_generate_sections', 'delete_section',
+  'split_section', 'auto_generate_sections', 'delete_section',
   'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications'
 ]);
 const MAX_DB_INT = 2147483647;
@@ -92,8 +92,7 @@ function applyServerState(data) {
     program: s.program,
     year: Number(s.year_level),
     studentCount: Number(s.student_count),
-    shift: s.shift || 'AM',
-    adviser: s.adviser || ''
+    shift: s.shift || 'AM'
   }));
 
   const previousRooms = ROOMS;
@@ -173,7 +172,7 @@ async function loadServerState() {
       applyServerState(body.data);
     } else if (CURRENT_USER.role === 'admin' && !publishOffered) {
       publishOffered = true;
-      const ok = confirm('The shared database has not been set up yet.\n\nPublish the scheduling data in this browser so everyone uses it? This replaces the school years, terms, subjects, sections and schedules in the database.\n\nChoose Cancel if another browser has the correct data.');
+      const ok = await askConfirm('Publish the scheduling data in this browser so everyone uses it? This replaces the school years, terms, subjects, sections and schedules in the database.\n\nChoose Cancel if another browser has the correct data.', { title: 'The shared database has not been set up yet', confirmLabel: 'Publish this data' });
       if (ok) await publishLocalState();
     }
   } catch (e) {
@@ -269,7 +268,7 @@ function queueScheduleSave() {
     try {
       await saveTermSchedule('bulk_save_schedules', activeTerm.id, MASTER_SCHEDULE_DATA.filter(c => !c.termId || c.termId === activeTerm.id));
     } catch (e) {
-      alert('Could not reach the server, so this schedule change exists only in this browser.');
+      if (!e || !e.reported) alert('Could not reach the server, so this schedule change exists only in this browser.');
     }
     scheduleSaveTimer = null;
   }, 600);
@@ -281,7 +280,7 @@ function postScheduleAction(body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
-  }).catch(() => alert('Could not reach the server, so this change exists only in this browser.'));
+  }).catch(e => { if (!e || !e.reported) alert('Could not reach the server, so this change exists only in this browser.'); });
 }
 
 function saveFacultyQualifications(fac, removeClasses = false) {

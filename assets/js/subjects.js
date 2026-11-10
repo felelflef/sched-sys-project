@@ -243,7 +243,7 @@ window.closeSubjectModal = function() {
   document.getElementById('subjectModal').style.display = 'none';
 };
 
-window.submitSubjectForm = function() {
+window.submitSubjectForm = async function() {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
     alert('Access Denied: Only system administrators are authorized to save subjects.');
     closeSubjectModal();
@@ -265,15 +265,15 @@ window.submitSubjectForm = function() {
     return;
   }
 
-  const subjectRemoval = origCode ? confirmSubjectFormRemoval('subject', origCode) : { removeClasses: false };
-  if (!subjectRemoval) return;
-
   const subjectProblem = INPUT_RULES.code('Course code', code) || INPUT_RULES.text('Subject title', title)
     || INPUT_RULES.int('Units', document.getElementById('subjectUnitsInput').value, 1, 6);
   if (subjectProblem) {
     alert(subjectProblem);
     return;
   }
+
+  const subjectRemoval = origCode ? await confirmSubjectFormRemoval('subject', origCode) : { removeClasses: false };
+  if (!subjectRemoval) return;
 
   let subjectSaved;
   if (origCode) {

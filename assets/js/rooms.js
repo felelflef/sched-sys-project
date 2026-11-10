@@ -169,6 +169,12 @@ window.promptDeleteRoom = function(code) {
   }
   const room = ROOMS.find(r => r.code === code);
   if (!room) return;
+  const roomClasses = MASTER_SCHEDULE_DATA.filter(c => c.room === code);
+  if (!IS_STANDALONE && roomClasses.length > 0) {
+    const termCount = new Set(roomClasses.map(c => c.termId)).size;
+    alert(`${code} can't be removed yet. It has ${roomClasses.length} scheduled class${roomClasses.length === 1 ? '' : 'es'}${termCount > 1 ? ` across ${termCount} terms` : ''}. Move them to another room first.`);
+    return;
+  }
 
   document.getElementById('deleteRoomTargetCode').value = room.code;
   document.getElementById('deleteRoomCodeDisplay').textContent = room.code;

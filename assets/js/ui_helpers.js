@@ -118,3 +118,53 @@ document.addEventListener('click', event => {
   tableSorts.set(table, { column: th.cellIndex, direction, observer });
   applyTableSort(table);
 });
+
+// In-app replacement for confirm(). Resolves true for the confirm button, false for Cancel, Esc or a click outside.
+function askConfirm(message, { title = 'Please confirm', confirmLabel = 'Confirm', danger = false } = {}) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-dialog-overlay';
+    overlay.innerHTML = `
+      <div class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogText">
+        <h3 id="confirmDialogTitle"></h3>
+        <p id="confirmDialogText"></p>
+        <div class="confirm-dialog-actions">
+          <button type="button" class="btn btn-outline" data-answer="no">Cancel</button>
+          <button type="button" class="btn ${danger ? 'btn-danger-solid' : 'btn-primary'}" data-answer="yes"></button>
+        </div>
+      </div>`;
+    overlay.querySelector('h3').textContent = title;
+    overlay.querySelector('p').textContent = String(message);
+    overlay.querySelector('[data-answer="yes"]').textContent = confirmLabel;
+
+    const previousFocus = document.activeElement;
+    const finish = answer => {
+      window.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      if (previousFocus && previousFocus.focus) previousFocus.focus();
+      resolve(answer);
+    };
+    // Captured first so the shared Esc handler doesn't also close the form underneath
+    const onKey = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finish(false);
+      } else if (event.key === 'Tab') {
+        const buttons = [...overlay.querySelectorAll('button')];
+        const index = buttons.indexOf(document.activeElement);
+        event.preventDefault();
+        buttons[(index + (event.shiftKey ? buttons.length - 1 : 1)) % buttons.length].focus();
+      }
+    };
+    overlay.addEventListener('click', event => {
+      if (event.target === overlay) finish(false);
+      const button = event.target.closest('[data-answer]');
+      if (button) finish(button.dataset.answer === 'yes');
+    });
+    window.addEventListener('keydown', onKey, true);
+    document.body.appendChild(overlay);
+    overlay.querySelector(danger ? '[data-answer="no"]' : '[data-answer="yes"]').focus();
+  });
+}
+window.askConfirm = askConfirm;
