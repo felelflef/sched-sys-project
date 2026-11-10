@@ -136,6 +136,29 @@ async function confirmClassRemoval(affected) {
   return { removeClasses: true };
 }
 
+// Checks a profile change against the professor's scheduled classes.
+// A lowered max load below what they already teach is refused; classes outside new availability are returned.
+function facultyChangeImpact(fac, status, days, shifts, maxLoad) {
+  const theirs = MASTER_SCHEDULE_DATA.filter(c => c.instructor === fac.name);
+  const limited = status === 'Part-time' && days.length > 0 && shifts.length > 0;
+  const broken = limited ? theirs.filter(c => !isWithinAvailability(days, shifts, c.day, c.startTime, c.endTime)) : [];
+  if (maxLoad < (fac.maxLoad || 24)) {
+    for (const termId of new Set(theirs.map(c => c.termId))) {
+      const minutes = theirs.filter(c => c.termId === termId && !broken.includes(c))
+        .reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
+      if (minutes > maxLoad * 60) {
+        const term = SCHOOL_TERMS.find(t => t.id === termId);
+        return { refuse: `${fac.name} already teaches ${+(minutes / 60).toFixed(1)} hrs a week${term ? ` in ${term.termName}` : ''}, so the max load can't be set to ${maxLoad}. Move some of their classes to another professor first.` };
+      }
+    }
+  }
+  return { broken };
+}
+
+function askAvailabilityUnschedule(fac, broken) {
+  return askToUnscheduleBroken(broken, 'Change availability?', `${fac.name}'s new available days and shifts don't cover some of their classes.`);
+}
+
 function confirmQualificationRemoval(fac, removedCodes) {
   const removed = removedCodes.map(c => c.toUpperCase());
   return confirmClassRemoval(activeTermClasses().filter(c => c.instructor === fac.name && removed.includes((c.subjectCode || '').toUpperCase())));
@@ -425,12 +448,8 @@ function readAvailabilityPicker(prefix) {
 function availabilityFormProblem(name, status, picked) {
   if (status !== 'Part-time') return null;
   if (!picked.days.length || !picked.shifts.length) return 'Choose at least one day and one shift for a part-time professor.';
-  const { activeTerm } = getActiveAcademicContext();
-  const outside = MASTER_SCHEDULE_DATA.find(c => c.instructor === name && (!c.termId || c.termId === activeTerm.id)
-    && !isWithinAvailability(picked.days, picked.shifts, c.day, c.startTime, c.endTime));
-  return outside
-    ? `${name} teaches ${outside.subjectCode} on ${outside.day} at ${formatTime12(outside.startTime)}, outside this availability. Reassign that class first.`
-    : null;
+  // Classes outside the new availability are handled by facultyChangeImpact, which asks before unscheduling them
+  return null;
 }
 
 window.openChangeFacultyDeptModal = function(identifier) {
@@ -509,25 +528,35 @@ window.submitChangeFacultyDept = async function() {
     return;
   }
 
+  const statusSelect = document.getElementById('changeFacultyStatusSelect');
+  const newStatus = statusSelect ? statusSelect.value : (fac.status || 'Full-time');
+  let newMaxLoad = fac.maxLoad;
+  if (newStatus === 'Part-time' && fac.maxLoad > 18) {
+    newMaxLoad = 15;
+  } else if (newStatus === 'Full-time' && fac.maxLoad < 20) {
+    newMaxLoad = 24;
+  }
+  const impact = facultyChangeImpact(fac, newStatus, newStatus === 'Part-time' ? pickedAvailability.days : [], newStatus === 'Part-time' ? pickedAvailability.shifts : [], newMaxLoad || 24);
+  if (impact.refuse) {
+    alert(impact.refuse);
+    return;
+  }
+  if (!(await askAvailabilityUnschedule(fac, impact.broken))) return;
+
   const keptQuals = document.getElementById('changeFacultyMainQualsInput').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
   const qualRemoval = await confirmQualificationRemoval(fac, (fac.mainQuals || []).filter(q => !keptQuals.includes(q.toUpperCase())));
   if (!qualRemoval) return;
+  removeClassesAndSave(impact.broken);
 
   const oldName = fac.name;
 
   // 1. Update faculty profile
   fac.name = newName;
   if (newDept) fac.dept = newDept;
-  const statusSelect = document.getElementById('changeFacultyStatusSelect');
-  const newStatus = statusSelect ? statusSelect.value : (fac.status || 'Full-time');
   fac.status = newStatus;
   fac.availableDays = newStatus === 'Part-time' ? pickedAvailability.days : [];
   fac.availableShifts = newStatus === 'Part-time' ? pickedAvailability.shifts : [];
-  if (newStatus === 'Part-time' && fac.maxLoad > 18) {
-    fac.maxLoad = 15;
-  } else if (newStatus === 'Full-time' && fac.maxLoad < 20) {
-    fac.maxLoad = 24;
-  }
+  fac.maxLoad = newMaxLoad;
   const mainQualsRaw = document.getElementById('changeFacultyMainQualsInput') ? document.getElementById('changeFacultyMainQualsInput').value.trim() : '';
   fac.mainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
@@ -714,10 +743,17 @@ window.submitAddFaculty = async function() {
   const existingFacIndex = FACULTY.findIndex(f => f.email.toLowerCase() === email.toLowerCase());
   let removeClasses = false;
   if (existingFacIndex >= 0) {
+    const impact = facultyChangeImpact(FACULTY[existingFacIndex], status, availableDays, availableShifts, maxLoad);
+    if (impact.refuse) {
+      alert(impact.refuse);
+      return;
+    }
+    if (!(await askAvailabilityUnschedule(FACULTY[existingFacIndex], impact.broken))) return;
     const removedQuals = (FACULTY[existingFacIndex].mainQuals || []).filter(q => !mainQuals.includes(q.toUpperCase()));
     const removal = await confirmQualificationRemoval(FACULTY[existingFacIndex], removedQuals);
     if (!removal) return;
     removeClasses = removal.removeClasses;
+    removeClassesAndSave(impact.broken);
   }
   const colors = ['#25447A', '#2E7D5B', '#6C3483', '#C27A1A', '#2980B9', '#C0392B'];
 

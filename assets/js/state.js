@@ -20,7 +20,7 @@ let ROOMS = [
   { code: 'LR-101', floor: '1F', type: 'Lecture', cap: 40, name: 'Lecture Room 101' },
   { code: 'LR-102', floor: '1F', type: 'Lecture', cap: 40, name: 'Lecture Room 102' },
   { code: 'LR-103', floor: '1F', type: 'Lecture', cap: 40, name: 'Lecture Room 103' },
-  { code: 'Kitchen Lab', floor: '1F', type: 'Special', cap: 25, name: 'Culinary Arts Kitchen Lab' },
+  { code: 'Kitchen Lab', floor: '1F', type: 'Special', cap: 40, name: 'Culinary Arts Kitchen Lab' },
 
   // Floor 2 (6 Lecture Rooms)
   { code: 'LR-201', floor: '2F', type: 'Lecture', cap: 40, name: 'Lecture Room 201' },
@@ -94,7 +94,7 @@ let USERS = [
 const MODULE_TITLES = {
   schedule: { title: 'Master Schedule', sub: 'Set up the term and build the weekly timetable' },
   viewer:   { title: 'View Schedule', sub: 'Weekly timetables by section, professor or room' },
-  reports:  { title: 'Schedule Overview', sub: 'Professor loads, room use, conflicts and missing hours' },
+  reports:  { title: 'Schedule Overview', sub: 'Professor loads, room use and missing hours' },
   rooms:    { title: 'Room Information', sub: 'Rooms, capacity and weekly schedules' },
   faculty:  { title: 'Faculty Profiles', sub: 'Professors and the subjects they can teach' },
   subjects: { title: 'Subject Catalog', sub: 'Courses, units and qualified professors' },

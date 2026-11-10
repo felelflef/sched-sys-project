@@ -148,7 +148,7 @@ INSERT INTO classrooms (room_name_number, room_type, capacity, floor_level) VALU
 ('LR-101', 'Lecture', 40, 1),
 ('LR-102', 'Lecture', 40, 1),
 ('LR-103', 'Lecture', 40, 1),
-('Kitchen Lab', 'Special', 25, 1),
+('Kitchen Lab', 'Special', 40, 1),
 ('LR-201', 'Lecture', 40, 2),
 ('LR-202', 'Lecture', 40, 2),
 ('LR-203', 'Lecture', 40, 2),
