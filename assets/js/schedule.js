@@ -1852,6 +1852,14 @@ function queueUnassignedBannerRefresh() {
   unassignedBannerTimer = setTimeout(refreshUnassignedBanner, 250);
 }
 
+// Keeps the Master Schedule's day headers just below its sticky filter bar
+(function keepTimetableHeadBelowControls() {
+  const panel = document.getElementById('stepPanel-6');
+  const controls = panel && panel.querySelector('.grid-controls');
+  if (!controls || typeof ResizeObserver === 'undefined') return;
+  new ResizeObserver(() => panel.style.setProperty('--timetable-head-top', `${Math.max(0, controls.offsetHeight - 14)}px`)).observe(controls);
+})();
+
 /* ─── Smart Constraint-Honoring Baseline Schedule Generator ─── */
 // The AI draft passes seed to keep the classes it already placed
 function generateSmartBaselineSchedules({ seed = [] } = {}) {
@@ -2258,6 +2266,24 @@ function curriculumSubjectFor(sec, subjectCode, termId) {
     && Number(s.year) === Number(sec.year) && (s.code || '').toUpperCase() === code) || null;
 }
 
+// Units of the subject a class teaches. Each meeting only stores its share of the units.
+function subjectUnitsFor(c) {
+  const termId = c.termId || getActiveAcademicContext().activeTerm.id;
+  const sec = ACADEMIC_SECTIONS.find(s => s.code === c.section && s.termId === termId);
+  const subj = sec && curriculumSubjectFor(sec, c.subjectCode, termId);
+  return subj ? subj.units : (c.units || 0);
+}
+
+// Total units of the subjects in a list of classes, counting each section's subject once
+function totalSubjectUnits(classes) {
+  const seen = new Map();
+  classes.forEach(c => {
+    const key = `${c.termId}|${c.section}|${(c.subjectCode || '').toUpperCase()}`;
+    if (!seen.has(key)) seen.set(key, subjectUnitsFor(c));
+  });
+  return +[...seen.values()].reduce((sum, units) => sum + (Number(units) || 0), 0).toFixed(1);
+}
+
 // A room must seat the section, and lab subjects need the right kind of lab
 function roomFitProblem(room, subj, sec) {
   if (room.cap < sec.studentCount) return `${room.code} seats ${room.cap}, but ${sec.code} has ${sec.studentCount} students.`;
@@ -2388,7 +2414,7 @@ function renderGrid() {
       shift: 'AM'
     };
 
-    const totalUnits = filteredClasses.reduce((sum, c) => sum + (c.units || 0), 0);
+    const totalUnits = totalSubjectUnits(filteredClasses);
 
 
 
@@ -2426,7 +2452,7 @@ function renderGrid() {
     filteredClasses = MASTER_SCHEDULE_DATA.filter(c => c.instructor === currentSelectedTeacher && (!c.termId || c.termId === activeTerm.id));
 
     const facMeta = FACULTY.find(f => f.name === currentSelectedTeacher) || { name: currentSelectedTeacher, dept: 'IT / CS', maxLoad: 24 };
-    const totalUnits = filteredClasses.reduce((sum, c) => sum + (c.units || 0), 0);
+    const totalUnits = totalSubjectUnits(filteredClasses);
     const totalWeeklyMins = filteredClasses.reduce((sum, c) => sum + (timeToMinutes(c.endTime) - timeToMinutes(c.startTime)), 0);
 
 
@@ -2557,7 +2583,7 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
               <span class="class-subj-title">${escapeHtml(item.subjectCode)}</span>
               <span class="class-subj-name">${escapeHtml(item.subjectTitle || '')}</span>
               <span class="class-meta-line">📍 ${escapeHtml(item.room)} · 👤 ${escapeHtml(item.instructor)}</span>
-              <span class="class-units-line">${item.units || 3} Units · ${formatTime12(item.startTime)}–${formatTime12(item.endTime)}</span>
+              <span class="class-units-line">${subjectUnitsFor(item)} Units · ${formatTime12(item.startTime)}–${formatTime12(item.endTime)}</span>
               ${conflictReason ? `<span class="class-conflict-badge">⚠️ ${escapeHtml(conflictReason)}</span>` : ''}
             </div>
           </td>
@@ -2662,7 +2688,7 @@ function showClassDetails(classId) {
       </div>
       <div>
         <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Academic Units</div>
-        <div style="font-weight:700; color:var(--text-primary); margin-top:2px;">${escapeHtml(String(item.units))} Units</div>
+        <div style="font-weight:700; color:var(--text-primary); margin-top:2px;">${escapeHtml(String(subjectUnitsFor(item)))} Units</div>
       </div>
       <div>
         <div style="color:var(--text-secondary); font-size:11px; font-weight:700; text-transform:uppercase;">Classroom</div>
@@ -3379,7 +3405,7 @@ function exportAllSectionsBatchPDF() {
 
   sections.forEach(sec => {
     const secClasses = MASTER_SCHEDULE_DATA.filter(c => c.section === sec.code && (!c.termId || c.termId === activeTerm.id));
-    const totalUnits = secClasses.reduce((sum, c) => sum + (c.units || 0), 0);
+    const totalUnits = totalSubjectUnits(secClasses);
 
     batchHtml += `
       <div class="section-page">
@@ -3416,7 +3442,7 @@ function exportAllSectionsBatchPDF() {
             <td class="class-box ${escapeHtml(cls.type)}">
               <div class="subj-code">${escapeHtml(cls.subjectCode)}</div>
               <div>${escapeHtml(cls.room)} · ${escapeHtml(cls.instructor)}</div>
-              <div>${cls.units} Units (${formatTime12(cls.startTime)}–${formatTime12(cls.endTime)})</div>
+              <div>${subjectUnitsFor(cls)} Units (${formatTime12(cls.startTime)}–${formatTime12(cls.endTime)})</div>
             </td>
           `;
         } else {

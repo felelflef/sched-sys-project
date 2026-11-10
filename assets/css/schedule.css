@@ -407,6 +407,12 @@ select:focus, input:focus {
   margin-bottom: 12px;
 }
 
+/* The day headers stay visible while scrolling a long week. The table fits at this width, so the container needn't scroll sideways. */
+@media screen and (min-width: 1024px) {
+  .timetable-table-container { overflow-x: visible; }
+  .section-spreadsheet-table thead th { position: sticky; top: var(--timetable-head-top, 0px); z-index: 5; }
+}
+
 /* ─── Spreadsheet Table (Thin Black Borders & Tight Rows) ─── */
 .section-spreadsheet-table {
   width: 100%;
