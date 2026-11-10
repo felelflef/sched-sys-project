@@ -173,13 +173,14 @@ window.toggleAddQualDropdown = function(email, type, event) {
   }
 
   container.innerHTML = `
-    <div style="display:flex; gap:6px; align-items:center; background:#F8FAFD; border:1px solid #BAE6FD; border-radius:6px; padding:6px 8px; margin-top:4px;">
-      <select id="selectAddQual-${safeId}-${type}" class="form-input" style="font-size:11.5px; padding:3px 6px; flex:1; height:28px;">
-        <option value="">-- Choose Subject to Add --</option>
-        ${availableSubjs.map(s => `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} — ${escapeHtml(s.title)} (${escapeHtml(s.dept || 'General')})</option>`).join('')}
-      </select>
-      <button class="btn btn-primary" style="font-size:11px; padding:3px 10px; height:28px; line-height:1;" onclick="confirmAddFacultyQual(${jsArg(fac.email)}, '${type}')">Add</button>
-      <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; height:28px; line-height:1;" onclick="closeAddQualDropdown(${jsArg(fac.email)}, '${type}')">✕</button>
+    <div style="background:#F8FAFD; border:1px solid #BAE6FD; border-radius:6px; padding:6px 8px; margin-top:4px;">
+      <div id="selectAddQual-${safeId}-${type}" class="availability-options qual-picker" style="margin-bottom:6px;">
+        ${availableSubjs.map(s => `<label class="availability-option" title="${escapeHtml(s.title)}"><input type="checkbox" value="${escapeHtml(s.code)}" /> ${escapeHtml(s.code)}</label>`).join('')}
+      </div>
+      <div style="display:flex; gap:6px; justify-content:flex-end;">
+        <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; height:28px; line-height:1;" onclick="closeAddQualDropdown(${jsArg(fac.email)}, '${type}')">Cancel</button>
+        <button class="btn btn-primary" style="font-size:11px; padding:3px 10px; height:28px; line-height:1;" onclick="confirmAddFacultyQual(${jsArg(fac.email)}, '${type}')">Add selected</button>
+      </div>
     </div>
   `;
   container.style.display = 'block';
@@ -193,10 +194,10 @@ window.closeAddQualDropdown = function(email, type) {
 
 window.confirmAddFacultyQual = function(email, type) {
   const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
-  const sel = document.getElementById(`selectAddQual-${safeId}-${type}`);
-  const subjCode = sel ? sel.value.trim().toUpperCase() : '';
-  if (!subjCode) {
-    alert('Please choose a subject to add.');
+  const picker = document.getElementById(`selectAddQual-${safeId}-${type}`);
+  const subjCodes = picker ? [...picker.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value.trim().toUpperCase()) : [];
+  if (subjCodes.length === 0) {
+    alert('Tick at least one subject to add.');
     return;
   }
 
@@ -204,9 +205,9 @@ window.confirmAddFacultyQual = function(email, type) {
   if (!fac) return;
 
   if (!Array.isArray(fac.mainQuals)) fac.mainQuals = [];
-  if (!fac.mainQuals.some(q => q.toUpperCase() === subjCode)) {
-    fac.mainQuals.push(subjCode);
-  }
+  subjCodes.forEach(subjCode => {
+    if (!fac.mainQuals.some(q => q.toUpperCase() === subjCode)) fac.mainQuals.push(subjCode);
+  });
 
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   saveFacultyQualifications(fac);
