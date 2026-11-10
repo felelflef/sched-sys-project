@@ -446,11 +446,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $inUse = $db->prepare("SELECT DISTINCT UPPER(s.subject_code) FROM schedules s JOIN school_terms t ON s.term_id = t.term_id JOIN faculty_qualifications q ON q.user_id = s.faculty_id AND UPPER(q.subject_code) = UPPER(s.subject_code) WHERE s.faculty_id = ? AND t.is_active = 1");
         $inUse->execute([$userId]);
         $blocked = array_diff($inUse->fetchAll(PDO::FETCH_COLUMN), $kept);
-        if ($blocked) {
+        if ($blocked && empty($input['remove_classes'])) {
             jsonResponse(['success' => false, 'message' => 'This teacher still has ' . implode(', ', $blocked) . ' classes this term. Reassign them first. No changes were made.'], 409);
         }
 
         $db->beginTransaction();
+        // The user confirmed removing those classes too, so they never stay with an unqualified teacher
+        if ($blocked) {
+            $marks = implode(',', array_fill(0, count($blocked), '?'));
+            $db->prepare("DELETE s FROM schedules s JOIN school_terms t ON s.term_id = t.term_id WHERE s.faculty_id = ? AND t.is_active = 1 AND UPPER(s.subject_code) IN ($marks)")
+                ->execute(array_merge([$userId], array_values($blocked)));
+            foreach ($db->query("SELECT term_id FROM school_terms WHERE is_active = 1")->fetchAll(PDO::FETCH_COLUMN) as $activeTermId) {
+                bumpScheduleVersion($db, (int)$activeTermId);
+            }
+        }
         $db->prepare("DELETE FROM faculty_qualifications WHERE user_id = ?")->execute([$userId]);
         insertQualifications($db, $userId, $subjects);
         $db->commit();

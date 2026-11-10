@@ -121,11 +121,24 @@ function getAllCatalogSubjects() {
 }
 window.getAllCatalogSubjects = getAllCatalogSubjects;
 
-// A subject can't be taken away while the professor still teaches it this term
-function qualificationRemovalProblem(fac, removedCodes) {
+// Asks before removing qualifications a professor still teaches this term. If the user agrees,
+// those classes come off the schedule with the qualification, so Quick Generate can reassign them.
+// Returns null if cancelled, otherwise whether classes were removed.
+function confirmClassRemoval(affected) {
+  if (affected.length === 0) return { removeClasses: false };
+  const teacherNames = [...new Set(affected.map(c => c.instructor))];
+  const teachers = teacherNames.join(', ');
+  const codes = [...new Set(affected.map(c => c.subjectCode))].join(', ');
+  const count = affected.length;
+  const ok = confirm(`${teachers} ${teacherNames.length === 1 ? 'teaches' : 'teach'} ${count} ${codes} class${count === 1 ? '' : 'es'} this term.\n\nRemove the qualification and take ${count === 1 ? 'that class' : 'those classes'} off the schedule? You can then run Quick Generate to give ${count === 1 ? 'it' : 'them'} to another qualified professor.`);
+  if (!ok) return null;
+  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !affected.includes(c));
+  return { removeClasses: true };
+}
+
+function confirmQualificationRemoval(fac, removedCodes) {
   const removed = removedCodes.map(c => c.toUpperCase());
-  const teaching = activeTermClasses().find(c => c.instructor === fac.name && removed.includes((c.subjectCode || '').toUpperCase()));
-  return teaching ? `${fac.name} still teaches ${teaching.subjectCode} this term. Reassign those classes before removing it.` : null;
+  return confirmClassRemoval(activeTermClasses().filter(c => c.instructor === fac.name && removed.includes((c.subjectCode || '').toUpperCase())));
 }
 
 function renderQualificationPicker(selected = []) {
@@ -208,15 +221,12 @@ window.removeFacultyQual = function(email, type, subjectCode, event) {
   if (!fac) return;
 
   const target = (subjectCode || '').toUpperCase();
-  const removalProblem = qualificationRemovalProblem(fac, [target]);
-  if (removalProblem) {
-    alert(removalProblem);
-    return;
-  }
+  const removal = confirmQualificationRemoval(fac, [target]);
+  if (!removal) return;
   fac.mainQuals = (fac.mainQuals || []).filter(q => q.toUpperCase() !== target);
 
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
-  saveFacultyQualifications(fac);
+  saveFacultyQualifications(fac, removal.removeClasses);
 
   renderFacultyCards();
   if (typeof renderGrid === 'function') renderGrid();
@@ -499,11 +509,8 @@ window.submitChangeFacultyDept = function() {
   }
 
   const keptQuals = document.getElementById('changeFacultyMainQualsInput').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-  const qualRemovalProblem = qualificationRemovalProblem(fac, (fac.mainQuals || []).filter(q => !keptQuals.includes(q.toUpperCase())));
-  if (qualRemovalProblem) {
-    alert(qualRemovalProblem);
-    return;
-  }
+  const qualRemoval = confirmQualificationRemoval(fac, (fac.mainQuals || []).filter(q => !keptQuals.includes(q.toUpperCase())));
+  if (!qualRemoval) return;
 
   const oldName = fac.name;
 
@@ -523,7 +530,7 @@ window.submitChangeFacultyDept = function() {
   const mainQualsRaw = document.getElementById('changeFacultyMainQualsInput') ? document.getElementById('changeFacultyMainQualsInput').value.trim() : '';
   fac.mainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
-  saveFacultyQualifications(fac);
+  saveFacultyQualifications(fac, qualRemoval.removeClasses);
   saveFacultyAvailability(fac);
 
   // 2. Update registered account in USERS list
@@ -704,13 +711,12 @@ window.submitAddFaculty = function() {
   const mainQuals = [...document.querySelectorAll('input[data-group="newFac-qual"]:checked')].map(i => i.value);
 
   const existingFacIndex = FACULTY.findIndex(f => f.email.toLowerCase() === email.toLowerCase());
+  let removeClasses = false;
   if (existingFacIndex >= 0) {
     const removedQuals = (FACULTY[existingFacIndex].mainQuals || []).filter(q => !mainQuals.includes(q.toUpperCase()));
-    const removalProblem = qualificationRemovalProblem(FACULTY[existingFacIndex], removedQuals);
-    if (removalProblem) {
-      alert(removalProblem);
-      return;
-    }
+    const removal = confirmQualificationRemoval(FACULTY[existingFacIndex], removedQuals);
+    if (!removal) return;
+    removeClasses = removal.removeClasses;
   }
   const colors = ['#25447A', '#2E7D5B', '#6C3483', '#C27A1A', '#2980B9', '#C0392B'];
 
@@ -746,7 +752,7 @@ window.submitAddFaculty = function() {
   }
 
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
-  saveFacultyQualifications({ email: user.email, mainQuals });
+  saveFacultyQualifications({ email: user.email, mainQuals }, removeClasses);
   saveFacultyAvailability({ email: user.email, status, availableDays, availableShifts, maxLoad });
   closeAddFacultyModal();
   renderFacultyCards();

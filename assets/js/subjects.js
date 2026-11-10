@@ -146,16 +146,14 @@ window.removeSubjectFormProfessor = function(button) {
 };
 
 // Runs after the subject is saved, because the server only accepts subjects it already knows
-// A professor can't be taken off a subject they still teach this term
-function subjectFormRemovalProblem(form, code) {
+// Professors taken off a subject they still teach this term need confirmation, and lose those classes
+function confirmSubjectFormRemoval(form, code) {
   const target = code.toUpperCase();
-  const selected = subjectFormProfessors[form];
-  const teaching = FACULTY.find(fac => !selected.includes(fac.email) && isFacultyQualified(fac, target)
-    && activeTermClasses().some(c => c.instructor === fac.name && (c.subjectCode || '').toUpperCase() === target));
-  return teaching ? `${teaching.name} still teaches ${target} this term. Reassign those classes before removing them.` : null;
+  const removedNames = FACULTY.filter(fac => !subjectFormProfessors[form].includes(fac.email) && isFacultyQualified(fac, target)).map(fac => fac.name);
+  return confirmClassRemoval(activeTermClasses().filter(c => removedNames.includes(c.instructor) && (c.subjectCode || '').toUpperCase() === target));
 }
 
-function saveSubjectFormProfessors(form, code, subjectSaved) {
+function saveSubjectFormProfessors(form, code, subjectSaved, removeClasses = false) {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') return;
 
   const target = code.toUpperCase();
@@ -180,7 +178,7 @@ function saveSubjectFormProfessors(form, code, subjectSaved) {
 
   Promise.resolve(subjectSaved).then(response => {
     if (response && !response.ok) return;
-    changed.forEach(saveFacultyQualifications);
+    changed.forEach(fac => saveFacultyQualifications(fac, removeClasses));
   });
 }
 
@@ -267,11 +265,8 @@ window.submitSubjectForm = function() {
     return;
   }
 
-  const subjectQualProblem = origCode ? subjectFormRemovalProblem('subject', origCode) : null;
-  if (subjectQualProblem) {
-    alert(subjectQualProblem);
-    return;
-  }
+  const subjectRemoval = origCode ? confirmSubjectFormRemoval('subject', origCode) : { removeClasses: false };
+  if (!subjectRemoval) return;
 
   const subjectProblem = INPUT_RULES.code('Course code', code) || INPUT_RULES.text('Subject title', title)
     || INPUT_RULES.int('Units', document.getElementById('subjectUnitsInput').value, 1, 6);
@@ -312,7 +307,7 @@ window.submitSubjectForm = function() {
   closeSubjectModal();
   renderSubjectTable();
   renderSubjectDatalist();
-  saveSubjectFormProfessors('subject', origCode || code, subjectSaved);
+  saveSubjectFormProfessors('subject', origCode || code, subjectSaved, subjectRemoval.removeClasses);
 };
 
 window.promptDeleteSubject = function(code) {

@@ -284,8 +284,8 @@ function postScheduleAction(body) {
   }).catch(() => alert('Could not reach the server, so this change exists only in this browser.'));
 }
 
-function saveFacultyQualifications(fac) {
-  postScheduleAction({ action: 'save_faculty_qualifications', email: fac.email, subjects: fac.mainQuals || [] });
+function saveFacultyQualifications(fac, removeClasses = false) {
+  postScheduleAction({ action: 'save_faculty_qualifications', email: fac.email, subjects: fac.mainQuals || [], remove_classes: removeClasses });
 }
 
 function saveFacultyAvailability(fac) {
