@@ -620,6 +620,9 @@ function submitTermModal() {
    STEP 3: LOAD SUBJECTS & CURRICULUM
    ══════════════════════════════════════════════════════════════════════════ */
 
+// The active term the filter last showed, so a term change can move the filter to it
+let curriculumFilterActiveTermId = null;
+
 function updateCurriculumTermFilter() {
   const sel = document.getElementById('curriculumTermFilter');
   if (!sel) return;
@@ -627,7 +630,10 @@ function updateCurriculumTermFilter() {
   const terms = SCHOOL_TERMS.filter(t => !activeSy || t.yearId === activeSy.id);
   const activeTerm = terms.find(t => t.isActive) || terms[0];
 
-  const currentVal = sel.value;
+  // A term the user picked stays picked, until the active term itself changes
+  const activeTermChanged = activeTerm && activeTerm.id !== curriculumFilterActiveTermId;
+  curriculumFilterActiveTermId = activeTerm ? activeTerm.id : null;
+  const currentVal = activeTermChanged ? '' : sel.value;
   sel.innerHTML = `<option value="all">All Terms</option>` + terms.map(t => `
     <option value="${t.id}" ${t.isActive ? 'selected' : ''}>
       ${escapeHtml(t.termName)} ${t.isActive ? '(Active)' : ''}
@@ -793,11 +799,8 @@ function submitAddSubjectModal() {
     return;
   }
 
-  const curricQualProblem = subjectFormRemovalProblem('curricSubj', code);
-  if (curricQualProblem) {
-    alert(curricQualProblem);
-    return;
-  }
+  const curricRemoval = confirmSubjectFormRemoval('curricSubj', code);
+  if (!curricRemoval) return;
 
   const curricProblem = INPUT_RULES.code('Subject code', code) || INPUT_RULES.text('Subject name', name)
     || INPUT_RULES.int('Units', document.getElementById('curricSubjUnits').value, 1, 6)
@@ -869,7 +872,7 @@ function submitAddSubjectModal() {
     })
   }).catch(() => {});
 
-  saveSubjectFormProfessors('curricSubj', code, subjectSaved);
+  saveSubjectFormProfessors('curricSubj', code, subjectSaved, curricRemoval.removeClasses);
 }
 
 function deleteSubjectOffering(id) {
