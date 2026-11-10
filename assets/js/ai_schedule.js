@@ -45,7 +45,7 @@ function aiDraftRejectReason(raw, accepted, sections, termId) {
   const teacher = FACULTY.find(f => f.name === raw.teacher);
   if (!teacher) return 'Unknown teacher';
   const eligibility = checkFacultySubjectConflict(raw.teacher, raw.subject, raw.section);
-  if (eligibility) return eligibility.startsWith('Adviser') ? 'Adviser cannot teach their own section' : 'Teacher is not qualified for this subject';
+  if (eligibility) return 'Teacher is not qualified for this subject';
 
   if (!AI_DRAFT_DAYS.includes(raw.day)) return 'Invalid day';
   if (!/^\d{2}:\d{2}$/.test(raw.start || '') || !/^\d{2}:\d{2}$/.test(raw.end || '')) return 'Invalid time';

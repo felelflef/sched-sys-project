@@ -24,7 +24,8 @@ function findScheduleConflicts(classes) {
     });
 
     const problem = checkFacultySubjectConflict(a.instructor, a.subjectCode, a.section)
-      || facultyAvailabilityProblem(a.instructor, a.day, a.startTime, a.endTime);
+      || facultyAvailabilityProblem(a.instructor, a.day, a.startTime, a.endTime)
+      || classRoomProblem(a);
     if (problem) conflicts.push({ when: timeOf(a), what: `${a.section} ${a.subjectCode}`, problem });
   });
   return conflicts;
@@ -80,7 +81,7 @@ function renderScheduleReports() {
     <div class="stats-row">${summary.map(([label, value]) => `
       <div class="stat-card"><div><div class="stat-value">${value}</div><div class="stat-label">${escapeHtml(label)}</div></div></div>`).join('')}
     </div>
-    <div class="card report-card"><div class="card-header"><div><h3>Conflicts</h3><p>Double-bookings, qualification, adviser and availability problems</p></div></div>
+    <div class="card report-card"><div class="card-header"><div><h3>Conflicts</h3><p>Double-bookings, qualification, availability and room problems</p></div></div>
       ${reportTable(['When', 'Classes', 'Problem'], conflicts.map(c => [escapeHtml(c.when), escapeHtml(c.what), escapeHtml(c.problem)]), 'No conflicts this term.')}
     </div>
     <div class="card report-card"><div class="card-header"><div><h3>Subjects Missing Hours</h3><p>Included subjects that don't have their full weekly hours yet</p></div></div>

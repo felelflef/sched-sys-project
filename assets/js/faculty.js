@@ -124,13 +124,13 @@ window.getAllCatalogSubjects = getAllCatalogSubjects;
 // Asks before removing qualifications a professor still teaches this term. If the user agrees,
 // those classes come off the schedule with the qualification, so Quick Generate can reassign them.
 // Returns null if cancelled, otherwise whether classes were removed.
-function confirmClassRemoval(affected) {
+async function confirmClassRemoval(affected) {
   if (affected.length === 0) return { removeClasses: false };
   const teacherNames = [...new Set(affected.map(c => c.instructor))];
   const teachers = teacherNames.join(', ');
   const codes = [...new Set(affected.map(c => c.subjectCode))].join(', ');
   const count = affected.length;
-  const ok = confirm(`${teachers} ${teacherNames.length === 1 ? 'teaches' : 'teach'} ${count} ${codes} class${count === 1 ? '' : 'es'} this term.\n\nRemove the qualification and take ${count === 1 ? 'that class' : 'those classes'} off the schedule? You can then run Quick Generate to give ${count === 1 ? 'it' : 'them'} to another qualified professor.`);
+  const ok = await askConfirm(`${teachers} ${teacherNames.length === 1 ? 'teaches' : 'teach'} ${count} ${codes} class${count === 1 ? '' : 'es'} this term.\n\nRemoving the qualification also takes ${count === 1 ? 'that class' : 'those classes'} off the schedule. You can then run Quick Generate to give ${count === 1 ? 'it' : 'them'} to another qualified professor.`, { title: 'Remove the qualification?', confirmLabel: `Remove and unschedule ${count === 1 ? 'class' : 'classes'}`, danger: true });
   if (!ok) return null;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !affected.includes(c));
   return { removeClasses: true };
@@ -215,13 +215,13 @@ window.confirmAddFacultyQual = function(email, type) {
   if (typeof renderGrid === 'function') renderGrid();
 };
 
-window.removeFacultyQual = function(email, type, subjectCode, event) {
+window.removeFacultyQual = async function(email, type, subjectCode, event) {
   if (event) event.stopPropagation();
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   if (!fac) return;
 
   const target = (subjectCode || '').toUpperCase();
-  const removal = confirmQualificationRemoval(fac, [target]);
+  const removal = await confirmQualificationRemoval(fac, [target]);
   if (!removal) return;
   fac.mainQuals = (fac.mainQuals || []).filter(q => q.toUpperCase() !== target);
 
@@ -475,7 +475,7 @@ window.closeChangeFacultyDeptModal = function() {
   document.getElementById('changeFacultyDeptModal').style.display = 'none';
 };
 
-window.submitChangeFacultyDept = function() {
+window.submitChangeFacultyDept = async function() {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
     alert('Access Denied: Only system administrators are authorized to edit faculty profiles.');
     return;
@@ -509,7 +509,7 @@ window.submitChangeFacultyDept = function() {
   }
 
   const keptQuals = document.getElementById('changeFacultyMainQualsInput').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-  const qualRemoval = confirmQualificationRemoval(fac, (fac.mainQuals || []).filter(q => !keptQuals.includes(q.toUpperCase())));
+  const qualRemoval = await confirmQualificationRemoval(fac, (fac.mainQuals || []).filter(q => !keptQuals.includes(q.toUpperCase())));
   if (!qualRemoval) return;
 
   const oldName = fac.name;
@@ -674,7 +674,7 @@ window.handleFacultyUserDropdownChange = function(email) {
   }
 };
 
-window.submitAddFaculty = function() {
+window.submitAddFaculty = async function() {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
     alert('Access Denied: Only system administrators are authorized to save faculty profiles.');
     closeAddFacultyModal();
@@ -714,7 +714,7 @@ window.submitAddFaculty = function() {
   let removeClasses = false;
   if (existingFacIndex >= 0) {
     const removedQuals = (FACULTY[existingFacIndex].mainQuals || []).filter(q => !mainQuals.includes(q.toUpperCase()));
-    const removal = confirmQualificationRemoval(FACULTY[existingFacIndex], removedQuals);
+    const removal = await confirmQualificationRemoval(FACULTY[existingFacIndex], removedQuals);
     if (!removal) return;
     removeClasses = removal.removeClasses;
   }

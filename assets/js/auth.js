@@ -49,7 +49,21 @@ window.fetch = async function(input, init = {}) {
   const headers = new Headers(init.headers || {});
   if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
 
-  const res = await nativeFetch(input, { ...init, headers });
+  let res;
+  try {
+    res = await nativeFetch(input, { ...init, headers });
+  } catch (e) {
+    // Screens update before saving, so say plainly that the change isn't on the server
+    if (!init.quietFailure) {
+      const now = Date.now();
+      if (now - lastApiFailureNoticeAt >= 5000) {
+        lastApiFailureNoticeAt = now;
+        alert("Couldn't reach the server, so that change wasn't saved. It only exists in this browser. Check your connection and try again.");
+      }
+      if (e && typeof e === 'object') e.reported = true;
+    }
+    throw e;
+  }
   // quietFailure means the caller shows the error itself; an expired session is still handled here
   if (!res.ok && (res.status === 401 || !init.quietFailure)) reportApiWriteFailure(res.clone());
   else if (res.ok && typeof handleApiWriteSaved === 'function') handleApiWriteSaved(url, init.body);

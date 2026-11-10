@@ -263,7 +263,7 @@ function openAddSchoolYearModal() {
   document.getElementById('syModalTitle').textContent = 'Add School Year';
   document.getElementById('syEditId').value = '';
   document.getElementById('syCodeInput').value = '';
-  document.getElementById('syIsActiveInput').checked = true;
+  document.getElementById('syIsActiveInput').checked = false;
   document.getElementById('schoolYearModal').style.display = 'flex';
 }
 
@@ -316,7 +316,7 @@ function syncAllSyFilters() {
 }
 window.syncAllSyFilters = syncAllSyFilters;
 
-function submitSchoolYearModal() {
+async function submitSchoolYearModal() {
   const idVal = document.getElementById('syEditId').value;
   const codeVal = document.getElementById('syCodeInput').value.trim();
   const isActiveVal = document.getElementById('syIsActiveInput').checked;
@@ -341,6 +341,11 @@ function submitSchoolYearModal() {
   const yearMatches = codeVal.match(/\b(20\d{2})\b/g);
   const startYr = yearMatches && yearMatches[0] ? parseInt(yearMatches[0], 10) : new Date().getFullYear();
   const endYr = yearMatches && yearMatches[1] ? parseInt(yearMatches[1], 10) : (startYr + 1);
+
+  // Making a year active changes it for everyone, so ask first, as the year dropdown does
+  const editedYear = idVal ? SCHOOL_YEARS.find(y => String(y.id) === idVal) : null;
+  if (isActiveVal && SCHOOL_YEARS.length > 0 && !(editedYear && editedYear.isActive)
+    && !(await askConfirm(`This makes ${codeVal} the active school year for all users, not just this view.`, { title: 'Make this the active school year?', confirmLabel: 'Make active' }))) return;
 
   if (isActiveVal) {
     SCHOOL_YEARS.forEach(y => y.isActive = false);
@@ -434,10 +439,10 @@ function setActiveSchoolYear(id) {
 }
 
 // The year dropdowns change the shared active year, so confirm before switching
-function handleActiveYearFilter(select) {
+async function handleActiveYearFilter(select) {
   const id = parseInt(select.value, 10);
   const target = SCHOOL_YEARS.find(y => y.id === id);
-  if (!target || !confirm(`Switch the active school year to ${target.yearCode}?\n\nThis changes it for all users, not just this view.`)) {
+  if (!target || !(await askConfirm(`This changes the active school year to ${target.yearCode} for all users, not just this view.`, { title: 'Switch the active school year?', confirmLabel: 'Switch year' }))) {
     syncAllSyFilters();
     return;
   }
@@ -445,12 +450,12 @@ function handleActiveYearFilter(select) {
 }
 window.handleActiveYearFilter = handleActiveYearFilter;
 
-function deleteSchoolYear(id) {
+async function deleteSchoolYear(id) {
   if (SCHOOL_YEARS.length <= 1) {
     alert('At least one school year must remain in the system.');
     return;
   }
-  if (!confirm('Are you sure you want to delete this school year?')) return;
+  if (!(await askConfirm('This school year will be removed from the system.', { title: 'Delete this school year?', confirmLabel: 'Delete school year', danger: true }))) return;
   SCHOOL_YEARS = SCHOOL_YEARS.filter(y => y.id !== id);
   if (!SCHOOL_YEARS.some(y => y.isActive)) SCHOOL_YEARS[0].isActive = true;
   saveStateToStorage();
@@ -647,10 +652,8 @@ function updateCurriculumTermFilter() {
   }
 }
 
-function renderSubjectOfferingTable() {
-  const tbody = document.getElementById('subjectOfferingTableBody');
-  if (!tbody) return;
-
+// The Step 3 subjects that match the current filters, which are the ones the table shows
+function filteredCurriculumSubjects() {
   const termFilter = document.getElementById('curriculumTermFilter')?.value || 'all';
   const progFilter = document.getElementById('curriculumProgFilter')?.value || 'all';
   const yrFilter = document.getElementById('curriculumYearFilter')?.value || 'all';
@@ -671,7 +674,14 @@ function renderSubjectOfferingTable() {
   if (revFilter !== 'all') {
     list = list.filter(s => s.curriculum === revFilter);
   }
+  return list;
+}
 
+function renderSubjectOfferingTable() {
+  const tbody = document.getElementById('subjectOfferingTableBody');
+  if (!tbody) return;
+
+  const list = filteredCurriculumSubjects();
   const countLabel = document.getElementById('subjectOfferingCountLabel');
   const includedCount = list.filter(s => s.isIncluded).length;
   if (countLabel) {
@@ -719,9 +729,42 @@ function renderSubjectOfferingTable() {
   }).join('');
 }
 
-function toggleSubjectInclusion(id, isIncluded) {
+// Scheduled classes that teach this curriculum subject, in its own term, program and year
+function curriculumSubjectClasses(subj) {
+  const code = (subj.code || '').toUpperCase();
+  return MASTER_SCHEDULE_DATA.filter(c => {
+    if (c.termId !== subj.termId || (c.subjectCode || '').toUpperCase() !== code) return false;
+    const sec = ACADEMIC_SECTIONS.find(s => s.code === c.section && s.termId === subj.termId);
+    return !sec || (sec.program === subj.program && Number(sec.year) === Number(subj.year));
+  });
+}
+
+// Takes classes off the schedule and saves each affected term
+function removeClassesAndSave(classes) {
+  if (classes.length === 0) return;
+  const termIds = [...new Set(classes.map(c => c.termId))];
+  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !classes.includes(c));
+  saveStateToStorage();
+  const { activeTerm } = getActiveAcademicContext();
+  termIds.forEach(termId => {
+    if (termId === activeTerm.id) queueScheduleSave();
+    else if (!IS_STANDALONE) saveTermSchedule('bulk_save_schedules', termId, MASTER_SCHEDULE_DATA.filter(c => c.termId === termId)).catch(() => {});
+  });
+}
+
+function scheduledClassesNote(classes) {
+  return `${classes.length} scheduled class${classes.length === 1 ? '' : 'es'}`;
+}
+
+async function toggleSubjectInclusion(id, isIncluded) {
   const subj = CURRICULUM_SUBJECTS.find(s => s.id === id);
   if (subj) {
+    const scheduled = isIncluded ? [] : curriculumSubjectClasses(subj);
+    if (scheduled.length > 0 && !(await askConfirm(`${subj.code} has ${scheduledClassesNote(scheduled)}. Excluding it also takes ${scheduled.length === 1 ? 'that class' : 'those classes'} off the schedule.`, { title: 'Exclude this subject?', confirmLabel: 'Exclude and unschedule', danger: true }))) {
+      renderSubjectOfferingTable();
+      return;
+    }
+    removeClassesAndSave(scheduled);
     subj.isIncluded = isIncluded;
     saveStateToStorage();
     renderSubjectOfferingTable();
@@ -729,20 +772,26 @@ function toggleSubjectInclusion(id, isIncluded) {
     fetch('api/schedules.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'toggle_term_subject', subject_id: id })
+      body: JSON.stringify({ action: 'toggle_term_subject', subject_id: id, is_included: isIncluded })
     }).catch(() => {});
   }
 }
 
-function toggleAllSubjectInclusion(status) {
-  CURRICULUM_SUBJECTS.forEach(s => s.isIncluded = status);
+// Only changes the subjects listed under the current filters, never other terms
+async function toggleAllSubjectInclusion(status) {
+  const listed = filteredCurriculumSubjects();
+  if (listed.length === 0) return;
+  const scheduled = status ? [] : [...new Set(listed.flatMap(curriculumSubjectClasses))];
+  if (scheduled.length > 0 && !(await askConfirm(`The listed subjects have ${scheduledClassesNote(scheduled)}. Excluding them also takes those classes off the schedule.`, { title: `Exclude ${listed.length} subject${listed.length === 1 ? '' : 's'}?`, confirmLabel: 'Exclude and unschedule', danger: true }))) return;
+  removeClassesAndSave(scheduled);
+  listed.forEach(s => s.isIncluded = status);
   saveStateToStorage();
   renderSubjectOfferingTable();
 
   fetch('api/schedules.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'set_all_subjects_included', is_included: status })
+    body: JSON.stringify({ action: 'set_all_subjects_included', is_included: status, subject_ids: listed.map(s => s.id) })
   }).catch(() => {});
 }
 
@@ -757,9 +806,43 @@ function openAddCurriculumSubjectModal() {
   document.getElementById('curricSubjType').value = 'lecture';
   document.getElementById('curricSubjProgram').value = 'BSIT';
   document.getElementById('curricSubjYear').value = '1';
+  populateCurriculumCatalogSelect();
+  document.getElementById('curricSubjCatalogRow').style.display = '';
   openSubjectFormProfessors('curricSubj', '');
   document.getElementById('manualSubjectModal').style.display = 'flex';
 }
+
+// Lists the Subject Catalog, marking subjects this term already offers
+function populateCurriculumCatalogSelect() {
+  const sel = document.getElementById('curricSubjCatalogSelect');
+  if (!sel) return;
+  const { activeTerm } = getActiveAcademicContext();
+  const termId = parseInt(document.getElementById('curriculumTermFilter')?.value, 10) || (activeTerm && activeTerm.id);
+  const offered = new Set(CURRICULUM_SUBJECTS.filter(s => s.termId === termId).map(s => (s.code || '').toUpperCase()));
+  const catalog = SUBJECTS.slice().sort((a, b) => a.code.localeCompare(b.code));
+  sel.innerHTML = '<option value="">-- Type a new subject instead --</option>' + catalog.map(s => {
+    const note = offered.has(s.code.toUpperCase()) ? ' (already in this term)' : '';
+    return `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} - ${escapeHtml(s.title || s.code)}${note}</option>`;
+  }).join('');
+  sel.value = '';
+}
+
+// Fills the form from the catalog. Hours and type come from the newest curriculum entry with the same code, if any.
+function fillCurriculumFromCatalog(code) {
+  if (!code) return;
+  const subj = SUBJECTS.find(s => s.code === code);
+  if (!subj) return;
+  const previous = CURRICULUM_SUBJECTS.filter(s => (s.code || '').toUpperCase() === code.toUpperCase()).sort((a, b) => b.id - a.id)[0];
+  const units = subj.units || (previous && previous.units) || 3;
+  document.getElementById('curricSubjCode').value = subj.code;
+  document.getElementById('curricSubjName').value = subj.title || subj.code;
+  document.getElementById('curricSubjUnits').value = units;
+  document.getElementById('curricSubjLecHrs').value = previous ? (previous.lecHours || 0) : units;
+  document.getElementById('curricSubjLabHrs').value = previous ? (previous.labHours || 0) : 0;
+  document.getElementById('curricSubjType').value = previous ? (previous.type || 'lecture') : 'lecture';
+  openSubjectFormProfessors('curricSubj', subj.code);
+}
+window.fillCurriculumFromCatalog = fillCurriculumFromCatalog;
 
 function openEditCurriculumSubjectModal(id) {
   const subj = CURRICULUM_SUBJECTS.find(s => s.id === id);
@@ -774,6 +857,7 @@ function openEditCurriculumSubjectModal(id) {
   document.getElementById('curricSubjType').value = subj.type || 'lecture';
   document.getElementById('curricSubjProgram').value = subj.program || 'BSIT';
   document.getElementById('curricSubjYear').value = String(subj.year || 1);
+  document.getElementById('curricSubjCatalogRow').style.display = 'none';
   openSubjectFormProfessors('curricSubj', subj.code);
   document.getElementById('manualSubjectModal').style.display = 'flex';
 }
@@ -783,7 +867,7 @@ function closeAddSubjectModal() {
   if (modal) modal.style.display = 'none';
 }
 
-function submitAddSubjectModal() {
+async function submitAddSubjectModal() {
   const idVal = document.getElementById('curricSubjEditId').value;
   const code = document.getElementById('curricSubjCode').value.trim();
   const name = document.getElementById('curricSubjName').value.trim();
@@ -799,9 +883,6 @@ function submitAddSubjectModal() {
     return;
   }
 
-  const curricRemoval = confirmSubjectFormRemoval('curricSubj', code);
-  if (!curricRemoval) return;
-
   const curricProblem = INPUT_RULES.code('Subject code', code) || INPUT_RULES.text('Subject name', name)
     || INPUT_RULES.int('Units', document.getElementById('curricSubjUnits').value, 1, 6)
     || INPUT_RULES.hours('Lecture hours', document.getElementById('curricSubjLecHrs').value)
@@ -810,6 +891,9 @@ function submitAddSubjectModal() {
     alert(curricProblem);
     return;
   }
+
+  const curricRemoval = await confirmSubjectFormRemoval('curricSubj', code);
+  if (!curricRemoval) return;
 
   let newSubjectTermId;
   if (idVal) {
@@ -875,8 +959,14 @@ function submitAddSubjectModal() {
   saveSubjectFormProfessors('curricSubj', code, subjectSaved, curricRemoval.removeClasses);
 }
 
-function deleteSubjectOffering(id) {
-  if (!confirm('Are you sure you want to remove this subject from the term curriculum?')) return;
+async function deleteSubjectOffering(id) {
+  const subj = CURRICULUM_SUBJECTS.find(s => s.id === id);
+  const scheduled = subj ? curriculumSubjectClasses(subj) : [];
+  const message = scheduled.length > 0
+    ? `The subject will no longer be offered in this term, and its ${scheduledClassesNote(scheduled)} will be taken off the schedule.`
+    : 'The subject will no longer be offered in this term.';
+  if (!(await askConfirm(message, { title: 'Remove this subject from the term?', confirmLabel: scheduled.length > 0 ? 'Remove and unschedule' : 'Remove subject', danger: true }))) return;
+  removeClassesAndSave(scheduled);
   CURRICULUM_SUBJECTS = CURRICULUM_SUBJECTS.filter(s => s.id !== id);
   saveStateToStorage();
   renderSubjectOfferingTable();
@@ -1153,7 +1243,7 @@ function renderSectionsTable() {
   const termSections = (typeof ACADEMIC_SECTIONS !== 'undefined' ? ACADEMIC_SECTIONS : []).filter(s => s.termId === activeTerm.id);
 
   if (termSections.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:28px 16px; color:var(--text-secondary);"><div style="font-size:15px; font-weight:700; color:var(--text-primary); margin-bottom:6px;">No sections created for ${escapeHtml(activeTerm.termName)} (${escapeHtml(activeSy.yearCode)})</div><div>Click <strong>"+ Add Section"</strong> to create sections for this term.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:28px 16px; color:var(--text-secondary);"><div style="font-size:15px; font-weight:700; color:var(--text-primary); margin-bottom:6px;">No sections created for ${escapeHtml(activeTerm.termName)} (${escapeHtml(activeSy.yearCode)})</div><div>Click <strong>"+ Add Section"</strong> to create sections for this term.</div></td></tr>`;
     return;
   }
 
@@ -1170,12 +1260,10 @@ function renderSectionsTable() {
         <td><span class="badge" style="${sec.shift === 'PM' ? 'background:#FEF3C7; color:#92400E;' : (sec.shift === 'MIDSHIFT' ? 'background:#EDE9FE; color:#5B21B6;' : 'background:#E0F2FE; color:#0369A1;')} font-size:11px; font-weight:700;">${escapeHtml(sec.shift || 'AM')}</span></td>
         <td><strong>${sec.studentCount}</strong> students</td>
         <td><span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-size:11px;">${attachedCount} subject${attachedCount === 1 ? '' : 's'}</span></td>
-        <td style="color:var(--text-secondary); font-size:12px;">${escapeHtml(sec.adviser || '—')}</td>
         <td style="text-align:right;">
           <div style="display:inline-flex; gap:6px;">
             <button class="btn btn-outline" onclick="openEditSectionModal(${sec.id})" style="font-size:11px; padding:3px 7px;">Edit</button>
             <button class="btn btn-outline" onclick="openSplitSectionModal(${sec.id})" style="font-size:11px; padding:3px 7px;">Split</button>
-            <button class="btn btn-outline" onclick="openMergeSectionsModal(${sec.id})" style="font-size:11px; padding:3px 7px;">Merge</button>
             <button class="btn btn-outline" onclick="deleteSectionItem(${sec.id})" style="font-size:11px; padding:3px 7px; color:#DC2626; border-color:#FCA5A5;">Delete</button>
           </div>
         </td>
@@ -1216,7 +1304,6 @@ function executeQuickGenerateSections() {
         program: prog,
         year: yr,
         studentCount: students,
-        adviser: '',
         shift: 'AM'
       });
     }
@@ -1353,7 +1440,6 @@ function submitAutoGenerateSections() {
             program: prog,
             year: yr,
             studentCount: studentsPerSec,
-            adviser: '',
         shift: 'AM'
           });
           createdCount++;
@@ -1397,28 +1483,6 @@ function submitAutoGenerateSections() {
   alert(`Academic sections generated (${createdCount} new created, ${ACADEMIC_SECTIONS.length} total sections configured).`);
 }
 
-function populateAdviserDropdown(selectedAdviser = '') {
-  const sel = document.getElementById('secAdviserInput');
-  if (!sel) return;
-  const facultyList = (typeof FACULTY !== 'undefined' ? FACULTY.map(f => f.name) : []);
-  const userList = (typeof USERS !== 'undefined' ? USERS.filter(u => !u.role || u.role === 'faculty' || u.role === 'program-head' || u.role === 'academic-head').map(u => u.name) : []);
-  const uniqueNames = Array.from(new Set([...facultyList, ...userList])).filter(Boolean).sort();
-
-  let html = '<option value="">-- Select Section Adviser --</option>';
-  uniqueNames.forEach(name => {
-    html += `<option value="${escapeHtml(name)}" ${name === selectedAdviser ? 'selected' : ''}>${escapeHtml(name)}</option>`;
-  });
-
-  if (selectedAdviser && !uniqueNames.includes(selectedAdviser)) {
-    html += `<option value="${escapeHtml(selectedAdviser)}" selected>${escapeHtml(selectedAdviser)}</option>`;
-  }
-
-  sel.innerHTML = html;
-  if (selectedAdviser) {
-    sel.value = selectedAdviser;
-  }
-}
-
 function openAddSectionModal() {
   document.getElementById('secModalTitle').textContent = 'Add Academic Section';
   document.getElementById('secEditId').value = '';
@@ -1428,7 +1492,6 @@ function openAddSectionModal() {
   document.getElementById('secYearInput').value = '1';
   document.getElementById('secStudentsInput').value = '35';
   if (document.getElementById('secShiftInput')) document.getElementById('secShiftInput').value = 'AM';
-  populateAdviserDropdown();
   document.getElementById('sectionModal').style.display = 'flex';
 }
 
@@ -1443,7 +1506,6 @@ function openEditSectionModal(id) {
   document.getElementById('secYearInput').value = String(sec.year);
   document.getElementById('secStudentsInput').value = sec.studentCount;
   if (document.getElementById('secShiftInput')) document.getElementById('secShiftInput').value = sec.shift || 'AM';
-  populateAdviserDropdown(sec.adviser || '');
   document.getElementById('sectionModal').style.display = 'flex';
 }
 
@@ -1460,7 +1522,6 @@ function submitSectionModal() {
   const prog = document.getElementById('secProgramInput').value;
   const yr = parseInt(document.getElementById('secYearInput').value, 10) || 1;
   const students = parseInt(document.getElementById('secStudentsInput').value, 10) || 35;
-  const adviser = document.getElementById('secAdviserInput').value.trim();
   const shift = document.getElementById('secShiftInput') ? document.getElementById('secShiftInput').value : 'AM';
 
   if (!code || !name) {
@@ -1475,15 +1536,8 @@ function submitSectionModal() {
     return;
   }
 
-  // An adviser can't teach their own section, so they can't take over one they already teach
   const savedSection = idVal ? ACADEMIC_SECTIONS.find(s => s.id === parseInt(idVal, 10)) : null;
   const previousCode = savedSection ? savedSection.code : null;
-  const adviserClash = savedSection && MASTER_SCHEDULE_DATA.find(c =>
-    c.section === savedSection.code && c.termId === activeTerm.id && isSameProfessor(c.instructor, adviser));
-  if (adviserClash) {
-    alert(`${adviser} teaches ${adviserClash.subjectCode} for this section, so they can't be its adviser. Reassign that class first.`);
-    return;
-  }
 
   if (ACADEMIC_SECTIONS.some(s => s.termId === activeTerm.id && s.code.toLowerCase() === code.toLowerCase() && String(s.id) !== idVal)) {
     alert(`Section code ${code} already exists in this term.`);
@@ -1505,7 +1559,6 @@ function submitSectionModal() {
       sec.program = prog;
       sec.year = yr;
       sec.studentCount = students;
-      sec.adviser = adviser;
       sec.shift = shift;
     }
   } else {
@@ -1518,7 +1571,6 @@ function submitSectionModal() {
       program: prog,
       year: yr,
       studentCount: students,
-      adviser,
       shift
     });
   }
@@ -1542,7 +1594,6 @@ function submitSectionModal() {
       program: prog,
       year_level: yr,
       student_count: students,
-      adviser,
       shift
     })
   }).catch(() => {});
@@ -1600,7 +1651,6 @@ function submitSplitSection() {
     program: sec.program,
     year: sec.year,
     studentCount: splitCount,
-    adviser: sec.adviser,
     shift: sec.shift || 'AM'
   });
 
@@ -1625,72 +1675,7 @@ function submitSplitSection() {
   }).catch(() => {});
 }
 
-function openMergeSectionsModal(id) {
-  const sec = ACADEMIC_SECTIONS.find(s => s.id === id);
-  if (!sec) return;
-  document.getElementById('mergePrimarySectionId').value = sec.id;
-  document.getElementById('mergePromptDesc').textContent = `Select a secondary section to merge into ${sec.code} (${sec.name}).`;
-
-  const sel = document.getElementById('mergeSecondarySectionSelect');
-  const others = ACADEMIC_SECTIONS.filter(s => s.id !== id && s.program === sec.program && s.termId === sec.termId);
-  if (others.length === 0) {
-    alert(`No compatible sections in ${sec.program} to merge with.`);
-    return;
-  }
-
-  sel.innerHTML = others.map(s => `
-    <option value="${s.id}">${escapeHtml(s.code)} - ${escapeHtml(s.name)} (${s.studentCount} students)</option>
-  `).join('');
-
-  document.getElementById('mergeSectionsModal').style.display = 'flex';
-}
-
-function closeMergeSectionsModal() {
-  const modal = document.getElementById('mergeSectionsModal');
-  if (modal) modal.style.display = 'none';
-}
-
-function submitMergeSections() {
-  const primaryId = parseInt(document.getElementById('mergePrimarySectionId').value, 10);
-  const secId = parseInt(document.getElementById('mergeSecondarySectionSelect').value, 10);
-
-  const sec1 = ACADEMIC_SECTIONS.find(s => s.id === primaryId);
-  const sec2 = ACADEMIC_SECTIONS.find(s => s.id === secId);
-
-  if (!sec1 || !sec2) return;
-
-  if (sec1.studentCount + sec2.studentCount > 60) {
-    alert(`Merging would make ${sec1.studentCount + sec2.studentCount} students. A section can have at most 60.`);
-    return;
-  }
-
-  sec1.studentCount += sec2.studentCount;
-  // Re-link any schedules from sec2 to sec1
-  MASTER_SCHEDULE_DATA.forEach(item => {
-    if (item.section === sec2.code) item.section = sec1.code;
-  });
-
-  ACADEMIC_SECTIONS = ACADEMIC_SECTIONS.filter(s => s.id !== secId);
-  saveStateToStorage();
-  closeMergeSectionsModal();
-  renderSectionsTable();
-  updateSectionDropdown();
-  renderGrid();
-  updateScheduleStats();
-  alert(`Sections successfully merged into ${sec1.code}. Combined students: ${sec1.studentCount}.`);
-
-  fetch('api/schedules.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'merge_sections',
-      primary_section_id: primaryId,
-      secondary_section_id: secId
-    })
-  }).catch(() => {});
-}
-
-function deleteSectionItem(id) {
+async function deleteSectionItem(id) {
   if (ACADEMIC_SECTIONS.length <= 1) {
     alert('At least one academic section must remain.');
     return;
@@ -1699,9 +1684,9 @@ function deleteSectionItem(id) {
   const inSection = c => target && c.section === target.code && (!c.termId || c.termId === target.termId);
   const classCount = MASTER_SCHEDULE_DATA.filter(inSection).length;
   const warning = classCount > 0
-    ? `Delete this section and its ${classCount} scheduled class${classCount === 1 ? '' : 'es'}? This can't be undone.`
-    : 'Are you sure you want to delete this section?';
-  if (!confirm(warning)) return;
+    ? `Its ${classCount} scheduled class${classCount === 1 ? '' : 'es'} will be deleted too. This can't be undone.`
+    : 'This section will be removed from the term.';
+  if (!(await askConfirm(warning, { title: 'Delete this section?', confirmLabel: 'Delete section', danger: true }))) return;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !inSection(c));
   ACADEMIC_SECTIONS = ACADEMIC_SECTIONS.filter(s => s.id !== id);
   saveStateToStorage();
@@ -1757,23 +1742,12 @@ function executeGenerateBaseline() {
   renderGrid();
   updateScheduleStats();
 
-  const banner = document.getElementById('unassignedBanner');
-  const list = document.getElementById('unassignedList');
-  if (banner && list) {
-    if (UNASSIGNED_CLASSES.length > 0) {
-      list.innerHTML = UNASSIGNED_CLASSES.map(u => `
-        <li><strong>${escapeHtml(u.section)} - ${escapeHtml(u.code)}:</strong> ${escapeHtml(u.reason)}</li>
-      `).join('');
-      banner.classList.add('show');
-    } else {
-      banner.classList.remove('show');
-    }
-  }
+  refreshUnassignedBanner();
 
   // Persist to DB, then reload to pick up saved IDs and the Undo option
   saveTermSchedule('generate_baseline', activeTerm.id, newSchedules, { strict: true })
     .then(res => { if (res.ok && !IS_STANDALONE) loadServerState(); })
-    .catch(() => alert('Could not reach the server, so this schedule exists only in this browser.'));
+    .catch(e => { if (!e || !e.reported) alert('Could not reach the server, so this schedule exists only in this browser.'); });
 
   alert(`Master schedule successfully generated (${newSchedules.length} classes scheduled across ${sectionsToSchedule.length} sections for ${activeTerm.termName}).`);
 }
@@ -1789,7 +1763,7 @@ function updateUndoButton() {
 
 window.undoLastGenerate = async function() {
   const { activeTerm } = getActiveAcademicContext();
-  if (!confirm(`Replace the current ${activeTerm.termName} schedule with the one saved before the last generate? You can undo this too.`)) return;
+  if (!(await askConfirm(`The current ${activeTerm.termName} schedule will be replaced with the one saved before the last generate. You can undo this too.`, { title: 'Undo the last generate?', confirmLabel: 'Restore schedule' }))) return;
   const res = await fetch('api/schedules.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1798,6 +1772,56 @@ window.undoLastGenerate = async function() {
   await loadServerState();
   if (res.ok) alert('The previous schedule has been restored.');
 };
+
+// Lists what is still missing from the current schedule, with up-to-date reasons.
+// Runs after every change, so fixing a cause (such as raising a max load) updates the list.
+function refreshUnassignedBanner() {
+  const banner = document.getElementById('unassignedBanner');
+  const list = document.getElementById('unassignedList');
+  if (!banner || !list) return;
+  const { activeTerm } = getActiveAcademicContext();
+  const sections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id);
+  const missing = sections.flatMap(section => sectionSubjectProgress(section)
+    .filter(p => p.scheduledMinutes < p.requiredMinutes)
+    .map(p => ({ section, ...p })));
+
+  // Before the first generate everything is missing, which the empty timetable already shows
+  if (!canEditSchedule() || missing.length === 0 || activeTermClasses().length === 0) {
+    UNASSIGNED_CLASSES = [];
+    banner.classList.remove('show');
+    list.innerHTML = '';
+    return;
+  }
+
+  // A trial run around the current classes gives today's reason for each subject with no classes yet
+  generateSmartBaselineSchedules({ seed: activeTermClasses() });
+  const trialReasons = UNASSIGNED_CLASSES;
+  const hours = minutes => +(minutes / 60).toFixed(1);
+  UNASSIGNED_CLASSES = missing.map(m => {
+    const code = m.subject.code;
+    const trial = trialReasons.find(u => u.section === m.section.code && u.code === code);
+    let reason;
+    if (m.scheduledMinutes > 0) {
+      reason = `Only ${hours(m.scheduledMinutes)} of ${hours(m.requiredMinutes)} hrs a week are scheduled. Add the remaining time manually or run Quick Generate.`;
+    } else if (trial) {
+      reason = trial.reason;
+    } else {
+      reason = 'Not scheduled yet, but a clash-free time is now available. Run Quick Generate or add it manually.';
+    }
+    return { section: m.section.code, code, reason };
+  });
+
+  list.innerHTML = UNASSIGNED_CLASSES.map(u => `
+    <li><strong>${escapeHtml(u.section)} - ${escapeHtml(u.code)}:</strong> ${escapeHtml(u.reason)}</li>
+  `).join('');
+  banner.classList.add('show');
+}
+
+let unassignedBannerTimer = null;
+function queueUnassignedBannerRefresh() {
+  clearTimeout(unassignedBannerTimer);
+  unassignedBannerTimer = setTimeout(refreshUnassignedBanner, 250);
+}
 
 /* ─── Smart Constraint-Honoring Baseline Schedule Generator ─── */
 // The AI draft passes seed to keep the classes it already placed
@@ -1907,18 +1931,8 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       // Determine candidate faculty
       // Check faculty qualified/allowable for this subject
       const targetSubjCode = (subj.code || '').toUpperCase();
-      let candidateTeachers = FACULTY.filter(f => isFacultyQualified(f, targetSubjCode));
+      const candidateTeachers = FACULTY.filter(f => isFacultyQualified(f, targetSubjCode));
       const hasQualifiedFaculty = candidateTeachers.length > 0;
-
-      // Ensure section adviser is not assigned to teach the section's classes
-      const adviserNameClean = (sec.adviser || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
-      if (adviserNameClean) {
-        const nonAdviserTeachers = candidateTeachers.filter(f => {
-          const fClean = (f.name || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
-          return fClean !== adviserNameClean && !fClean.includes(adviserNameClean) && !adviserNameClean.includes(fClean);
-        });
-        candidateTeachers = nonAdviserTeachers;
-      }
 
       // Determine slot search prioritized by section shift
       const secShift = sec.shift || 'AM';
@@ -2012,16 +2026,25 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       };
       placed = tryPlace();
 
+      // Names the main thing that stopped this class, so the user knows what to change
+      const unplacedReason = () => {
+        const hours = weeklyMinutes / 60;
+        if (!hasQualifiedFaculty) return `No faculty member has ${subj.code} in their main qualifications.`;
+        if (candidateRooms.length === 0) return `There is no suitable room for ${subj.code}. Add a room of the right type in Room Information.`;
+        const names = list => list.map(t => t.name).join(', ');
+        if (teachersToTry.length === 0) {
+          const loads = candidateTeachers.map(t => `${t.name} has ${+(usedMinutes(t) / 60).toFixed(1)} of ${t.maxLoad || 24} hrs`).join('; ');
+          return `${subj.code} needs ${hours} hrs a week, which would put every qualified professor over their max load (${loads}). Raise a max load or qualify another professor.`;
+        }
+        const limitedHours = t => t.status === 'Part-time' && (t.availableDays || []).length > 0 && (t.availableShifts || []).length > 0;
+        if (teachersToTry.every(limitedHours)) {
+          return `The qualified professor${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) ${teachersToTry.length === 1 ? 'is' : 'are'} part-time, and no ${hours}-hour weekly schedule fits inside their available days and shifts without a clash.`;
+        }
+        return `No clash-free ${hours}-hour weekly schedule is left. The qualified professor${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) and the suitable rooms are already booked whenever ${sec.code} is free. Free up time or qualify another professor.`;
+      };
+
       if (!placed) {
-        UNASSIGNED_CLASSES.push({
-          section: sec.code,
-          code: subj.code,
-          reason: !hasQualifiedFaculty
-            ? `No faculty member has ${subj.code} in their main qualifications.`
-            : candidateTeachers.length === 0
-              ? `The only professor qualified for ${subj.code} is this section's adviser, who cannot teach their own section.`
-              : `No conflict-free ${weeklyMinutes / 60}-hour weekly schedule fits the room capacity (${sec.studentCount} seats), professor availability and teaching limits.`
-        });
+        UNASSIGNED_CLASSES.push({ section: sec.code, code: subj.code, reason: unplacedReason() });
       }
     });
   });
@@ -2196,6 +2219,69 @@ function isWithinAvailability(days, shifts, day, startTime, endTime) {
 }
 
 // A part-time professor with no days or shifts set has no limit yet
+const CLASS_DAY_START = 7 * 60;
+const CLASS_DAY_END = 20 * 60 + 30;
+
+// The curriculum subject a class teaches, for its section's program and year in that term
+function curriculumSubjectFor(sec, subjectCode, termId) {
+  const code = (subjectCode || '').toUpperCase();
+  return CURRICULUM_SUBJECTS.find(s => s.termId === termId && s.isIncluded !== false && s.program === sec.program
+    && Number(s.year) === Number(sec.year) && (s.code || '').toUpperCase() === code) || null;
+}
+
+// A room must seat the section, and lab subjects need the right kind of lab
+function roomFitProblem(room, subj, sec) {
+  if (room.cap < sec.studentCount) return `${room.code} seats ${room.cap}, but ${sec.code} has ${sec.studentCount} students.`;
+  const isLab = subj.type === 'lab' || subj.labHours > 0;
+  const isSpecial = room.type === 'Special' || /kitchen|tourism/i.test(room.code);
+  if (isLab) {
+    const fits = sec.program === 'BSHM' ? /kitchen/i.test(room.code) || room.type === 'Special'
+      : sec.program === 'BSTM' ? /tourism/i.test(room.code) || room.type === 'Special'
+      : room.type === 'CompLab';
+    const needed = sec.program === 'BSHM' ? 'the Kitchen Lab' : sec.program === 'BSTM' ? 'the Tourism Lab' : 'a computer lab';
+    if (!fits) return `${subj.code} is a lab subject and needs ${needed}. ${room.code} is a ${room.type} room.`;
+  } else if (isSpecial) {
+    return `${room.code} is a specialized lab, so it can't be used for the lecture subject ${subj.code}.`;
+  }
+  return null;
+}
+
+// Room problem for a class already on the schedule, used by the Overview conflict list
+function classRoomProblem(c) {
+  const termId = c.termId || getActiveAcademicContext().activeTerm.id;
+  const sec = ACADEMIC_SECTIONS.find(s => s.code === c.section && s.termId === termId);
+  const room = ROOMS.find(r => r.code === c.room);
+  const subj = sec && curriculumSubjectFor(sec, c.subjectCode, termId);
+  return sec && room && subj ? roomFitProblem(room, subj, sec) : null;
+}
+
+// Rules for a class placed by hand, on top of clash, qualification and availability checks
+function placementProblem(cls, ignoreId = null) {
+  const termId = cls.termId || getActiveAcademicContext().activeTerm.id;
+  const start = timeToMinutes(cls.startTime);
+  const end = timeToMinutes(cls.endTime);
+  if (start < CLASS_DAY_START || end > CLASS_DAY_END) {
+    return `Classes must be between 7:00 AM and 8:30 PM. This one would run ${formatTime12(cls.startTime)} to ${formatTime12(cls.endTime)}.`;
+  }
+  const sec = ACADEMIC_SECTIONS.find(s => s.code === cls.section && s.termId === termId);
+  if (!sec) return `Section ${cls.section} doesn't exist in this term.`;
+  const subj = curriculumSubjectFor(sec, cls.subjectCode, termId);
+  if (!subj) return `${cls.subjectCode} isn't an included subject for ${sec.code} (${sec.program} Year ${sec.year}) this term. Add it in Step 3 first.`;
+  const room = ROOMS.find(r => r.code === cls.room);
+  if (!room) return `Room ${cls.room} doesn't exist.`;
+  const roomProblem = roomFitProblem(room, subj, sec);
+  if (roomProblem) return roomProblem;
+  const fac = FACULTY.find(f => f.name === cls.instructor);
+  if (fac) {
+    const minutes = MASTER_SCHEDULE_DATA
+      .filter(c => c.id !== ignoreId && c.instructor === fac.name && (c.termId || termId) === termId)
+      .reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0) + (end - start);
+    const maxLoad = fac.maxLoad || 24;
+    if (minutes > maxLoad * 60) return `${fac.name} would teach ${+(minutes / 60).toFixed(1)} hrs a week, over their ${maxLoad}-hr max load.`;
+  }
+  return null;
+}
+
 function facultyAvailabilityProblem(instructorName, day, startTime, endTime) {
   const fac = FACULTY.find(f => f.name && f.name.toLowerCase() === (instructorName || '').toLowerCase());
   if (!fac || fac.status !== 'Part-time' || !(fac.availableDays || []).length || !(fac.availableShifts || []).length) return null;
@@ -2203,32 +2289,13 @@ function facultyAvailabilityProblem(instructorName, day, startTime, endTime) {
   return `Not Available: ${fac.name} only teaches ${fac.availableDays.join(', ')} during ${fac.availableShifts.join(', ')} shift`;
 }
 
-// Compares two professor names, ignoring titles such as Prof. or Engr.
-function isSameProfessor(nameA, nameB) {
-  const clean = name => (name || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
-  const a = clean(nameA);
-  const b = clean(nameB);
-  return !!a && !!b && (a === b || a.includes(b) || b.includes(a));
-}
 
 function checkFacultySubjectConflict(instructorName, subjectCode, sectionCode) {
   if (!instructorName || instructorName === 'TBA' || instructorName === 'Unassigned') {
     return 'Instructor Unassigned';
   }
 
-  // 1. Check Section Adviser conflict
-  if (sectionCode && typeof ACADEMIC_SECTIONS !== 'undefined') {
-    const sec = ACADEMIC_SECTIONS.find(s => s.code === sectionCode);
-    if (sec && sec.adviser) {
-      const advClean = (sec.adviser || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
-      const instClean = (instructorName || '').replace(/^(Prof\.|Dr\.|Engr\.|Chef)\s*/i, '').trim().toLowerCase();
-      if (advClean && instClean && (advClean === instClean || advClean.includes(instClean) || instClean.includes(advClean))) {
-        return `Adviser Conflict: Section adviser cannot teach ${sectionCode}`;
-      }
-    }
-  }
-
-  // 2. Check Faculty profile
+  // Check the faculty profile
   const fac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.name && f.name.toLowerCase() === instructorName.toLowerCase());
   if (!fac) {
     return `Unregistered Faculty: ${instructorName}`;
@@ -2248,6 +2315,7 @@ function renderGrid() {
   const tbody = document.getElementById('sectionGridBody');
   if (!tbody) return;
   applyScheduleRole();
+  queueUnassignedBannerRefresh();
   if (!canEditSchedule() && ACTIVE_SCHEDULE_STEP !== 6) {
     goToScheduleStep(6);
     return;
@@ -2265,7 +2333,7 @@ function renderGrid() {
       document.getElementById('sheetTotalUnits').textContent = '0';
       document.getElementById('sheetStatLabel2').textContent = '# of Students';
       document.getElementById('sheetStudentsCount').textContent = '0';
-      document.getElementById('sheetStatLabel3').textContent = 'Adviser';
+      document.getElementById('sheetStatLabel3').textContent = 'Shift';
       document.getElementById('sheetAdviser').textContent = '—';
       tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:48px 16px; color:var(--text-secondary);"><div style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:8px;">No Sections Configured for ${escapeHtml(activeTerm.termName)} ${escapeHtml(activeSy.yearCode)}</div><div>Please go to <strong>Step 5 (Create Sections)</strong> to add or generate sections for this academic period.</div></td></tr>`;
       return;
@@ -2278,7 +2346,6 @@ function renderGrid() {
       program: 'BSIT',
       year: 1,
       studentCount: 38,
-      adviser: 'Prof. Academic Head',
       shift: 'AM'
     };
 
@@ -2295,8 +2362,8 @@ function renderGrid() {
     document.getElementById('sheetTotalUnits').textContent = String(totalUnits);
     document.getElementById('sheetStatLabel2').textContent = '# of Students';
     document.getElementById('sheetStudentsCount').textContent = String(secMeta.studentCount || 35);
-    document.getElementById('sheetStatLabel3').textContent = 'Adviser';
-    document.getElementById('sheetAdviser').textContent = secMeta.adviser || '—';
+    document.getElementById('sheetStatLabel3').textContent = 'Shift';
+    document.getElementById('sheetAdviser').textContent = secMeta.shift || 'AM';
   }
   // Room View
   else if (CURRENT_TIMETABLE_VIEW === 'room') {
@@ -2745,6 +2812,12 @@ function submitEditClassSchedule() {
     return;
   }
 
+  const editPlacementProblem = placementProblem({ ...item, subjectCode: subjCode, day, startTime, endTime, room, instructor, section }, item.id);
+  if (editPlacementProblem) {
+    if (errDiv) { errDiv.textContent = editPlacementProblem; errDiv.style.display = 'block'; }
+    return;
+  }
+
   // Check conflicts with other scheduled items
   for (const other of MASTER_SCHEDULE_DATA) {
     if (other.id === item.id) continue;
@@ -2816,8 +2889,8 @@ function submitEditClassSchedule() {
   queueScheduleSave();
 }
 
-function deleteClassSchedule(classId) {
-  if (!confirm('Are you sure you want to remove this class from the schedule?')) return;
+async function deleteClassSchedule(classId) {
+  if (!(await askConfirm('The class will be taken off the schedule.', { title: 'Remove this class?', confirmLabel: 'Remove class', danger: true }))) return;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.id !== classId);
   queueScheduleSave();
   saveStateToStorage();
@@ -2867,6 +2940,10 @@ function handleSlotDrop(event, targetDay, targetSlotMin) {
 
   const durationMin = Math.max(30, timeToMinutes(item.endTime) - timeToMinutes(item.startTime));
   const targetEndMin = targetSlotMin + durationMin;
+  if (targetEndMin > CLASS_DAY_END) {
+    alert(`This class can't move there. It would end at ${formatTime12(minutesToTime(targetEndMin))}, after the 8:30 PM closing time.`);
+    return;
+  }
 
   const availabilityProblem = facultyAvailabilityProblem(item.instructor, targetDay, minutesToTime(targetSlotMin), minutesToTime(targetEndMin));
   if (availabilityProblem) {
@@ -3022,19 +3099,27 @@ function submitSlotAssignment() {
     return;
   }
 
-  // Subject metadata lookup
-  const matchingSubj = CURRICULUM_SUBJECTS.find(s => s.code.toUpperCase() === subjectCode);
-  const subjectTitle = matchingSubj ? matchingSubj.name : subjectCode;
-  const units = matchingSubj ? matchingSubj.units : 3;
-  const type = matchingSubj ? matchingSubj.type : 'lecture';
+  const activeTermId = getActiveAcademicContext().activeTerm.id;
+  const addPlacementProblem = placementProblem({ termId: activeTermId, section, subjectCode, room, instructor, day, startTime, endTime });
+  if (addPlacementProblem) {
+    showError(addPlacementProblem);
+    return;
+  }
+
+  // Details come from the section and its curriculum entry
+  const slotSection = ACADEMIC_SECTIONS.find(s => s.code === section && s.termId === activeTermId);
+  const matchingSubj = curriculumSubjectFor(slotSection, subjectCode, activeTermId);
+  const subjectTitle = matchingSubj.name;
+  const units = matchingSubj.units;
+  const type = matchingSubj.type;
 
   const newId = `SCH-MANUAL-${Date.now()}`;
   const newClass = {
     id: newId,
-    termId: (getActiveAcademicContext().activeTerm.id),
+    termId: activeTermId,
     section,
-    program,
-    year: '1',
+    program: slotSection.program,
+    year: String(slotSection.year),
     subjectCode,
     subjectTitle,
     type,
@@ -3265,7 +3350,7 @@ function exportAllSectionsBatchPDF() {
             <div class="title">${escapeHtml(sec.code)} (${escapeHtml(sec.name)})</div>
           </div>
           <div style="text-align:right;">
-            <div class="meta">Adviser: ${escapeHtml(sec.adviser || '—')} · Students: ${sec.studentCount} · Units: ${totalUnits}</div>
+            <div class="meta">Shift: ${escapeHtml(sec.shift || 'AM')} · Students: ${sec.studentCount} · Units: ${totalUnits}</div>
             <div style="font-size:8.5px; color:#555;">STI Academic Scheduling Master Timetable</div>
           </div>
         </div>
@@ -3451,16 +3536,12 @@ window.toggleAutoGenModeUI = toggleAutoGenModeUI;
 window.calculateAutoGenPreview = calculateAutoGenPreview;
 window.submitAutoGenerateSections = submitAutoGenerateSections;
 window.openAddSectionModal = openAddSectionModal;
-window.populateAdviserDropdown = populateAdviserDropdown;
 window.openEditSectionModal = openEditSectionModal;
 window.closeSectionModal = closeSectionModal;
 window.submitSectionModal = submitSectionModal;
 window.openSplitSectionModal = openSplitSectionModal;
 window.closeSplitSectionModal = closeSplitSectionModal;
 window.submitSplitSection = submitSplitSection;
-window.openMergeSectionsModal = openMergeSectionsModal;
-window.closeMergeSectionsModal = closeMergeSectionsModal;
-window.submitMergeSections = submitMergeSections;
 window.deleteSectionItem = deleteSectionItem;
 
 // Step 6 & 7 Modals & Drag-and-Drop

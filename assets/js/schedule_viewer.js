@@ -62,7 +62,7 @@ function viewerSheetDetails(selected, classes, activeTerm, termLabel) {
     const sec = ACADEMIC_SECTIONS.find(s => s.code === selected && s.termId === activeTerm.id);
     return {
       subtitle: sec ? `${sec.program} • Year ${sec.year} (${sec.name}) • ${termLabel}` : termLabel,
-      stats: [['Total Units', String(totalUnits)], ['# of Students', String(sec ? sec.studentCount : 0)], ['Adviser', (sec && sec.adviser) || '—']]
+      stats: [['Total Units', String(totalUnits)], ['# of Students', String(sec ? sec.studentCount : 0)], ['Shift', (sec && sec.shift) || 'AM']]
     };
   }
   if (viewerMode === 'room') {
