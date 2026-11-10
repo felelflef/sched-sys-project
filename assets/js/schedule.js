@@ -2797,15 +2797,9 @@ function openEditClassScheduleModal(classId) {
       </div>
     </div>
 
-    <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:0;">
-      <div class="form-group" style="margin-bottom:0;">
-        <label class="form-label" style="font-weight:700; font-size:12px;">Section</label>
-        <input type="text" id="editScheduleSection" class="form-input" value="${escapeHtml(item.section)}" style="width:100%; font-weight:700;" />
-      </div>
-      <div class="form-group" style="margin-bottom:0;">
-        <label class="form-label" style="font-weight:700; font-size:12px;">Units</label>
-        <input type="number" step="0.5" id="editScheduleUnits" class="form-input" value="${item.units || 1.5}" style="width:100%;" />
-      </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label" style="font-weight:700; font-size:12px;">Section</label>
+      <input type="text" id="editScheduleSection" class="form-input" value="${escapeHtml(item.section)}" style="width:100%; font-weight:700;" />
     </div>
   `;
 
@@ -2829,11 +2823,7 @@ function openEditClassScheduleModal(classId) {
 function handleEditSubjectChange(code) {
   const subj = CURRICULUM_SUBJECTS.find(s => s.code.toUpperCase() === (code || '').toUpperCase());
   const titleInput = document.getElementById('editScheduleSubjTitle');
-  const unitsInput = document.getElementById('editScheduleUnits');
-  if (subj) {
-    if (titleInput) titleInput.value = subj.name;
-    if (unitsInput) unitsInput.value = (subj.units >= 3 ? 1.5 : subj.units);
-  }
+  if (subj && titleInput) titleInput.value = subj.name;
   const instSelect = document.getElementById('editScheduleInstructor');
   if (instSelect) {
     const curVal = instSelect.value;
@@ -2859,7 +2849,6 @@ function submitEditClassSchedule() {
   const room = document.getElementById('editScheduleRoom')?.value;
   const instructor = document.getElementById('editScheduleInstructor')?.value;
   const section = document.getElementById('editScheduleSection')?.value.trim();
-  const units = parseFloat(document.getElementById('editScheduleUnits')?.value || '1.5');
 
   if (!subjCode) {
     if (errDiv) { errDiv.textContent = 'Subject is required.'; errDiv.style.display = 'block'; }
@@ -2936,7 +2925,6 @@ function submitEditClassSchedule() {
   item.room = room;
   item.instructor = instructor;
   item.section = section;
-  item.units = units;
 
   const matchedSubj = CURRICULUM_SUBJECTS.find(s => s.code.toUpperCase() === subjCode.toUpperCase());
   if (matchedSubj) {
