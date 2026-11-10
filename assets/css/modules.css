@@ -477,7 +477,8 @@ body.role-faculty #btnGenerateAi,
 body.role-faculty #btnUndoGenerate,
 body.role-faculty #unassignedBanner,
 body.role-faculty .nav-item[data-module="reports"],
-body.role-faculty .nav-item[data-module="users"] { display: none !important; }
+body.role-faculty .nav-item[data-module="users"],
+body.role-faculty .nav-section-admin { display: none !important; }
 
 /* Sortable headings */
 #page-rooms .data-table th:not(:last-child),

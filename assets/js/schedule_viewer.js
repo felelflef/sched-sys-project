@@ -6,6 +6,7 @@
 let viewerMode = 'section'; // 'section' | 'teacher' | 'room'
 const viewerSelection = { section: '', teacher: '', room: '' };
 const VIEWER_LABELS = { section: 'Section', teacher: 'Professor', room: 'Room' };
+let viewerDefaultedFor = null; // Email of the faculty member already shown their own timetable
 
 /**
  * Adds any room used by a class to the ROOMS catalog so its timetable can still be viewed.
@@ -55,7 +56,7 @@ function viewerOptions(activeTerm, termClasses) {
 }
 
 function viewerSheetDetails(selected, classes, activeTerm, termLabel) {
-  const totalUnits = classes.reduce((sum, c) => sum + (c.units || 0), 0);
+  const totalUnits = totalSubjectUnits(classes);
   const weeklyHours = classes.reduce((sum, c) => sum + (timeToMinutes(c.endTime) - timeToMinutes(c.startTime)), 0) / 60;
 
   if (viewerMode === 'section') {
@@ -88,6 +89,16 @@ function renderScheduleViewer() {
   const { activeSy, activeTerm } = getActiveAcademicContext();
   const termLabel = `${activeTerm.termName} ${activeSy.yearCode}`;
   const termClasses = MASTER_SCHEDULE_DATA.filter(c => !c.termId || c.termId === activeTerm.id);
+
+  // A professor first sees their own timetable; after that, their own choice is kept
+  if (CURRENT_USER && CURRENT_USER.role === 'faculty' && viewerDefaultedFor !== CURRENT_USER.email) {
+    const own = FACULTY.find(f => f.email && f.email.toLowerCase() === (CURRENT_USER.email || '').toLowerCase());
+    if (own) {
+      viewerDefaultedFor = CURRENT_USER.email;
+      viewerMode = 'teacher';
+      viewerSelection.teacher = own.name;
+    }
+  }
 
   document.querySelectorAll('[data-viewer-mode]').forEach(btn => {
     const isActive = btn.dataset.viewerMode === viewerMode;
@@ -141,8 +152,8 @@ function csvCell(value) {
 function downloadScheduleCsv(classes, filename) {
   const dayOrder = DAYS.reduce((order, day, i) => ({ ...order, [day]: i }), {});
   const sorted = [...classes].sort((a, b) => a.section.localeCompare(b.section) || dayOrder[a.day] - dayOrder[b.day] || a.startTime.localeCompare(b.startTime));
-  const lines = [['Section', 'Subject Code', 'Subject Title', 'Day', 'Start', 'End', 'Room', 'Professor', 'Units']];
-  sorted.forEach(c => lines.push([c.section, c.subjectCode, c.subjectTitle, c.day, formatTime12(c.startTime), formatTime12(c.endTime), c.room, c.instructor, c.units]));
+  const lines = [['Section', 'Subject Code', 'Subject Title', 'Day', 'Start', 'End', 'Room', 'Professor', 'Subject Units']];
+  sorted.forEach(c => lines.push([c.section, c.subjectCode, c.subjectTitle, c.day, formatTime12(c.startTime), formatTime12(c.endTime), c.room, c.instructor, subjectUnitsFor(c)]));
 
   // The byte order mark makes Excel read accented names correctly
   const blob = new Blob(['﻿' + lines.map(line => line.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
