@@ -1,35 +1,10 @@
 /* ═══════════════════════════════════════════════════
    SCHEDULE OVERVIEW
-   Professor loads, room use, conflicts and missing hours for the active term.
+   Professor loads, room use and missing hours for the active term.
    ═══════════════════════════════════════════════════ */
 
 // Six school days of 12 hours (7:00 AM to 7:00 PM)
 const ROOM_WEEKLY_HOURS = 72;
-
-function findScheduleConflicts(classes) {
-  const conflicts = [];
-  const timeOf = c => `${c.day} ${formatTime12(c.startTime)}–${formatTime12(c.endTime)}`;
-
-  classes.forEach((a, i) => {
-    classes.slice(i + 1).forEach(b => {
-      if (a.day !== b.day) return;
-      if (!(timeToMinutes(a.startTime) < timeToMinutes(b.endTime) && timeToMinutes(a.endTime) > timeToMinutes(b.startTime))) return;
-      const shared = [];
-      if (a.room === b.room) shared.push(`Room ${a.room}`);
-      if (a.instructor === b.instructor) shared.push(a.instructor);
-      if (a.section === b.section) shared.push(`Section ${a.section}`);
-      if (shared.length) {
-        conflicts.push({ when: timeOf(a), what: `${a.section} ${a.subjectCode} and ${b.section} ${b.subjectCode}`, problem: `${shared.join(', ')} double-booked` });
-      }
-    });
-
-    const problem = checkFacultySubjectConflict(a.instructor, a.subjectCode, a.section)
-      || facultyAvailabilityProblem(a.instructor, a.day, a.startTime, a.endTime)
-      || classRoomProblem(a);
-    if (problem) conflicts.push({ when: timeOf(a), what: `${a.section} ${a.subjectCode}`, problem });
-  });
-  return conflicts;
-}
 
 function reportTable(headings, rows, emptyMessage) {
   if (rows.length === 0) return `<p class="report-empty">${escapeHtml(emptyMessage)}</p>`;
@@ -60,7 +35,6 @@ function renderScheduleReports() {
     return { code: room.code, type: room.type, classes: roomClasses.length, hours, percent: Math.round(hours / ROOM_WEEKLY_HOURS * 100) };
   }).sort((a, b) => b.hours - a.hours);
 
-  const conflicts = findScheduleConflicts(classes);
   const missing = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id).flatMap(section =>
     sectionSubjectProgress(section)
       .filter(p => p.scheduledMinutes < p.requiredMinutes)
@@ -69,7 +43,6 @@ function renderScheduleReports() {
 
   const summary = [
     ['Classes This Term', classes.length],
-    ['Conflicts', conflicts.length],
     ['Subjects Missing Hours', missing.length],
     ['Professors Over Limit', overLimit.length]
   ];
@@ -80,9 +53,6 @@ function renderScheduleReports() {
     <p class="report-term">${escapeHtml(activeTerm.termName)} ${escapeHtml(activeSy.yearCode)}</p>
     <div class="stats-row">${summary.map(([label, value]) => `
       <div class="stat-card"><div><div class="stat-value">${value}</div><div class="stat-label">${escapeHtml(label)}</div></div></div>`).join('')}
-    </div>
-    <div class="card report-card"><div class="card-header"><div><h3>Conflicts</h3><p>Double-bookings, qualification, availability and room problems</p></div></div>
-      ${reportTable(['When', 'Classes', 'Problem'], conflicts.map(c => [escapeHtml(c.when), escapeHtml(c.what), escapeHtml(c.problem)]), 'No conflicts this term.')}
     </div>
     <div class="card report-card"><div class="card-header"><div><h3>Subjects Missing Hours</h3><p>Included subjects that don't have their full weekly hours yet</p></div></div>
       ${reportTable(['Section', 'Subject', 'Required', 'Scheduled'], missing.map(m => [escapeHtml(m.section), `${escapeHtml(m.subject.code)} ${escapeHtml(m.subject.name)}`, `${m.required} hrs`, `${m.scheduled} hrs`]), 'Every subject has its full weekly hours.')}

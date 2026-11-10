@@ -892,8 +892,20 @@ async function submitAddSubjectModal() {
     return;
   }
 
+  // Classes that would no longer match the edited subject come off the schedule
+  const editedSubj = idVal ? CURRICULUM_SUBJECTS.find(s => s.id === parseInt(idVal, 10)) : null;
+  const brokenBySubject = editedSubj ? curriculumSubjectClasses(editedSubj).filter(c => {
+    const sec = ACADEMIC_SECTIONS.find(s => s.code === c.section && s.termId === editedSubj.termId);
+    if (!sec) return false;
+    if ((c.subjectCode || '').toUpperCase() !== code.toUpperCase() || sec.program !== program || Number(sec.year) !== year) return true;
+    const room = ROOMS.find(r => r.code === c.room);
+    return !!(room && roomFitProblem(room, { ...editedSubj, code, type, lecHours: lecHrs, labHours: labHrs }, sec));
+  }) : [];
+  if (!(await askToUnscheduleBroken(brokenBySubject, `Change ${editedSubj ? editedSubj.code : code}?`, `After this change, some ${editedSubj ? editedSubj.code : code} classes no longer fit their room type, program or year level.`))) return;
+
   const curricRemoval = await confirmSubjectFormRemoval('curricSubj', code);
   if (!curricRemoval) return;
+  removeClassesAndSave(brokenBySubject);
 
   let newSubjectTermId;
   if (idVal) {
@@ -1381,7 +1393,7 @@ function calculateAutoGenPreview() {
   label.textContent = `Preview: Will generate ${secCount} section${secCount > 1 ? 's' : ''} (~${stuPerSec} students each) for ${progLabel} (${yrLabel}).`;
 }
 
-function submitAutoGenerateSections() {
+async function submitAutoGenerateSections() {
   const { activeSy, activeTerm } = getActiveAcademicContext();
   const progVal = document.getElementById('autoGenProgram')?.value || 'all';
   const yrVal = document.getElementById('autoGenYear')?.value || 'all';
@@ -1416,6 +1428,17 @@ function submitAutoGenerateSections() {
   const targetYears = yrVal === 'all' ? [1, 2, 3, 4] : [parseInt(yrVal, 10)];
 
   const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+  // Existing sections get the new student count, so check their rooms first
+  const resetCodes = targetProgs.flatMap(prog => targetYears.flatMap(yr =>
+    Array.from({ length: countPerGroup }, (_, i) => `${prog.substring(2) || prog}${yr}0${i + 1}M`)));
+  const resetSections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id && resetCodes.includes(s.code));
+  const tooSmall = MASTER_SCHEDULE_DATA.filter(c => {
+    const sec = resetSections.find(s => s.code === c.section && (c.termId || s.termId) === s.termId);
+    return sec && sectionChangeBreaks(c, { ...sec, studentCount: studentsPerSec });
+  });
+  if (!(await askToUnscheduleBroken(tooSmall, 'Update existing sections?', `Existing sections will have ${studentsPerSec} students each, and some of their classes are in rooms that are too small.`))) return;
+  removeClassesAndSave(tooSmall);
 
   let createdCount = 0;
 
@@ -1514,7 +1537,7 @@ function closeSectionModal() {
   if (modal) modal.style.display = 'none';
 }
 
-function submitSectionModal() {
+async function submitSectionModal() {
   const { activeSy, activeTerm } = getActiveAcademicContext();
   const idVal = document.getElementById('secEditId').value;
   const code = document.getElementById('secCodeInput').value.trim();
@@ -1547,6 +1570,12 @@ function submitSectionModal() {
   if (idVal) {
     const sec = ACADEMIC_SECTIONS.find(s => s.id === parseInt(idVal, 10));
     if (sec) {
+      // Classes that would no longer fit their room or curriculum come off the schedule
+      const updated = { ...sec, code, program: prog, year: yr, studentCount: students };
+      const broken = MASTER_SCHEDULE_DATA.filter(c => c.section === sec.code && (c.termId || sec.termId) === sec.termId && sectionChangeBreaks(c, updated));
+      if (!(await askToUnscheduleBroken(broken, `Change ${sec.code}?`, `With ${students} students in ${prog} Year ${yr}, some of ${sec.code}'s classes no longer fit their room or curriculum.`))) return;
+      removeClassesAndSave(broken);
+
       // Classes follow the section when its code changes
       if (previousCode !== code) {
         MASTER_SCHEDULE_DATA.forEach(c => {
@@ -2246,13 +2275,23 @@ function roomFitProblem(room, subj, sec) {
   return null;
 }
 
-// Room problem for a class already on the schedule, used by the Overview conflict list
-function classRoomProblem(c) {
-  const termId = c.termId || getActiveAcademicContext().activeTerm.id;
-  const sec = ACADEMIC_SECTIONS.find(s => s.code === c.section && s.termId === termId);
+// True when a class no longer fits its section after the section is changed
+function sectionChangeBreaks(c, updatedSec) {
+  const subj = curriculumSubjectFor(updatedSec, c.subjectCode, updatedSec.termId);
+  if (!subj) return true;
   const room = ROOMS.find(r => r.code === c.room);
-  const subj = sec && curriculumSubjectFor(sec, c.subjectCode, termId);
-  return sec && room && subj ? roomFitProblem(room, subj, sec) : null;
+  return !!(room && roomFitProblem(room, subj, updatedSec));
+}
+
+// Lists the classes a change would break and asks before saving. Resolves true to go ahead.
+// The caller takes the classes off the schedule with removeClassesAndSave once every prompt is confirmed.
+function askToUnscheduleBroken(affected, title, reason) {
+  if (affected.length === 0) return Promise.resolve(true);
+  const listed = affected.slice(0, 6).map(c => `${c.section} ${c.subjectCode} (${c.day} ${formatTime12(c.startTime)})`).join(', ');
+  const more = affected.length > 6 ? `, and ${affected.length - 6} more` : '';
+  const them = affected.length === 1 ? 'it' : 'them';
+  return askConfirm(`${reason}\n\nThis affects ${scheduledClassesNote(affected)}: ${listed}${more}.\n\nSaving takes ${them} off the schedule, so ${affected.length === 1 ? 'it shows' : 'they show'} as missing hours and can be placed again.`,
+    { title, confirmLabel: 'Save and unschedule', danger: true });
 }
 
 // Rules for a class placed by hand, on top of clash, qualification and availability checks

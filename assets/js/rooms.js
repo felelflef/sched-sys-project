@@ -110,7 +110,7 @@ window.closeRoomModal = function() {
   document.getElementById('roomModal').style.display = 'none';
 };
 
-window.submitRoomForm = function() {
+window.submitRoomForm = async function() {
   if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
     alert('Access Denied: Only system administrators are authorized to save room changes.');
     closeRoomModal();
@@ -136,6 +136,17 @@ window.submitRoomForm = function() {
   if (origCode) {
     const room = ROOMS.find(r => r.code === origCode);
     if (room) {
+      // Classes the room can no longer hold come off the schedule
+      const updated = { ...room, floor, type, cap };
+      const broken = MASTER_SCHEDULE_DATA.filter(c => {
+        if (c.room !== origCode) return false;
+        const termId = c.termId || getActiveAcademicContext().activeTerm.id;
+        const sec = ACADEMIC_SECTIONS.find(s => s.code === c.section && s.termId === termId);
+        const subj = sec && curriculumSubjectFor(sec, c.subjectCode, termId);
+        return !!(sec && subj && roomFitProblem(updated, subj, sec));
+      });
+      if (!(await askToUnscheduleBroken(broken, `Change ${origCode}?`, `As a ${type} room with ${cap} seats, ${origCode} no longer fits some of its classes.`))) return;
+      removeClassesAndSave(broken);
       room.floor = floor;
       room.type = type;
       room.cap = cap;
