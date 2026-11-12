@@ -3,8 +3,8 @@
    Professor loads, room use and missing hours for the active term.
    ═══════════════════════════════════════════════════ */
 
-// Six school days of 12 hours (7:00 AM to 7:00 PM)
-const ROOM_WEEKLY_HOURS = 72;
+// Six school days of the hours classes can be held (7:00 AM to 8:30 PM)
+const ROOM_WEEKLY_HOURS = (CLASS_DAY_END - CLASS_DAY_START) / 60 * 6;
 
 function reportTable(headings, rows, emptyMessage) {
   if (rows.length === 0) return `<p class="report-empty">${escapeHtml(emptyMessage)}</p>`;
@@ -60,7 +60,7 @@ function renderScheduleReports() {
     <div class="card report-card"><div class="card-header"><div><h3>Professor Loads</h3><p>Weekly teaching hours against each professor's limit</p></div></div>
       ${reportTable(['Professor', 'Status', 'Classes', 'Hours', 'Limit', ''], loads.map(l => [escapeHtml(l.name), escapeHtml(l.status), l.classes, `${l.hours.toFixed(1)} hrs`, `${l.max} hrs`, statusBadge(l.hours <= l.max, 'Within limit', 'Over limit')]), 'No professors yet.')}
     </div>
-    <div class="card report-card"><div class="card-header"><div><h3>Room Use</h3><p>Share of a ${ROOM_WEEKLY_HOURS}-hour school week each room is booked</p></div></div>
+    <div class="card report-card"><div class="card-header"><div><h3>Room Use</h3><p>Share of the ${ROOM_WEEKLY_HOURS}-hour school week (Mon–Sat, 7:00 AM–8:30 PM) each room is booked</p></div></div>
       ${reportTable(['Room', 'Type', 'Classes', 'Hours', 'Use'], rooms.map(r => [escapeHtml(r.code), escapeHtml(r.type), r.classes, `${r.hours.toFixed(1)} hrs`, `${r.percent}%`]), 'No rooms yet.')}
     </div>
   `;

@@ -149,7 +149,6 @@ function restoreUserSession() {
 
     const ROLE_LABELS = {
       'admin': 'System Administrator',
-      'academic-head': 'Academic Head',
       'program-head': 'Program Head',
       'faculty': 'Faculty Member'
     };
@@ -288,7 +287,6 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
 
   const ROLE_LABELS = {
     'admin': 'System Administrator',
-    'academic-head': 'Academic Head',
     'program-head': 'Program Head',
     'faculty': 'Faculty Member'
   };
@@ -302,6 +300,12 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
   try { if (typeof renderSubjectTable === 'function') renderSubjectTable(); } catch (e) {}
   try { if (typeof renderUserTable === 'function') renderUserTable(); } catch (e) {}
   try { if (typeof renderSubjectDatalist === 'function') renderSubjectDatalist(); } catch (e) {}
+
+  // A new sign-in never opens on a page this role can't use, such as the previous user's User Management
+  const openNavItem = document.querySelector('.nav-item.active');
+  if (!openNavItem || getComputedStyle(openNavItem).display === 'none' || (openNavItem.dataset.module === 'users' && user.role !== 'admin')) {
+    window.switchPage('schedule');
+  }
 
   // Transition: fade out login, reveal dashboard
   const loginPage = document.getElementById('loginPage');
@@ -326,9 +330,8 @@ async function syncUsersFromDB() {
           const fullName = `${u.first_name} ${u.last_name}`.trim();
           const roleLabels = {
             'admin': 'System Admin',
-            'faculty': `Faculty – ${u.subject_role || 'General'}`,
             'program-head': `Program Head – ${u.subject_role || 'General'}`,
-            'academic-head': 'Academic Head'
+            'faculty': `Faculty – ${u.subject_role || 'General'}`
           };
           const existingIdx = USERS.findIndex(existing => existing.email.toLowerCase() === email);
           if (existingIdx === -1) {
@@ -354,7 +357,7 @@ async function syncUsersFromDB() {
             };
           }
 
-          if (['faculty', 'program-head', 'academic-head'].includes(u.role)) {
+          if (u.role === 'faculty' || u.role === 'program-head') {
             if (!FACULTY.some(f => f.email.toLowerCase() === email)) {
               const colors = ['#25447A', '#2E7D5B', '#6C3483', '#C27A1A', '#2980B9', '#C0392B'];
               FACULTY.push({

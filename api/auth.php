@@ -56,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $input['action'] ?? 'login';
 
     if ($action === 'logout') {
+        expectActivity(null, 'auth', 'logout'); // noted before the session is cleared
         try {
             if (isset($_SESSION['user_id'])) {
                 $db = getDB();
@@ -110,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_regenerate_id(true);
             $_SESSION['session_token'] = $sessionToken;
             clearFailedAttempts($db, $attemptKey);
+            expectActivity($db, 'auth', 'change_password');
             jsonResponse(['success' => true, 'message' => 'Your password has been changed.']);
         }
 
@@ -129,6 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($update->rowCount() === 0) {
             jsonResponse(['success' => false, 'message' => 'User not found.'], 404);
         }
+        expectActivity($db, 'auth', 'admin_reset_password', $input);
         jsonResponse(['success' => true, 'message' => 'Password reset. Share it with the user securely.']);
     }
 
@@ -178,6 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['last_name'] = $user['last_name'];
             $_SESSION['email'] = $user['email'];
             $_SESSION['subject_role'] = $user['subject_role'];
+            expectActivity($db, 'auth', 'login');
 
             $initials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1));
             if (empty($initials)) $initials = 'ST';

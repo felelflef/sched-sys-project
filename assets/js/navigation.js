@@ -5,10 +5,17 @@
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.nav-item[data-module]').forEach(item => {
     item.addEventListener('click', () => {
+      // A page hidden from this role, such as User Management, opens Master Schedule instead, even from a saved page
+      const hiddenForRole = getComputedStyle(item).display === 'none' || (item.dataset.module === 'users' && CURRENT_USER && CURRENT_USER.role !== 'admin');
+      if (hiddenForRole && item.dataset.module !== 'schedule') {
+        window.switchPage('schedule');
+        return;
+      }
       const mod = item.dataset.module;
       // Toggle nav active
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       item.classList.add('active');
+      syncMobileSection(item);
       // Toggle page
       document.querySelectorAll('.module-page').forEach(p => p.classList.remove('active'));
       const pageEl = document.getElementById(`page-${mod}`);
@@ -34,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (mod === 'subjects') renderSubjectTable();
       if (mod === 'schedule') renderGrid();
       if (mod === 'users') renderUserTable();
+      if (mod === 'activity') loadActivityLog(true);
       if (mod === 'reports') renderScheduleReports();
     });
   });
@@ -45,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window.switchPage(savedPage);
     }
   } catch (e) {}
+  syncMobileSection(document.querySelector('.nav-item.active'));
 
   document.addEventListener('click', function(e) {
     const menu = document.getElementById('userDropdownMenu');
@@ -54,6 +63,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+/* ─── Phone section bar ───
+   Marks the section of the open page, so the top bar shows only that section's pages. */
+const lastPageInSection = {};
+function syncMobileSection(item) {
+  const section = item && item.closest('.nav-section[data-section]');
+  if (!section) return;
+  const name = section.dataset.section;
+  lastPageInSection[name] = item.dataset.module;
+  document.querySelectorAll('.nav-section[data-section]').forEach(s => s.classList.toggle('mobile-current', s === section));
+  document.querySelectorAll('.mobile-section-btn').forEach(btn => {
+    const isCurrent = btn.dataset.section === name;
+    btn.classList.toggle('active', isCurrent);
+    if (isCurrent) btn.setAttribute('aria-current', 'true');
+    else btn.removeAttribute('aria-current');
+  });
+}
+
+// Opens the page last used in that section, or else its first page this user can see
+window.openMobileSection = function(name) {
+  const section = document.querySelector(`.nav-section[data-section="${name}"]`);
+  if (!section) return;
+  const pages = [...section.querySelectorAll('.nav-item[data-module]')].filter(item => getComputedStyle(item).display !== 'none');
+  const target = pages.find(item => item.dataset.module === lastPageInSection[name]) || pages[0];
+  if (target) target.click();
+};
 
 window.switchPage = function(mod) {
   const navItem = document.querySelector(`.nav-item[data-module="${mod}"]`);

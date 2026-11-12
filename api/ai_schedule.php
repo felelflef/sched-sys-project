@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'message' => 'Method not allowed'], 405);
 }
 
-requireAnyRole(['admin', 'academic-head', 'program-head']);
+requireAnyRole(['admin', 'program-head']);
 requireCSRF();
 
 $apiKey = getenv('GEMINI_API_KEY') ?: '';
@@ -53,7 +53,7 @@ $teachers = [];
 foreach ($db->query("
     SELECT u.email, CONCAT(u.first_name, ' ', u.last_name) AS name, q.subject_code, u.employment_status, u.available_days, u.available_shifts
     FROM users u JOIN faculty_qualifications q ON q.user_id = u.user_id
-    WHERE u.role IN ('faculty', 'academic-head', 'program-head')
+    WHERE u.role IN ('faculty', 'program-head')
     ORDER BY u.email
 ")->fetchAll() as $row) {
     $teachers[$row['email']]['name'] = $row['name'];

@@ -4,7 +4,7 @@
 
 const VALID_USERS = {
   'admin@sti.edu':   { name: 'System Administrator', role: 'admin',         initials: 'SA' },
-  'acah@sti.edu':    { name: 'Academic Head',        role: 'academic-head', initials: 'AH' },
+  'acah@sti.edu':    { name: 'Prof. IT Instructor',  role: 'faculty',       initials: 'IT' },
   'proh@sti.edu':    { name: 'Program Head',         role: 'program-head',  initials: 'PH' },
   'faculty@sti.edu': { name: 'Faculty Member',       role: 'faculty',       initials: 'FM' },
 };
@@ -64,7 +64,7 @@ let SUBJECTS = [
 let DEPARTMENTS = ['IT / CS', 'Engineering', 'Hospitality', 'Business Admin', 'General Education'];
 
 let FACULTY = [
-  { name: 'Academic Head', email: 'acah@sti.edu', dept: 'IT / CS', status: 'Full-time', maxLoad: 24, mainQuals: ['ITE 101','CC 103','ITE 301','ITE 202'], bg: '#25447A' },
+  { name: 'Prof. IT Instructor', email: 'acah@sti.edu', dept: 'IT / CS', status: 'Full-time', maxLoad: 24, mainQuals: ['ITE 101','CC 103','ITE 301','ITE 202'], bg: '#25447A' },
   { name: 'Program Head', email: 'proh@sti.edu', dept: 'IT / CS', status: 'Full-time', maxLoad: 24, mainQuals: ['CS 201','CS 301','CS 401','CC 104'], bg: '#2E7D5B' },
   { name: 'Faculty Member', email: 'faculty@sti.edu', dept: 'IT / CS', status: 'Full-time', maxLoad: 24, mainQuals: ['ITE 101','IM 101','IT 312','ITE 401'], bg: '#6C3483' },
   { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', dept: 'General Education', status: 'Full-time', maxLoad: 24, mainQuals: ['GE 107','GE 201','PE 102','NSTP 1','GE 102','PE 104','NSTP 2'], bg: '#0D9488' },
@@ -79,9 +79,14 @@ function isFacultyQualified(fac, subjectCode) {
   return (fac?.mainQuals || []).some(q => q.trim().toUpperCase() === target);
 }
 
+// The System Administrator and Program Heads manage scheduling data. Only the System Administrator manages user accounts.
+function canManageData() {
+  return !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'program-head'));
+}
+
 let USERS = [
   { name: 'System Administrator', email: 'admin@sti.edu', role: 'admin', roleLabel: 'System Admin', lastActive: 'Just now', status: 'Online', employmentType: 'Full-time' },
-  { name: 'Academic Head', email: 'acah@sti.edu', role: 'academic-head', roleLabel: 'Academic Head', lastActive: '5 min ago', status: 'Online', employmentType: 'Full-time' },
+  { name: 'Prof. IT Instructor', email: 'acah@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '5 min ago', status: 'Online', employmentType: 'Full-time' },
   { name: 'Program Head', email: 'proh@sti.edu', role: 'program-head', roleLabel: 'Program Head', lastActive: '10 min ago', status: 'Online', employmentType: 'Full-time' },
   { name: 'Faculty Member', email: 'faculty@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '15 min ago', status: 'Online', employmentType: 'Full-time' },
   { name: 'Prof. GenEd Instructor', email: 'gened@sti.edu', role: 'faculty', roleLabel: 'Faculty Member', lastActive: '20 min ago', status: 'Online', employmentType: 'Full-time' },
@@ -100,6 +105,7 @@ const MODULE_TITLES = {
   subjects: { title: 'Subject Catalog', sub: 'Courses, units and qualified professors' },
   ai:       { title: 'AI Assistant', sub: 'Ask questions and get suggestions about rooms and schedules' },
   users:    { title: 'User Management', sub: 'Accounts, roles and passwords' },
+  activity: { title: 'Activity Log', sub: 'Who changed what, and when' },
 };
 
 /* ═══════════════════════════════════════════════════
@@ -173,6 +179,16 @@ let CURRICULUM_SUBJECTS = [
   { id: 28, termId: 3, termName: 'Summer',  code: 'CS 401',  name: 'Automata Theory',            units: 3, lecHours: 3.0, labHours: 0.0, type: 'lecture', program: 'BSCS', year: 1, curriculum: '2024 Revised', isIncluded: true }
 ];
 
+// 4. Saved Subject Sets: reusable subject lists kept in the Subject Catalog and loaded into a term in Step 3.
+// The demo starts with one set per term.
+function subjectSetItem(s) {
+  return { code: s.code, name: s.name, units: s.units, lecHours: s.lecHours, labHours: s.labHours, type: s.type, program: s.program, year: Number(s.year) };
+}
+let SUBJECT_SETS = SCHOOL_TERMS.map(term => {
+  const year = SCHOOL_YEARS.find(y => y.id === term.yearId);
+  return { id: term.id, name: `${term.termName}${year ? ` ${year.yearCode}` : ''}`, items: CURRICULUM_SUBJECTS.filter(s => s.termId === term.id).map(subjectSetItem) };
+}).filter(set => set.items.length > 0);
+
 // 5. Academic Sections
 let ACADEMIC_SECTIONS = [
   // AY 2026-2027 (Term 1 - 1st Sem)
@@ -242,6 +258,9 @@ function loadStateFromStorage() {
     const storedCatalog = JSON.parse(localStorage.getItem('sti_subject_catalog') || 'null');
     if (Array.isArray(storedCatalog) && storedCatalog.length > 0) SUBJECTS = storedCatalog;
 
+    const storedSets = JSON.parse(localStorage.getItem('sti_subject_sets') || 'null');
+    if (Array.isArray(storedSets)) SUBJECT_SETS = storedSets;
+
     const storedDepts = JSON.parse(localStorage.getItem('sti_departments') || 'null');
     if (Array.isArray(storedDepts) && storedDepts.length > 0) DEPARTMENTS = storedDepts;
 
@@ -271,6 +290,7 @@ function saveStateToStorage() {
     localStorage.setItem('sti_rooms', JSON.stringify(ROOMS));
     localStorage.setItem('sti_subject_catalog', JSON.stringify(SUBJECTS));
     localStorage.setItem('sti_departments', JSON.stringify(DEPARTMENTS));
+    localStorage.setItem('sti_subject_sets', JSON.stringify(SUBJECT_SETS));
     localStorage.setItem('sti_school_years', JSON.stringify(SCHOOL_YEARS));
     localStorage.setItem('sti_school_terms', JSON.stringify(SCHOOL_TERMS));
     localStorage.setItem('sti_curriculum_subjects', JSON.stringify(CURRICULUM_SUBJECTS));

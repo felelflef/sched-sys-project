@@ -33,11 +33,14 @@ function renderSubjectTable() {
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
+  const isAdmin = canManageData();
   const btnAdd = document.getElementById('btnAddSubject');
   if (btnAdd) {
     btnAdd.style.display = isAdmin ? 'inline-flex' : 'none';
   }
+
+  renderSubjectSetTable();
+  showCatalogTab(catalogTab);
 
   const filterVal = document.getElementById('subjectDeptFilter')?.value || 'all';
   const searchVal = (document.getElementById('subjectSearchInput')?.value || '').trim().toLowerCase();
@@ -105,7 +108,7 @@ const subjectFormProfessors = { subject: [], curricSubj: [] };
 
 function renderSubjectFormProfessors(form) {
   const selected = subjectFormProfessors[form];
-  const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
+  const isAdmin = canManageData();
 
   document.getElementById(`${form}ProfAddRow`).style.display = isAdmin ? 'flex' : 'none';
   document.getElementById(`${form}ProfSelect`).innerHTML = '<option value="">-- Choose Professor --</option>' +
@@ -154,7 +157,7 @@ function confirmSubjectFormRemoval(form, code) {
 }
 
 function saveSubjectFormProfessors(form, code, subjectSaved, removeClasses = false) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') return;
+  if (!canManageData()) return;
 
   const target = code.toUpperCase();
   const selected = subjectFormProfessors[form];
@@ -183,8 +186,8 @@ function saveSubjectFormProfessors(form, code, subjectSaved, removeClasses = fal
 }
 
 window.openAddSubjectModal = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to add subjects.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can add subjects.');
     return;
   }
   document.getElementById('subjectModalTitle').textContent = 'Add Subject to Catalog';
@@ -210,8 +213,8 @@ window.openAddSubjectModal = function() {
 };
 
 window.openEditSubjectModal = function(code) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to edit subjects.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can edit subjects.');
     return;
   }
   const subj = SUBJECTS.find(s => s.code.toLowerCase() === code.toLowerCase());
@@ -244,8 +247,8 @@ window.closeSubjectModal = function() {
 };
 
 window.submitSubjectForm = async function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to save subjects.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can save subjects.');
     closeSubjectModal();
     return;
   }
@@ -311,8 +314,8 @@ window.submitSubjectForm = async function() {
 };
 
 window.promptDeleteSubject = function(code) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to remove subjects.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can remove subjects.');
     return;
   }
   const subj = SUBJECTS.find(s => s.code.toLowerCase() === code.toLowerCase());
@@ -329,8 +332,8 @@ window.closeDeleteSubjectModal = function() {
 };
 
 window.confirmDeleteSubject = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to remove subjects.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can remove subjects.');
     return;
   }
   const code = document.getElementById('deleteSubjectTargetCode').value;
@@ -345,3 +348,401 @@ window.confirmDeleteSubject = function() {
 
 // Backward-compatible alias
 window.deleteSubject = window.promptDeleteSubject;
+
+/* ─── SAVED SUBJECT SETS ───
+   Reusable subject lists (for example a 1st or 2nd semester), made here in the Subject Catalog
+   and loaded into a term with Load Saved Subjects in Step 3. Both screens use SUBJECT_SETS. */
+
+let subjectSetDraft = { id: null, items: [] };
+let loadSubjectSetTermId = null;
+
+function canManageSubjectSets() {
+  return canManageData();
+}
+
+// The same subject for the same program and year counts once
+function subjectSetKey(item) {
+  return `${String(item.code || '').trim().toUpperCase()}|${item.program}|${Number(item.year)}`;
+}
+
+function termLabelFor(termId) {
+  const term = SCHOOL_TERMS.find(t => t.id === termId);
+  if (!term) return 'this term';
+  const year = SCHOOL_YEARS.find(y => y.id === term.yearId);
+  return `${term.termName}${year ? ` ${year.yearCode}` : ''}`;
+}
+
+// A term's subjects as set items, without repeats
+function termSubjectSetItems(termId) {
+  const seen = new Set();
+  return CURRICULUM_SUBJECTS.filter(s => s.termId === termId).map(subjectSetItem).filter(item => {
+    const key = subjectSetKey(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function sortSubjectSetItems(items) {
+  return items.sort((a, b) => a.program.localeCompare(b.program) || Number(a.year) - Number(b.year) || a.code.localeCompare(b.code));
+}
+
+// The Subject Catalog shows its subjects or its saved subject sets, one tab at a time
+let catalogTab = 'subjects';
+function showCatalogTab(tab) {
+  catalogTab = tab === 'sets' ? 'sets' : 'subjects';
+  [['subjects', 'catalogTabSubjects', 'subjectCatalogCard'], ['sets', 'catalogTabSets', 'subjectSetsCard']].forEach(([name, tabId, panelId]) => {
+    const isOpen = name === catalogTab;
+    const tabButton = document.getElementById(tabId);
+    const panel = document.getElementById(panelId);
+    if (!tabButton || !panel) return;
+    tabButton.classList.toggle('btn-primary', isOpen);
+    tabButton.classList.toggle('btn-outline', !isOpen);
+    tabButton.setAttribute('aria-selected', String(isOpen));
+    panel.style.display = isOpen ? '' : 'none';
+  });
+}
+
+function renderSubjectSetTable() {
+  const tbody = document.getElementById('subjectSetTableBody');
+  if (!tbody) return;
+  const countBadge = document.getElementById('catalogSetCount');
+  if (countBadge) countBadge.textContent = String(SUBJECT_SETS.length);
+  const canManage = canManageSubjectSets();
+  const btn = document.getElementById('btnAddSubjectSet');
+  if (btn) btn.style.display = canManage ? 'inline-flex' : 'none';
+
+  if (SUBJECT_SETS.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:28px 16px; color:var(--text-secondary);">No saved subject sets yet.${canManage ? ' Choose + New Set to make one.' : ''}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = SUBJECT_SETS.slice().sort((a, b) => a.name.localeCompare(b.name)).map(set => {
+    const programs = [...new Set(set.items.map(i => i.program))].sort();
+    const actions = canManage
+      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openSubjectSetModal(${Number(set.id)})">Edit</button>
+         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="deleteSubjectSet(${Number(set.id)})">Remove</button>`
+      : '<span style="font-size:11px; color:var(--text-secondary);">&mdash;</span>';
+    return `
+      <tr>
+        <td style="font-weight:700; color:var(--accent-primary);">${escapeHtml(set.name)}</td>
+        <td style="text-align:center; font-weight:600;">${set.items.length}</td>
+        <td>${programs.map(p => `<span class="badge" style="background:#F3F4F6; color:#374151; font-size:10.5px; margin:1px 2px;">${escapeHtml(p)}</span>`).join('')}</td>
+        <td style="text-align:right;">${actions}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function showSubjectSetError(message) {
+  const el = document.getElementById('subjectSetError');
+  el.textContent = message;
+  el.style.display = message ? 'block' : 'none';
+}
+
+// Opens the set editor for a new set, an existing set, or a ready-made list (preset)
+function openSubjectSetModal(id, preset) {
+  if (!canManageSubjectSets()) {
+    alert('Only the System Administrator or a Program Head can make or edit subject sets.');
+    return;
+  }
+  const set = id ? SUBJECT_SETS.find(s => s.id === id) : null;
+  const source = preset ? preset.items : (set ? set.items : []);
+  subjectSetDraft = { id: set ? set.id : null, items: sortSubjectSetItems(source.map(item => ({ ...item }))) };
+
+  document.getElementById('subjectSetModalTitle').textContent = set ? 'Edit Subject Set' : 'New Subject Set';
+  document.getElementById('subjectSetName').value = preset ? preset.name : (set ? set.name : '');
+  showSubjectSetError('');
+
+  document.getElementById('subjectSetCopyTerm').innerHTML = '<option value="">-- Choose a term --</option>' +
+    SCHOOL_TERMS.filter(t => CURRICULUM_SUBJECTS.some(s => s.termId === t.id))
+      .map(t => `<option value="${Number(t.id)}">${escapeHtml(termLabelFor(t.id))}</option>`).join('');
+  renderSubjectSetItems();
+  document.getElementById('subjectSetModal').style.display = 'flex';
+}
+
+function closeSubjectSetModal() {
+  document.getElementById('subjectSetModal').style.display = 'none';
+}
+
+function renderSubjectSetItems() {
+  const items = subjectSetDraft.items;
+  document.getElementById('subjectSetItemsBody').innerHTML = items.length === 0
+    ? '<tr><td colspan="6" style="text-align:center; padding:18px; color:var(--text-secondary);">No subjects yet. Copy them from a term or add them from the catalog.</td></tr>'
+    : items.map((item, index) => `
+      <tr>
+        <td style="font-weight:700; color:var(--accent-primary);">${escapeHtml(item.code)}</td>
+        <td>${escapeHtml(item.name)}</td>
+        <td>${escapeHtml(item.program)}</td>
+        <td>Year ${Number(item.year)}</td>
+        <td>${Number(item.units)}</td>
+        <td style="text-align:right;"><button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 7px; color:var(--danger); border-color:#fadbd8;" onclick="removeSubjectSetItem(${index})" aria-label="Remove ${escapeHtml(item.code)} for ${escapeHtml(item.program)} Year ${Number(item.year)}">&times;</button></td>
+      </tr>
+    `).join('');
+  document.getElementById('subjectSetCount').textContent = `${items.length} subject${items.length === 1 ? '' : 's'} in this set`;
+  renderSubjectSetPicker();
+}
+
+// Checkboxes for the catalog subjects. Ones already in the set for the chosen program and year are ticked and locked.
+function renderSubjectSetPicker() {
+  const picker = document.getElementById('subjectSetPicker');
+  if (!picker) return;
+  const program = document.getElementById('subjectSetProgram').value;
+  const year = parseInt(document.getElementById('subjectSetYear').value, 10) || 1;
+  const inSet = new Set(subjectSetDraft.items.map(subjectSetKey));
+  const catalog = SUBJECTS.slice().sort((a, b) => a.code.localeCompare(b.code));
+  picker.innerHTML = catalog.length === 0
+    ? '<span style="font-size:12px; color:var(--text-secondary);">The Subject Catalog has no subjects yet.</span>'
+    : catalog.map(s => {
+      const added = inSet.has(subjectSetKey({ code: s.code, program, year }));
+      return `<label class="availability-option" title="${escapeHtml(s.title || s.code)}${added ? ' (already in this set)' : ''}" style="${added ? 'opacity:0.55;' : ''}">
+        <input type="checkbox" value="${escapeHtml(s.code)}" ${added ? 'checked disabled' : ''} /> ${escapeHtml(s.code)}
+      </label>`;
+    }).join('');
+}
+
+function tickAllSubjectSetPicker() {
+  const boxes = [...document.querySelectorAll('#subjectSetPicker input:not(:disabled)')];
+  const tickAll = boxes.some(box => !box.checked);
+  boxes.forEach(box => { box.checked = tickAll; });
+}
+
+function copyTermIntoSubjectSet() {
+  const termId = parseInt(document.getElementById('subjectSetCopyTerm').value, 10);
+  if (!termId) {
+    showSubjectSetError('Choose a term to copy from.');
+    return;
+  }
+  const keys = new Set(subjectSetDraft.items.map(subjectSetKey));
+  const added = termSubjectSetItems(termId).filter(item => !keys.has(subjectSetKey(item)));
+  subjectSetDraft.items = sortSubjectSetItems([...subjectSetDraft.items, ...added]);
+  const nameInput = document.getElementById('subjectSetName');
+  if (!nameInput.value.trim()) nameInput.value = termLabelFor(termId);
+  showSubjectSetError(added.length === 0 ? 'Every subject from that term is already in this set.' : '');
+  renderSubjectSetItems();
+}
+
+// Adds every ticked subject for the chosen program and year.
+// Hours and type come from the newest curriculum entry with the same code, as in the Step 3 form.
+function addCatalogSubjectToSet() {
+  const codes = [...document.querySelectorAll('#subjectSetPicker input:checked:not(:disabled)')].map(box => box.value);
+  if (codes.length === 0) {
+    showSubjectSetError('Tick at least one subject to add.');
+    return;
+  }
+  const program = document.getElementById('subjectSetProgram').value;
+  const year = parseInt(document.getElementById('subjectSetYear').value, 10) || 1;
+  const keys = new Set(subjectSetDraft.items.map(subjectSetKey));
+  const added = [];
+  codes.forEach(code => {
+    const subj = SUBJECTS.find(s => s.code === code);
+    if (!subj || keys.has(subjectSetKey({ code, program, year }))) return;
+    const previous = CURRICULUM_SUBJECTS.filter(s => (s.code || '').toUpperCase() === code.toUpperCase()).sort((a, b) => b.id - a.id)[0];
+    const units = subj.units || (previous && previous.units) || 3;
+    added.push({
+      code: subj.code,
+      name: subj.title || subj.code,
+      units,
+      lecHours: previous ? (previous.lecHours || 0) : units,
+      labHours: previous ? (previous.labHours || 0) : 0,
+      type: previous ? (previous.type || 'lecture') : 'lecture',
+      program,
+      year
+    });
+  });
+  showSubjectSetError('');
+  subjectSetDraft.items = sortSubjectSetItems([...subjectSetDraft.items, ...added]);
+  renderSubjectSetItems();
+}
+
+function removeSubjectSetItem(index) {
+  subjectSetDraft.items.splice(index, 1);
+  renderSubjectSetItems();
+}
+
+let subjectSetSaving = false;
+
+async function submitSubjectSet() {
+  if (!canManageSubjectSets() || subjectSetSaving) return;
+  const name = document.getElementById('subjectSetName').value.trim().replace(/\s+/g, ' ');
+  if (!name) return showSubjectSetError('Please name the subject set.');
+  const nameProblem = name.length > 60 ? 'Set name must be 60 characters or fewer.' : INPUT_RULES.text('Set name', name);
+  if (nameProblem) return showSubjectSetError(nameProblem);
+  if (SUBJECT_SETS.some(s => s.id !== subjectSetDraft.id && s.name.toLowerCase() === name.toLowerCase())) {
+    return showSubjectSetError('Another subject set already has that name.');
+  }
+  if (subjectSetDraft.items.length === 0) return showSubjectSetError('Add at least one subject to the set.');
+
+  let id = subjectSetDraft.id;
+  const items = subjectSetDraft.items.map(item => ({ ...item }));
+
+  // Online, the set is only shown once the server has saved it
+  if (!IS_STANDALONE) {
+    subjectSetSaving = true;
+    const btn = document.getElementById('subjectSetSaveBtn');
+    btn.disabled = true;
+    try {
+      const res = await fetch('api/schedules.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        quietFailure: true,
+        body: JSON.stringify({ action: 'save_subject_set', set_id: id || 0, set_name: name, items })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.success) return showSubjectSetError(body.message || 'The subject set could not be saved.');
+      id = Number(body.set_id) || id;
+    } catch (e) {
+      return showSubjectSetError('Could not reach the server, so the subject set was not saved.');
+    } finally {
+      subjectSetSaving = false;
+      btn.disabled = false;
+    }
+  }
+
+  if (!id) id = SUBJECT_SETS.length ? Math.max(...SUBJECT_SETS.map(s => s.id)) + 1 : 1;
+  const existing = SUBJECT_SETS.find(s => s.id === id);
+  if (existing) {
+    existing.name = name;
+    existing.items = items;
+  } else {
+    SUBJECT_SETS.push({ id, name, items });
+  }
+  saveStateToStorage();
+  closeSubjectSetModal();
+  renderSubjectSetTable();
+}
+
+async function deleteSubjectSet(id) {
+  if (!canManageSubjectSets()) return;
+  const set = SUBJECT_SETS.find(s => s.id === id);
+  if (!set) return;
+  if (!(await askConfirm(`"${set.name}" will be removed. Subjects already loaded into a term stay in that term.`, { title: 'Remove this subject set?', confirmLabel: 'Remove set', danger: true }))) return;
+  SUBJECT_SETS = SUBJECT_SETS.filter(s => s.id !== id);
+  saveStateToStorage();
+  renderSubjectSetTable();
+  postScheduleAction({ action: 'delete_subject_set', set_id: id });
+}
+
+// ── Step 3: Load Saved Subjects ──
+
+function openLoadSubjectSetModal() {
+  // The same term the Step 3 Add Subject form adds to
+  const { activeTerm } = getActiveAcademicContext();
+  const termFilter = document.getElementById('curriculumTermFilter')?.value;
+  loadSubjectSetTermId = (termFilter && termFilter !== 'all') ? parseInt(termFilter, 10) : (activeTerm ? activeTerm.id : null);
+  if (!loadSubjectSetTermId) return;
+
+  document.getElementById('loadSubjectSetTarget').innerHTML = `Subjects are added to <strong>${escapeHtml(termLabelFor(loadSubjectSetTermId))}</strong>. Subjects this term already offers are skipped.`;
+
+  const sets = SUBJECT_SETS.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const sel = document.getElementById('loadSubjectSetSelect');
+  sel.innerHTML = sets.length
+    ? sets.map(s => `<option value="${Number(s.id)}">${escapeHtml(s.name)} (${s.items.length} subject${s.items.length === 1 ? '' : 's'})</option>`).join('')
+    : '<option value="">No saved subject sets yet</option>';
+  // Start on a set for the same kind of term, such as "2nd Sem" for a 2nd Sem term
+  const term = SCHOOL_TERMS.find(t => t.id === loadSubjectSetTermId);
+  const match = term && sets.find(s => s.name.toLowerCase().startsWith(term.termName.toLowerCase()));
+  if (match) sel.value = String(match.id);
+
+  document.getElementById('btnSaveTermAsSet').style.display =
+    canManageSubjectSets() && CURRICULUM_SUBJECTS.some(s => s.termId === loadSubjectSetTermId) ? '' : 'none';
+  renderLoadSubjectSetPreview();
+  document.getElementById('loadSubjectSetModal').style.display = 'flex';
+}
+
+function closeLoadSubjectSetModal() {
+  document.getElementById('loadSubjectSetModal').style.display = 'none';
+}
+
+function selectedLoadSubjectSet() {
+  return SUBJECT_SETS.find(s => s.id === parseInt(document.getElementById('loadSubjectSetSelect').value, 10)) || null;
+}
+
+function renderLoadSubjectSetPreview() {
+  const preview = document.getElementById('loadSubjectSetPreview');
+  const set = selectedLoadSubjectSet();
+  if (!set) {
+    preview.innerHTML = `<div style="padding:18px; text-align:center; color:var(--text-secondary); font-size:12.5px;">No saved subject sets yet. ${canManageSubjectSets() ? 'Make one in Subject Catalog, or save this term as a set.' : 'The System Administrator or a Program Head can make one in Subject Catalog.'}</div>`;
+    updateLoadSubjectSetSummary();
+    return;
+  }
+  const offered = new Set(CURRICULUM_SUBJECTS.filter(s => s.termId === loadSubjectSetTermId).map(subjectSetKey));
+  preview.innerHTML = set.items.map((item, index) => {
+    const already = offered.has(subjectSetKey(item));
+    return `
+      <label style="display:flex; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--border-subtle); font-size:12.5px; margin:0; ${already ? 'opacity:0.55;' : 'cursor:pointer;'}">
+        <input type="checkbox" class="load-set-item" data-index="${index}" ${already ? 'disabled' : 'checked'} onchange="updateLoadSubjectSetSummary()" style="width:16px; height:16px; flex:none;" />
+        <span style="font-weight:700; color:var(--accent-primary); min-width:68px;">${escapeHtml(item.code)}</span>
+        <span style="flex:1; min-width:0;">${escapeHtml(item.name)}</span>
+        <span class="badge" style="background:#F3F4F6; color:#374151; font-size:10.5px; white-space:nowrap;">${escapeHtml(item.program)} · Year ${Number(item.year)}</span>
+        ${already ? '<span style="font-size:11px; color:var(--text-secondary); white-space:nowrap;">Already in this term</span>' : ''}
+      </label>
+    `;
+  }).join('') || '<div style="padding:18px; text-align:center; color:var(--text-secondary); font-size:12.5px;">This set has no subjects.</div>';
+  updateLoadSubjectSetSummary();
+}
+
+function updateLoadSubjectSetSummary() {
+  const boxes = [...document.querySelectorAll('#loadSubjectSetPreview .load-set-item')];
+  const open = boxes.filter(b => !b.disabled);
+  const picked = open.filter(b => b.checked).length;
+  const skipped = boxes.length - open.length;
+  document.getElementById('loadSubjectSetSummary').textContent = boxes.length
+    ? `${picked} of ${open.length} selected${skipped ? ` · ${skipped} already in this term` : ''}`
+    : '';
+  const submit = document.getElementById('loadSubjectSetSubmit');
+  submit.disabled = picked === 0;
+  submit.textContent = picked ? `Load ${picked} subject${picked === 1 ? '' : 's'}` : 'Load subjects';
+}
+
+function tickAllLoadSubjectSet(checked) {
+  document.querySelectorAll('#loadSubjectSetPreview .load-set-item:not(:disabled)').forEach(b => { b.checked = checked; });
+  updateLoadSubjectSetSummary();
+}
+
+function submitLoadSubjectSet() {
+  const set = selectedLoadSubjectSet();
+  const termId = loadSubjectSetTermId;
+  if (!set || !termId) return;
+  const offered = new Set(CURRICULUM_SUBJECTS.filter(s => s.termId === termId).map(subjectSetKey));
+  const toAdd = [...document.querySelectorAll('#loadSubjectSetPreview .load-set-item:checked')]
+    .map(b => set.items[Number(b.dataset.index)])
+    .filter(item => item && !offered.has(subjectSetKey(item)));
+  if (toAdd.length === 0) return;
+
+  const term = SCHOOL_TERMS.find(t => t.id === termId);
+  let nextId = CURRICULUM_SUBJECTS.length ? Math.max(...CURRICULUM_SUBJECTS.map(s => s.id)) + 1 : 1;
+  toAdd.forEach(item => {
+    CURRICULUM_SUBJECTS.push({
+      id: nextId++,
+      termId,
+      termName: term ? term.termName : undefined,
+      code: item.code,
+      name: item.name,
+      units: item.units,
+      lecHours: item.lecHours,
+      labHours: item.labHours,
+      type: item.type,
+      program: item.program,
+      year: Number(item.year),
+      curriculum: '2024 Revised',
+      isIncluded: true
+    });
+  });
+  saveStateToStorage();
+  closeLoadSubjectSetModal();
+  renderSubjectOfferingTable();
+
+  // The server adds the same subjects; the reload after it brings back their database IDs
+  postScheduleAction({ action: 'add_term_subjects', term_id: termId, items: toAdd });
+}
+
+// Opens the set editor filled with the Step 3 term's subjects
+function saveTermAsSubjectSet() {
+  const termId = loadSubjectSetTermId;
+  if (!termId || !canManageSubjectSets()) return;
+  let name = termLabelFor(termId);
+  if (SUBJECT_SETS.some(s => s.name.toLowerCase() === name.toLowerCase())) name = `${name} (copy)`.slice(0, 60);
+  closeLoadSubjectSetModal();
+  openSubjectSetModal(null, { name, items: termSubjectSetItems(termId) });
+}

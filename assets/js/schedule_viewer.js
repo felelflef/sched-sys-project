@@ -164,21 +164,154 @@ function downloadScheduleCsv(classes, filename) {
   URL.revokeObjectURL(link.href);
 }
 
-function csvFileName(label) {
-  const { activeSy, activeTerm } = getActiveAcademicContext();
-  return `${label} ${activeTerm.termName} ${activeSy.yearCode}.csv`.replace(/[\\/:*?"<>|]/g, '-');
+/* ─── Excel workbooks ───
+   Each timetable is laid out like the on-screen sheet: times down the side, days across,
+   and each class spanning its hours. A Class List sheet holds one row per class. */
+const XLSX_LINE = { style: 'thin', color: { rgb: 'A3A9B5' } };
+const XLSX_BORDER = { top: XLSX_LINE, bottom: XLSX_LINE, left: XLSX_LINE, right: XLSX_LINE };
+const XLSX_HEAD = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1C3664' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: XLSX_BORDER };
+const XLSX_TYPE_FILL = { lecture: 'EBF3FC', lab: 'ECFDF5', pe: 'FEF3C7', special: 'F3E8FF' };
+const XLSX_SLOT_MINUTES = 30;
+
+function xlsxCell(value, style) {
+  return { v: value, t: typeof value === 'number' ? 'n' : 's', s: style };
 }
 
-window.exportTermCsv = function() {
+function timetableWorksheet(classes, title, subtitle) {
+  const slots = [];
+  for (let m = CLASS_DAY_START; m < CLASS_DAY_END; m += XLSX_SLOT_MINUTES) slots.push(m);
+  const firstSlotRow = 4;
+  const rows = [
+    [xlsxCell(title, { font: { bold: true, sz: 14, color: { rgb: '1C3664' } } })],
+    [xlsxCell(subtitle, { font: { sz: 10, color: { rgb: '5C6375' } } })],
+    [],
+    [xlsxCell('Time', XLSX_HEAD), ...DAYS.map(day => xlsxCell(day, XLSX_HEAD))]
+  ];
+  slots.forEach(m => rows.push([
+    xlsxCell(`${formatTime12(minutesToTime(m))} – ${formatTime12(minutesToTime(m + XLSX_SLOT_MINUTES))}`, { font: { bold: true, sz: 9 }, fill: { fgColor: { rgb: 'F1F3F7' } }, border: XLSX_BORDER, alignment: { vertical: 'top' } }),
+    ...DAYS.map(() => xlsxCell('', { border: XLSX_BORDER }))
+  ]));
+
+  const merges = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: DAYS.length } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: DAYS.length } }
+  ];
+  const taken = new Set();
+  classes.forEach(c => {
+    const col = DAYS.indexOf(c.day) + 1;
+    const start = Math.max(0, Math.floor((timeToMinutes(c.startTime) - CLASS_DAY_START) / XLSX_SLOT_MINUTES));
+    const end = Math.min(slots.length, Math.ceil((timeToMinutes(c.endTime) - CLASS_DAY_START) / XLSX_SLOT_MINUTES));
+    if (col < 1 || end <= start) return;
+    const row = firstSlotRow + start;
+    const text = [
+      `${c.subjectCode} – ${c.subjectTitle}`,
+      `Section: ${c.section}`,
+      `Room: ${c.room}`,
+      `Prof: ${c.instructor}`,
+      `${formatTime12(c.startTime)}–${formatTime12(c.endTime)}`
+    ].join('\n');
+    // Merged ranges must not overlap, so a class over a filled slot is added to that cell instead
+    const overlaps = Array.from({ length: end - start }, (_, i) => `${row + i}|${col}`).some(key => taken.has(key));
+    if (overlaps) {
+      const cell = rows[row][col];
+      cell.v = cell.v ? `${cell.v}\n\n${text}` : text;
+      return;
+    }
+    for (let i = 0; i < end - start; i++) taken.add(`${row + i}|${col}`);
+    rows[row][col] = xlsxCell(text, {
+      font: { sz: 9 },
+      alignment: { wrapText: true, vertical: 'top' },
+      fill: { fgColor: { rgb: XLSX_TYPE_FILL[c.type] || XLSX_TYPE_FILL.lecture } },
+      border: XLSX_BORDER
+    });
+    if (end - start > 1) merges.push({ s: { r: row, c: col }, e: { r: row + end - start - 1, c: col } });
+  });
+
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  sheet['!merges'] = merges;
+  sheet['!cols'] = [{ wch: 20 }, ...DAYS.map(() => ({ wch: 28 }))];
+  sheet['!rows'] = rows.map((_, i) => (i >= firstSlotRow ? { hpt: 22 } : {}));
+  return sheet;
+}
+
+function classListWorksheet(classes) {
+  const dayOrder = DAYS.reduce((order, day, i) => ({ ...order, [day]: i }), {});
+  const sorted = [...classes].sort((a, b) => a.section.localeCompare(b.section) || dayOrder[a.day] - dayOrder[b.day] || a.startTime.localeCompare(b.startTime));
+  const headings = ['Section', 'Subject Code', 'Subject Title', 'Day', 'Start', 'End', 'Room', 'Professor', 'Subject Units'];
+  const body = { border: XLSX_BORDER, font: { sz: 10 } };
+  const rows = [headings.map(h => xlsxCell(h, XLSX_HEAD))];
+  sorted.forEach(c => rows.push([c.section, c.subjectCode, c.subjectTitle, c.day, formatTime12(c.startTime), formatTime12(c.endTime), c.room, c.instructor, Number(subjectUnitsFor(c)) || 0]
+    .map(value => xlsxCell(value, body))));
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  sheet['!cols'] = [12, 13, 34, 7, 11, 11, 12, 26, 13].map(wch => ({ wch }));
+  sheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(rows.length - 1, 1), c: headings.length - 1 } }) };
+  return sheet;
+}
+
+// Sheet names: at most 31 characters, none of : \ / ? * [ ], and no repeats
+function addWorksheet(book, sheet, name) {
+  const base = String(name).replace(/[:\\/?*[\]]/g, '-').slice(0, 31) || 'Sheet';
+  let unique = base;
+  for (let n = 2; book.SheetNames.includes(unique); n++) unique = `${base.slice(0, 28)} ${n}`;
+  XLSX.utils.book_append_sheet(book, sheet, unique);
+}
+
+// Saves the workbook, or a CSV of the same classes if the Excel tool couldn't load
+function saveScheduleWorkbook(buildSheets, classes, label) {
+  if (!window.XLSX || !XLSX.utils) {
+    downloadScheduleCsv(classes, exportFileName(label, 'csv'));
+    alert("The Excel tool couldn't load, so the schedule was saved as a CSV file, which Excel can also open.");
+    return;
+  }
+  try {
+    const book = XLSX.utils.book_new();
+    buildSheets(book);
+    XLSX.writeFile(book, exportFileName(label, 'xlsx'));
+  } catch (e) {
+    alert('Could not create the Excel file. Please try again.');
+  }
+}
+
+function termContextLabel() {
+  const { activeSy, activeTerm } = getActiveAcademicContext();
+  return `${activeTerm.termName} ${activeSy.yearCode}`;
+}
+
+window.exportTermExcel = function() {
   const menu = document.getElementById('exportDropdownMenu');
   if (menu) menu.style.display = 'none';
-  downloadScheduleCsv(activeTermClasses(), csvFileName('Master Schedule'));
+  const { activeTerm } = getActiveAcademicContext();
+  const classes = activeTermClasses();
+  const sections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id).sort((a, b) => a.code.localeCompare(b.code));
+  saveScheduleWorkbook(book => {
+    addWorksheet(book, classListWorksheet(classes), 'All Classes');
+    sections.forEach(sec => {
+      const secClasses = classes.filter(c => c.section === sec.code);
+      addWorksheet(book, timetableWorksheet(secClasses, `${sec.code} (${sec.name})`,
+        `${sec.program} Year ${sec.year} · ${termContextLabel()} · ${totalSubjectUnits(secClasses)} units · ${sec.studentCount} students`), sec.code);
+    });
+  }, classes, 'Master Schedule');
 };
 
-window.exportViewerCsv = function() {
+function viewerSelectedClasses() {
   const selected = viewerSelection[viewerMode];
-  const classes = activeTermClasses().filter(c => viewerMode === 'section' ? c.section === selected : viewerMode === 'room' ? c.room === selected : c.instructor === selected);
-  downloadScheduleCsv(classes, csvFileName(selected));
+  return activeTermClasses().filter(c => viewerMode === 'section' ? c.section === selected : viewerMode === 'room' ? c.room === selected : c.instructor === selected);
+}
+
+window.exportViewerExcel = function() {
+  const selected = viewerSelection[viewerMode];
+  if (!selected) return;
+  const classes = viewerSelectedClasses();
+  saveScheduleWorkbook(book => {
+    addWorksheet(book, timetableWorksheet(classes, selected, `${VIEWER_LABELS[viewerMode]} timetable · ${termContextLabel()} · ${totalSubjectUnits(classes)} units`), 'Timetable');
+    addWorksheet(book, classListWorksheet(classes), 'Class List');
+  }, classes, selected);
+};
+
+window.exportViewerPdf = function() {
+  const selected = viewerSelection[viewerMode];
+  if (!selected) return;
+  saveTimetableSheetPdf(document.querySelector('#page-viewer .schedule-viewer-sheet'), selected);
 };
 
 window.setViewerMode = function(mode) {

@@ -5,7 +5,7 @@ require_once __DIR__ . '/../includes/functions.php';
 
 header('Content-Type: application/json');
 
-requireRole('admin');
+requireAnyRole(['admin', 'program-head']);
 
 $db = getDB();
 
@@ -17,6 +17,7 @@ requireCSRF();
 
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? '';
+expectActivity($db, 'rooms', (string)$action, is_array($input) ? $input : []);
 
 $validTypes = ['Lecture', 'Lab', 'Kitchen', 'Bar', 'Special', 'CompLab'];
 

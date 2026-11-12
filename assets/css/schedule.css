@@ -714,8 +714,9 @@ select:focus, input:focus {
   filter: none;
   box-shadow: none;
 }
-@media (max-width: 768px) {
-  .schedule-viewer-sheet .section-spreadsheet-table {
+@media (max-width: 800px) {
+  .schedule-viewer-sheet .section-spreadsheet-table,
+  #sectionScheduleTable {
     min-width: 760px;
   }
 }
@@ -796,6 +797,8 @@ select:focus, input:focus {
     padding: 0 !important;
     margin: 0 !important;
   }
+  .print-hide,
+  .cell-quick-edit-btn,
   .sidebar,
   .grid-controls,
   .export-dropdown-menu,

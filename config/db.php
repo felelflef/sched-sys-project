@@ -31,7 +31,7 @@ define('DB_PASS', getenv('DB_PASS') ?: '');
 
 // Aiven requires SSL. Set DB_SSL=true in Koyeb env vars.
 // Raise this whenever a new database column or table is added
-define('SCHEMA_VERSION', '2026-11-10.2');
+define('SCHEMA_VERSION', '2026-11-13.2');
 define('DB_SSL', filter_var(getenv('DB_SSL') ?: 'false', FILTER_VALIDATE_BOOLEAN));
 
 // Gemini API
@@ -93,9 +93,16 @@ function getDB(): PDO {
                     if (!$checkAvailability) {
                         $pdo->exec("ALTER TABLE users ADD COLUMN employment_status VARCHAR(20) NOT NULL DEFAULT 'Full-time', ADD COLUMN available_days VARCHAR(30) NOT NULL DEFAULT '', ADD COLUMN available_shifts VARCHAR(30) NOT NULL DEFAULT ''");
                     }
+                    // Roles: System Administrator, Program Head and Faculty / Professor.
+                    // Former Academic Head accounts keep their classes and become faculty.
                     $checkRole = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
-                    if ($checkRole && strpos($checkRole['Type'], 'academic-head') === false) {
+                    if ($checkRole && (strpos($checkRole['Type'], 'academic-head') !== false || strpos($checkRole['Type'], 'program-head') === false)) {
+                        // Every old value fits during the change, whichever list the column had
                         $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'academic-head', 'program-head', 'faculty') NOT NULL");
+                        $pdo->exec("UPDATE users SET role = 'faculty' WHERE role = 'academic-head'");
+                        $pdo->exec("UPDATE users SET subject_role = 'IT' WHERE subject_role IN ('Academic Leadership', 'Program Leadership')");
+                        $pdo->exec("UPDATE users SET first_name = 'Prof.', last_name = 'IT Instructor' WHERE email = 'acah@sti.edu' AND first_name = 'Academic' AND last_name = 'Head'");
+                        $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'program-head', 'faculty') NOT NULL");
                     }
                     $checkSession = $pdo->query("SHOW COLUMNS FROM users LIKE 'active_session_token'")->fetch();
                     if (!$checkSession) {
@@ -105,6 +112,8 @@ function getDB(): PDO {
                     if (!$checkMaxLoad) {
                         $pdo->exec("ALTER TABLE users ADD COLUMN max_load INT NOT NULL DEFAULT 24");
                     }
+                    // Change history (the statement is repeated in includes/activity.php for a database that lacks it)
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS activity_log (log_id INT AUTO_INCREMENT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, user_email VARCHAR(100) NOT NULL, user_name VARCHAR(101) NOT NULL, user_role VARCHAR(20) NOT NULL, category VARCHAR(20) NOT NULL, summary VARCHAR(500) NOT NULL, INDEX idx_activity_time (created_at))");
                     $pdo->prepare("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('schema_core', ?)")->execute([SCHEMA_VERSION]);
                 } catch (\Throwable $migErr) {
                     // Silently ignore schema check errors to avoid blocking execution if restricted
