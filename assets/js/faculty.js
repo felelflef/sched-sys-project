@@ -21,7 +21,7 @@ function renderFacultyCards() {
   if (!grid) return;
   grid.innerHTML = '';
 
-  const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
+  const isAdmin = canManageData();
   const btnAddFac = document.getElementById('btnAddFaculty');
   if (btnAddFac) {
     btnAddFac.style.display = isAdmin ? 'inline-flex' : 'none';
@@ -263,8 +263,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Department Management functions
 window.openDeptModal = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to manage departments.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can manage departments.');
     return;
   }
   renderDeptList();
@@ -298,8 +298,8 @@ function renderDeptList() {
 }
 
 window.addDepartment = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to add departments.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can add departments.');
     return;
   }
   const input = document.getElementById('newDeptInput');
@@ -328,8 +328,8 @@ window.addDepartment = function() {
 };
 
 window.deleteDepartment = function(idx) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to remove departments.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can remove departments.');
     return;
   }
   if (idx < 0 || idx >= DEPARTMENTS.length) return;
@@ -453,8 +453,8 @@ function availabilityFormProblem(name, status, picked) {
 }
 
 window.openChangeFacultyDeptModal = function(identifier) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to edit faculty profiles.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can edit faculty profiles.');
     return;
   }
   const fac = FACULTY.find(f => (f.email && f.email.toLowerCase() === identifier.toLowerCase()) || (f.name && f.name.toLowerCase() === identifier.toLowerCase()));
@@ -496,8 +496,8 @@ window.closeChangeFacultyDeptModal = function() {
 };
 
 window.submitChangeFacultyDept = async function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to edit faculty profiles.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can edit faculty profiles.');
     return;
   }
   const email = document.getElementById('changeFacultyDeptTargetEmail').value;
@@ -630,15 +630,15 @@ window.submitChangeFacultyProfile = window.submitChangeFacultyDept;
 
 // Add Faculty Modal Functions
 window.openAddFacultyModal = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to add faculty profiles.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can add faculty profiles.');
     return;
   }
   const userSelect = document.getElementById('newFacUserSelect');
   if (userSelect) {
     userSelect.innerHTML = '';
     // Registered accounts in User Management eligible for teaching
-    const registeredFacultyUsers = USERS.filter(u => u.role === 'faculty' || u.role === 'program-head' || u.role === 'academic-head');
+    const registeredFacultyUsers = USERS.filter(u => u.role === 'faculty' || u.role === 'program-head');
     
     if (registeredFacultyUsers.length === 0) {
       const opt = document.createElement('option');
@@ -705,8 +705,8 @@ window.handleFacultyUserDropdownChange = function(email) {
 };
 
 window.submitAddFaculty = async function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to save faculty profiles.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can save faculty profiles.');
     closeAddFacultyModal();
     return;
   }
@@ -784,7 +784,7 @@ window.submitAddFaculty = async function() {
     user.employmentType = status;
   }
 
-  if (VALID_USERS[user.email] && !VALID_USERS[user.email].password) {
+  if (IS_STANDALONE && VALID_USERS[user.email] && !VALID_USERS[user.email].password) {
     VALID_USERS[user.email].password = 'password';
   }
 
@@ -801,8 +801,8 @@ window.submitAddFaculty = async function() {
 };
 
 window.promptDeleteFaculty = function(identifier) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to remove faculty profiles.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can remove faculty profiles.');
     return;
   }
   const fac = FACULTY.find(f => (f.email && f.email.toLowerCase() === identifier.toLowerCase()) || (f.name && f.name.toLowerCase() === identifier.toLowerCase()));
@@ -819,8 +819,8 @@ window.closeDeleteFacultyModal = function() {
 };
 
 window.confirmDeleteFacultyProfile = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to remove faculty profiles.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can remove faculty profiles.');
     return;
   }
   const email = document.getElementById('deleteFacultyTargetEmail').value;

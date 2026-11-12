@@ -8,7 +8,7 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 let MASTER_SCHEDULE_DATA = [];
 let currentSelectedSection = 'IT701M';
 let currentSelectedRoom = 'LR-101';
-let currentSelectedTeacher = 'Academic Head';
+let currentSelectedTeacher = 'Prof. IT Instructor';
 
 /* ─── Helpers: Time Parsing & Formatting ─── */
 function timeToMinutes(timeStr) {
@@ -556,9 +556,16 @@ function updateTermStatusDirectly(termId, newStatus) {
   }
 }
 
-function setActiveSchoolTerm(termId) {
+async function setActiveSchoolTerm(termId) {
   const targetTerm = SCHOOL_TERMS.find(t => t.id === termId);
   if (!targetTerm) return;
+
+  // The active term changes for everyone, so ask first, as switching the school year does
+  const targetYear = SCHOOL_YEARS.find(y => y.id === targetTerm.yearId);
+  const changesYear = targetYear && !targetYear.isActive;
+  const termLabel = `${targetTerm.termName}${targetYear ? ` ${targetYear.yearCode}` : ''}`;
+  if (!(await askConfirm(`This makes ${termLabel} the active term for all users, not just this view.${changesYear ? ` The active school year also changes to ${targetYear.yearCode}.` : ''}`,
+    { title: 'Switch the active term?', confirmLabel: 'Switch term' }))) return;
 
   // Make sure parent year is active
   SCHOOL_YEARS.forEach(y => y.isActive = (y.id === targetTerm.yearId));
@@ -708,7 +715,7 @@ function renderSubjectOfferingTable() {
     return `
       <tr style="${!subj.isIncluded ? 'opacity:0.55; background:#FAFAFA;' : ''}">
         <td style="text-align:center;">
-          <input type="checkbox" ${subj.isIncluded ? 'checked' : ''} onchange="toggleSubjectInclusion(${subj.id}, this.checked)" style="width:16px; height:16px; cursor:pointer;" />
+          <input type="checkbox" ${subj.isIncluded ? 'checked' : ''} onchange="toggleSubjectInclusion(${subj.id}, this.checked)" aria-label="Include ${escapeHtml(subj.code)} this term" style="width:16px; height:16px; cursor:pointer;" />
         </td>
         <td style="font-weight:700; color:var(--accent-primary); font-size:13px;">${escapeHtml(subj.code)}</td>
         <td style="font-weight:600; color:var(--text-primary);">${escapeHtml(subj.name)}</td>
@@ -1843,7 +1850,26 @@ function refreshUnassignedBanner() {
   list.innerHTML = UNASSIGNED_CLASSES.map(u => `
     <li><strong>${escapeHtml(u.section)} - ${escapeHtml(u.code)}:</strong> ${escapeHtml(u.reason)}</li>
   `).join('');
+  const count = UNASSIGNED_CLASSES.length;
+  document.getElementById('unassignedSummary').textContent =
+    `${count} subject${count === 1 ? " doesn't" : "s don't"} have their full weekly hours on the schedule yet.`;
+  applyUnassignedListOpen();
   banner.classList.add('show');
+}
+
+// On phones the reasons start hidden, so the timetable isn't pushed far down the page
+let unassignedListOpen = !window.matchMedia('(max-width: 800px)').matches;
+function applyUnassignedListOpen() {
+  const list = document.getElementById('unassignedList');
+  const toggle = document.getElementById('unassignedToggle');
+  if (!list || !toggle) return;
+  list.hidden = !unassignedListOpen;
+  toggle.textContent = unassignedListOpen ? 'Hide details' : 'Show details';
+  toggle.setAttribute('aria-expanded', String(unassignedListOpen));
+}
+function toggleUnassignedList() {
+  unassignedListOpen = !unassignedListOpen;
+  applyUnassignedListOpen();
 }
 
 let unassignedBannerTimer = null;
@@ -2234,6 +2260,7 @@ function canEditSchedule() {
 
 function applyScheduleRole() {
   document.body.classList.toggle('role-faculty', !canEditSchedule());
+  document.body.classList.toggle('role-program-head', !!(CURRENT_USER && CURRENT_USER.role === 'program-head'));
 }
 
 // Selected shifts that touch or overlap count as one continuous window
@@ -2573,7 +2600,9 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
               rowspan="${cell.rowspan}"
               ${readOnly ? '' : `draggable="true"
               ondragstart="handleClassDragStart(event, '${item.id}')"
-              onclick="showClassDetails('${item.id}')"`}
+              onclick="showClassDetails('${item.id}')"
+              tabindex="0" role="button"
+              aria-label="${escapeHtml(item.subjectCode)} for ${escapeHtml(item.section)}, ${escapeHtml(item.day)} ${formatTime12(item.startTime)} to ${formatTime12(item.endTime)}, ${escapeHtml(item.room)}, ${escapeHtml(item.instructor)}. Press Enter for details."`}
               title="${escapeHtml(item.subjectCode)}: ${escapeHtml(item.subjectTitle || '')} (${formatTime12(item.startTime)} – ${formatTime12(item.endTime)})">
             <div class="class-cell-inner">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
@@ -3110,7 +3139,7 @@ function submitSlotAssignment() {
   const startTime = document.getElementById('slotStartSelect').value;
   const endTime = document.getElementById('slotEndSelect').value;
   const room = document.getElementById('slotRoomSelect').value;
-  const instructor = facSel?.value || (FACULTY.length > 0 ? FACULTY[0].name : 'Prof. Academic Head');
+  const instructor = facSel?.value || (FACULTY.length > 0 ? FACULTY[0].name : 'TBA');
   const subjectCode = (subInput?.value || '').trim().toUpperCase();
   const program = progSel?.value || 'BSIT';
   const section = (secInput?.value || '').trim().toUpperCase() || currentSelectedSection || 'IT701M';
@@ -3294,6 +3323,94 @@ function toggleExportMenu(e) {
   }
 }
 
+// Printing shows only the timetable sheet on screen, so headings, stats and warnings stay off the paper
+const printHiddenElements = [];
+window.addEventListener('beforeprint', () => {
+  const sheet = [...document.querySelectorAll('.module-page.active .timetable-sheet-card')].find(el => el.offsetParent !== null);
+  if (!sheet) return;
+  for (let el = sheet; el.parentElement && el !== document.body; el = el.parentElement) {
+    [...el.parentElement.children].forEach(sibling => {
+      if (sibling !== el && !sibling.classList.contains('print-hide')) {
+        sibling.classList.add('print-hide');
+        printHiddenElements.push(sibling);
+      }
+    });
+  }
+});
+window.addEventListener('afterprint', () => {
+  printHiddenElements.splice(0).forEach(el => el.classList.remove('print-hide'));
+});
+
+const PDF_TOOLS_MISSING = "The PDF tool couldn't load. Check your internet connection and reload the page, or use Print instead.";
+let pdfExportBusy = false;
+
+function pdfToolsReady() {
+  return typeof html2canvas !== 'undefined' && !!(window.jspdf && window.jspdf.jsPDF);
+}
+
+function exportFileName(label, extension) {
+  const { activeSy, activeTerm } = getActiveAcademicContext();
+  return `${label} ${activeTerm.termName} ${activeSy.yearCode}.${extension}`.replace(/[\\/:*?"<>|]/g, '-');
+}
+
+// Draws a timetable sheet as an image at desktop width, so phones get the same full page, without its edit buttons
+async function captureTimetableSheet(card) {
+  card.setAttribute('data-capture', 'true');
+  try {
+    return await html2canvas(card, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#FFFFFF',
+      logging: false,
+      windowWidth: 1400,
+      onclone: doc => {
+        const copy = doc.querySelector('[data-capture]');
+        if (!copy) return;
+        copy.style.width = '1240px';
+        copy.style.maxWidth = 'none';
+        copy.querySelectorAll('.timetable-table-container').forEach(el => { el.style.overflow = 'visible'; });
+        copy.querySelectorAll('button').forEach(el => el.remove());
+      }
+    });
+  } finally {
+    card.removeAttribute('data-capture');
+  }
+}
+
+function newTimetablePdf() {
+  return new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+}
+
+// One timetable per landscape A4 page, scaled to fit and centred
+function addSheetToPdf(pdf, canvas, isFirstPage) {
+  if (!isFirstPage) pdf.addPage('a4', 'landscape');
+  const margin = 8;
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const scale = Math.min((pageWidth - margin * 2) / canvas.width, (pageHeight - margin * 2) / canvas.height);
+  const width = canvas.width * scale;
+  const height = canvas.height * scale;
+  pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', (pageWidth - width) / 2, margin, width, height);
+}
+
+async function saveTimetableSheetPdf(card, label) {
+  if (!pdfToolsReady()) {
+    alert(PDF_TOOLS_MISSING);
+    return;
+  }
+  if (!card || pdfExportBusy) return;
+  pdfExportBusy = true;
+  try {
+    const pdf = newTimetablePdf();
+    addSheetToPdf(pdf, await captureTimetableSheet(card), true);
+    pdf.save(exportFileName(`${label} Timetable`, 'pdf'));
+  } catch (e) {
+    alert('Could not create the PDF. Please try again, or use Print instead.');
+  } finally {
+    pdfExportBusy = false;
+  }
+}
+
 function exportTimetablePDF() {
   const menu = document.getElementById('exportDropdownMenu');
   if (menu) menu.style.display = 'none';
@@ -3301,15 +3418,7 @@ function exportTimetablePDF() {
   const titlePrefix = CURRENT_TIMETABLE_VIEW === 'section'
     ? currentSelectedSection
     : (CURRENT_TIMETABLE_VIEW === 'room' ? currentSelectedRoom : currentSelectedTeacher);
-
-  const originalTitle = document.title;
-  document.title = `${titlePrefix}_STI_Timetable`;
-
-  window.print();
-
-  setTimeout(() => {
-    document.title = originalTitle;
-  }, 1000);
+  saveTimetableSheetPdf(document.getElementById('sectionTimetableCard'), titlePrefix);
 }
 
 async function exportTimetablePNG() {
@@ -3323,7 +3432,7 @@ async function exportTimetablePNG() {
   }
 
   if (typeof html2canvas === 'undefined') {
-    alert('html2canvas is loading. Please use Export as PDF in the meantime.');
+    alert('The image tool is still loading. Please try again in a moment.');
     return;
   }
 
@@ -3344,121 +3453,48 @@ async function exportTimetablePNG() {
     link.href = canvas.toDataURL('image/png');
     link.click();
   } catch (err) {
-    alert('Unable to generate PNG image. Please use Export as PDF.');
+    alert('Unable to generate the PNG image. Please use Download PDF instead.');
   }
 }
 
-function exportAllSectionsBatchPDF() {
+// One PDF with a page for every section of the active term, each drawn from the on-screen timetable
+async function exportAllSectionsBatchPDF() {
   const menu = document.getElementById('exportDropdownMenu');
   if (menu) menu.style.display = 'none';
-
-  // Open clean printable multi-page batch document
-  const printWin = window.open('', '_blank');
-  if (!printWin) {
-    alert('Please allow popups to generate batch timetable PDF.');
+  if (!pdfToolsReady()) {
+    alert(PDF_TOOLS_MISSING);
     return;
   }
+  if (pdfExportBusy) return;
 
   const { activeSy, activeTerm } = getActiveAcademicContext();
-  const sections = (typeof ACADEMIC_SECTIONS !== 'undefined' ? ACADEMIC_SECTIONS : []).filter(s => s.termId === activeTerm.id);
+  const sections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id).sort((a, b) => a.code.localeCompare(b.code));
   if (sections.length === 0) {
-    printWin.close();
     alert(`No sections found for ${activeTerm.termName} (${activeSy.yearCode}) to export.`);
     return;
   }
-  let batchHtml = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>STI_Academic_Sections_Master_Timetables</title>
-      <style>
-        @page { size: landscape; margin: 8mm; }
-        body { font-family: Arial, Calibri, sans-serif; margin: 0; padding: 0; color: #000; font-size: 8.5px; }
-        .section-page { page-break-after: always; padding: 10px; margin-bottom: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
-        .title { font-size: 18px; font-weight: bold; }
-        .meta { font-size: 10px; font-weight: 600; }
-        table { width: 100%; border-collapse: collapse; border: 1.5px solid #000; table-layout: fixed; }
-        th, td { border: 1px solid #000; padding: 4px; text-align: center; }
-        th { background: #1C3664; color: #fff; font-size: 9px; }
-        .time-col { width: 75px; background: #eee; font-weight: bold; }
-        .class-box { background: #f0f4f8; border-left: 4px solid #2563eb; text-align: left; padding: 3px 5px; font-size: 8.5px; }
-        .class-box.lab { border-left-color: #059669; background: #eafaf1; }
-        .class-box.pe { border-left-color: #d97706; background: #fef9e7; }
-        .subj-code { font-weight: bold; font-size: 9.5px; }
-      </style>
-    </head>
-    <body>
-  `;
 
-  sections.forEach(sec => {
-    const secClasses = MASTER_SCHEDULE_DATA.filter(c => c.section === sec.code && (!c.termId || c.termId === activeTerm.id));
-    const totalUnits = totalSubjectUnits(secClasses);
-
-    batchHtml += `
-      <div class="section-page">
-        <div class="header">
-          <div>
-            <div class="meta">${escapeHtml(sec.program)} · Year ${escapeHtml(sec.year)}</div>
-            <div class="title">${escapeHtml(sec.code)} (${escapeHtml(sec.name)})</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="meta">Shift: ${escapeHtml(sec.shift || 'AM')} · Students: ${sec.studentCount} · Units: ${totalUnits}</div>
-            <div style="font-size:8.5px; color:#555;">STI Academic Scheduling Master Timetable</div>
-          </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th class="time-col">TIME</th>
-              <th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th>
-            </tr>
-          </thead>
-          <tbody>
-    `;
-
-    // Hourly rows covering the generator's full 7:00 AM - 7:00 PM range
-    for (let m = 7 * 60; m < 19 * 60; m += 60) {
-      const tStr = minutesToTime(m);
-      const tEndStr = minutesToTime(m + 60);
-      batchHtml += `<tr><td class="time-col">${formatTime12(tStr)}</td>`;
-
-      DAYS.forEach(day => {
-        const cls = secClasses.find(c => c.day === day && timeToMinutes(c.startTime) <= m && timeToMinutes(c.endTime) > m);
-        if (cls) {
-          batchHtml += `
-            <td class="class-box ${escapeHtml(cls.type)}">
-              <div class="subj-code">${escapeHtml(cls.subjectCode)}</div>
-              <div>${escapeHtml(cls.room)} · ${escapeHtml(cls.instructor)}</div>
-              <div>${subjectUnitsFor(cls)} Units (${formatTime12(cls.startTime)}–${formatTime12(cls.endTime)})</div>
-            </td>
-          `;
-        } else {
-          batchHtml += `<td></td>`;
-        }
-      });
-
-      batchHtml += `</tr>`;
+  const card = document.getElementById('sectionTimetableCard');
+  const previous = { view: CURRENT_TIMETABLE_VIEW, section: currentSelectedSection };
+  pdfExportBusy = true;
+  alert(`Preparing a PDF of ${sections.length} section timetables. It downloads when ready.`);
+  try {
+    const pdf = newTimetablePdf();
+    for (let i = 0; i < sections.length; i++) {
+      CURRENT_TIMETABLE_VIEW = 'section';
+      currentSelectedSection = sections[i].code;
+      renderGrid();
+      addSheetToPdf(pdf, await captureTimetableSheet(card), i === 0);
     }
-
-    batchHtml += `
-          </tbody>
-        </table>
-      </div>
-    `;
-  });
-
-  batchHtml += `
-      <script>
-        window.onload = function() { window.print(); }
-      </script>
-    </body>
-    </html>
-  `;
-
-  printWin.document.open();
-  printWin.document.write(batchHtml);
-  printWin.document.close();
+    pdf.save(exportFileName('All Section Timetables', 'pdf'));
+  } catch (e) {
+    alert('Could not create the PDF. Please try again, or use Print instead.');
+  } finally {
+    CURRENT_TIMETABLE_VIEW = previous.view;
+    currentSelectedSection = previous.section;
+    renderGrid();
+    pdfExportBusy = false;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

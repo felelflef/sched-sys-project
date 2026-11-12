@@ -23,7 +23,7 @@ function renderRoomTable() {
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
+  const isAdmin = canManageData();
   const btnAddRoom = document.getElementById('btnAddRoom');
   if (btnAddRoom) {
     btnAddRoom.style.display = isAdmin ? 'inline-flex' : 'none';
@@ -73,8 +73,8 @@ function renderRoomTable() {
 }
 
 window.openAddRoomModal = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to add rooms.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can add rooms.');
     return;
   }
   document.getElementById('roomModalTitle').textContent = 'Add Room';
@@ -89,8 +89,8 @@ window.openAddRoomModal = function() {
 };
 
 window.openEditRoomModal = function(code) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to edit rooms.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can edit rooms.');
     return;
   }
   const room = ROOMS.find(r => r.code === code);
@@ -111,8 +111,8 @@ window.closeRoomModal = function() {
 };
 
 window.submitRoomForm = async function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to save room changes.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can save room changes.');
     closeRoomModal();
     return;
   }
@@ -174,8 +174,8 @@ window.submitRoomForm = async function() {
 };
 
 window.promptDeleteRoom = function(code) {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to remove rooms.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can remove rooms.');
     return;
   }
   const room = ROOMS.find(r => r.code === code);
@@ -198,8 +198,8 @@ window.closeDeleteRoomModal = function() {
 };
 
 window.confirmDeleteRoom = function() {
-  if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
-    alert('Access Denied: Only system administrators are authorized to remove rooms.');
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can remove rooms.');
     return;
   }
   const code = document.getElementById('deleteRoomTargetCode').value;

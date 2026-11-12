@@ -11,6 +11,8 @@ set_exception_handler(function (Throwable $e): void {
     echo json_encode(['success' => false, 'message' => $badInput ? 'One of the values entered is not valid.' : 'A server error occurred. Please check your entry and try again.']);
 });
 
+require_once __DIR__ . '/activity.php';
+
 const VALID_PROGRAMS = ['BSIT', 'BSCS', 'BSCpE', 'BSHM', 'BSTM', 'BSBA'];
 const SCHOOL_DAY_START = '07:00:00';
 const SCHOOL_DAY_END = '20:30:00';
@@ -157,6 +159,10 @@ function sanitize(string $str): string {
 }
 
 function jsonResponse(array $data, int $code = 200): never {
+    // A change that succeeded goes into the activity log
+    if ($code < 400 && !empty($data['success'])) {
+        recordPendingActivity();
+    }
     http_response_code($code);
     header('Content-Type: application/json');
     echo json_encode($data);

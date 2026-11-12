@@ -125,8 +125,8 @@
   font-weight: 700;
 }
 .role-admin { background: var(--accent-primary); color: var(--text-on-accent); }
-.role-academic-head { background: #EEF1F7; color: var(--accent-primary); border: 1px solid #C8D2E4; }
-.role-program-head { background: var(--success-bg); color: var(--success); border: 1px solid #B8DFC8; }
+.role-program-head { background: #EEF1F7; color: var(--accent-primary); border: 1px solid #C8D2E4; }
+.role-faculty { background: var(--success-bg); color: var(--success); border: 1px solid #B8DFC8; }
 
 /* ─── RESPONSIVE ─── */
 @media (max-width: 800px) {
@@ -477,6 +477,7 @@ body.role-faculty #btnGenerateAi,
 body.role-faculty #btnUndoGenerate,
 body.role-faculty #unassignedBanner,
 body.role-faculty .nav-item[data-module="reports"],
+body.role-program-head .nav-item[data-module="users"],
 body.role-faculty .nav-item[data-module="users"],
 body.role-faculty .nav-section-admin { display: none !important; }
 
@@ -511,8 +512,62 @@ th[data-sorted="desc"]::after { content: ' \25BC'; font-size: 9px; }
   .page-heading { padding: 10px 16px 0; }
   .page-heading h2 { font-size: 17px; }
 }
+
+/* Phones: Scheduling, Resources and Administration sit in a bar at the bottom.
+   The top bar then lists only the chosen section's pages. */
+.mobile-section-bar { display: none; }
+@media screen and (max-width: 800px) {
+  .mobile-section-bar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 900;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-subtle);
+    box-shadow: 0 -4px 16px rgba(44, 48, 58, 0.06);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-section-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 56px;
+    padding: 6px 4px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .mobile-section-btn svg { width: 20px; height: 20px; }
+  .mobile-section-btn.active { color: var(--accent-primary); }
+  .mobile-section-btn.active svg { stroke-width: 2.4; }
+  .main { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+  .sidebar-nav .nav-section[data-section]:not(.mobile-current) { display: none; }
+  body.role-faculty .mobile-section-admin { display: none; }
+
+  /* Buttons and fields are at least 44px tall, so they are easy to tap */
+  .btn,
+  select,
+  input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="number"], input[type="date"],
+  #userMenuBtn,
+  .modal-overlay button[aria-label="Close"] { min-height: 44px; }
+  #userMenuBtn,
+  .modal-overlay button[aria-label="Close"] { min-width: 44px; }
+
+  /* Dialogs keep a margin, so they stand apart from the page behind them */
+  .modal-overlay { padding: 12px; box-sizing: border-box; }
+}
 @media print {
   .page-heading,
+  .mobile-section-bar,
   .viewer-controls { display: none; }
   html, body, .app, .main, .content { height: auto !important; overflow: visible !important; }
   .app { display: block !important; }

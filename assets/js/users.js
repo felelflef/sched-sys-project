@@ -17,7 +17,7 @@ function renderUserTable() {
 
   USERS.forEach(u => {
     const tr = document.createElement('tr');
-    const roleBadgeClass = u.role === 'admin' ? 'role-admin' : u.role === 'academic-head' ? 'role-academic-head' : 'role-program-head';
+    const roleBadgeClass = u.role === 'admin' ? 'role-admin' : u.role === 'program-head' ? 'role-program-head' : 'role-faculty';
     const isSelf = CURRENT_USER && (u.email.toLowerCase() === CURRENT_USER.email.toLowerCase());
     const matchingFac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.email && f.email.toLowerCase() === u.email.toLowerCase());
     const empStatus = u.employmentType || (matchingFac ? matchingFac.status : 'Full-time');
@@ -88,7 +88,21 @@ window.openAddUserModal = function() {
   document.getElementById('newUserEmail').value = '';
   document.getElementById('newUserPassword').value = '';
   document.getElementById('newUserRole').value = 'faculty';
+  updateNewUserRoleFields();
   document.getElementById('addUserModal').style.display = 'flex';
+};
+
+// Employment status and department only apply to Faculty / Professor accounts
+window.updateNewUserRoleFields = function() {
+  const role = document.getElementById('newUserRole').value;
+  const isAdmin = role === 'admin';
+  document.getElementById('newUserStatusGroup').style.display = isAdmin ? 'none' : '';
+  document.getElementById('newUserDeptGroup').style.display = isAdmin ? 'none' : '';
+  document.getElementById('newUserRoleHint').textContent = {
+    admin: 'Can manage accounts, rooms, faculty, subjects and schedules.',
+    'program-head': 'Can manage rooms, faculty, subjects and schedules, but not user accounts. Also gets a faculty profile for teaching.',
+    faculty: 'Can view schedules and download their timetable. Also gets a faculty profile for teaching.'
+  }[role];
 };
 
 window.closeAddUserModal = function() {
@@ -106,7 +120,8 @@ window.submitAddUser = async function() {
   const name = document.getElementById('newUserName').value.trim();
   let email = document.getElementById('newUserEmail').value.trim().toLowerCase();
   let password = document.getElementById('newUserPassword').value.trim();
-  const role = document.getElementById('newUserRole').value;
+  const chosenRole = document.getElementById('newUserRole').value;
+  const role = ['admin', 'program-head'].includes(chosenRole) ? chosenRole : 'faculty';
   const dept = document.getElementById('newUserDept').value || 'IT / CS';
 
   if (!name) {
@@ -150,9 +165,8 @@ window.submitAddUser = async function() {
 
   const roleLabels = {
     'admin': 'System Admin',
-    'faculty': `Faculty – ${dept}`,
     'program-head': `Program Head – ${dept}`,
-    'academic-head': 'Academic Head'
+    'faculty': `Faculty – ${dept}`
   };
 
   // Persist to MySQL database via API
@@ -206,10 +220,11 @@ window.submitAddUser = async function() {
   });
 
   const initials = name.split(' ').filter(w => w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
-  VALID_USERS[email] = { name, role, initials, password };
+  // Only the offline demo checks passwords in the browser; online, the server holds them
+  VALID_USERS[email] = IS_STANDALONE ? { name, role, initials, password } : { name, role, initials };
 
   // Link to Faculty profiles if user has an academic teaching role
-  if (role === 'faculty' || role === 'program-head' || role === 'academic-head') {
+  if (role === 'faculty' || role === 'program-head') {
     if (!FACULTY.some(f => f.email.toLowerCase() === email.toLowerCase() || f.name.toLowerCase() === name.toLowerCase())) {
       const colors = ['#25447A', '#2E7D5B', '#6C3483', '#C27A1A', '#2980B9', '#C0392B'];
       FACULTY.push({

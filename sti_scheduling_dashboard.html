@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="assets/css/schedule.css" />
   <link rel="stylesheet" href="assets/css/modules.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" defer></script>
   <script>
     try {
       if (localStorage.getItem('sti_auth_user')) {
@@ -74,7 +76,7 @@
       </div>
 
       <nav class="sidebar-nav">
-        <div class="nav-section">
+        <div class="nav-section" data-section="scheduling">
           <div class="nav-section-label">Scheduling</div>
 
           <div class="nav-item active" data-module="schedule">
@@ -98,7 +100,7 @@
           </div>
         </div>
 
-        <div class="nav-section">
+        <div class="nav-section" data-section="resources">
           <div class="nav-section-label">Resources</div>
 
           <div class="nav-item" data-module="rooms">
@@ -117,12 +119,17 @@
           </div>
         </div>
 
-        <div class="nav-section nav-section-admin">
+        <div class="nav-section nav-section-admin" data-section="admin">
           <div class="nav-section-label">Administration</div>
 
           <div class="nav-item" data-module="users">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             User Management
+          </div>
+
+          <div class="nav-item" data-module="activity">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+            Activity Log
           </div>
         </div>
       </nav>
@@ -133,7 +140,7 @@
           <div class="user-name">System Administrator</div>
           <div class="user-role">System Admin</div>
         </div>
-        <button class="btn-icon" id="userMenuBtn" onclick="toggleUserMenu(event)" style="border:none; background:none; color:var(--text-secondary); cursor:pointer;" title="Account Options">
+        <button class="btn-icon" id="userMenuBtn" onclick="toggleUserMenu(event)" style="border:none; background:none; color:var(--text-secondary); cursor:pointer;" title="Account Options" aria-label="Account options" aria-haspopup="menu">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
         </button>
         <!-- User Dropdown Menu -->
@@ -149,6 +156,22 @@
         </div>
       </div>
     </aside>
+
+    <!-- Phones: the sections sit in a bar at the bottom, and the top bar lists only the chosen section's pages -->
+    <nav class="mobile-section-bar" aria-label="Sections">
+      <button type="button" class="mobile-section-btn" data-section="scheduling" onclick="openMobileSection('scheduling')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>Scheduling</span>
+      </button>
+      <button type="button" class="mobile-section-btn" data-section="resources" onclick="openMobileSection('resources')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Resources</span>
+      </button>
+      <button type="button" class="mobile-section-btn mobile-section-admin" data-section="admin" onclick="openMobileSection('admin')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Administration</span>
+      </button>
+    </nav>
 
     <!-- ═══════════════════════ MAIN ═══════════════════════ -->
     <div class="main">
@@ -321,6 +344,7 @@
                 <div style="display:flex; gap:8px;">
                   <button class="btn btn-outline" onclick="toggleAllSubjectInclusion(true)" style="font-size:12px; padding:6px 12px;">Include All</button>
                   <button class="btn btn-outline" onclick="toggleAllSubjectInclusion(false)" style="font-size:12px; padding:6px 12px;">Exclude All</button>
+                  <button class="btn btn-outline" onclick="openLoadSubjectSetModal()" style="font-size:12px; padding:6px 12px;">Load Saved Subjects</button>
                   <button class="btn btn-primary" onclick="openAddCurriculumSubjectModal()" style="font-size:12px; padding:6px 14px;">+ Add Subject</button>
                 </div>
               </div>
@@ -614,7 +638,10 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 <span>Unassigned Classes & Diagnostic Warning</span>
               </div>
-              <div style="font-size:12.5px;">These subjects don't have their full weekly hours on the schedule yet:</div>
+              <div style="font-size:12.5px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                <span id="unassignedSummary">These subjects don't have their full weekly hours on the schedule yet:</span>
+                <button type="button" class="btn btn-outline" id="unassignedToggle" aria-controls="unassignedList" aria-expanded="true" onclick="toggleUnassignedList()" style="font-size:12px; padding:3px 10px;">Hide details</button>
+              </div>
               <ul class="unassigned-list" id="unassignedList">
                 <!-- Populated if any item unassigned -->
               </ul>
@@ -669,7 +696,7 @@
                   <div id="exportDropdownMenu" class="export-dropdown-menu" style="display:none;">
                     <a href="javascript:void(0)" onclick="exportTimetablePDF()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none;">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      Export as PDF (Landscape)
+                      Download PDF (Landscape)
                     </a>
                     <a href="javascript:void(0)" onclick="exportTimetablePNG()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none; border-top:1px solid var(--border-subtle);">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -677,9 +704,9 @@
                     </a>
                     <a href="javascript:void(0)" onclick="exportAllSectionsBatchPDF()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none; border-top:1px solid var(--border-subtle);">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                      Export All Sections (Batch PDF)
+                      Download All Sections (PDF)
                     </a>
-                    <a href="javascript:void(0)" onclick="exportTermCsv()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none;">Export Term to Excel (CSV)</a>
+                    <a href="javascript:void(0)" onclick="exportTermExcel()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:13px; color:var(--text-primary); text-decoration:none; border-top:1px solid var(--border-subtle);">Export Term to Excel (.xlsx)</a>
                   </div>
                 </div>
 
@@ -779,7 +806,8 @@
             <select id="viewerSelect" onchange="setViewerSelection(this.value)"></select>
             <div class="viewer-export-buttons">
               <button class="btn btn-outline" onclick="window.print()">Print</button>
-              <button class="btn btn-outline" onclick="exportViewerCsv()">Export to Excel (CSV)</button>
+              <button class="btn btn-outline" onclick="exportViewerPdf()">Download PDF</button>
+              <button class="btn btn-outline" onclick="exportViewerExcel()">Export to Excel (.xlsx)</button>
             </div>
           </div>
 
@@ -950,7 +978,14 @@
              MODULE: SUBJECT CATALOG & CURRICULUM
              ══════════════════════════════════════════════ -->
         <div class="module-page" id="page-subjects">
-          <div class="card" style="margin-bottom:20px;">
+          <!-- Subjects and saved subject sets are tabs, so neither is far down the page -->
+          <div role="tablist" aria-label="Subject Catalog sections" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+            <button type="button" role="tab" class="btn btn-primary" id="catalogTabSubjects" aria-selected="true" aria-controls="subjectCatalogCard" onclick="showCatalogTab('subjects')">Subjects</button>
+            <button type="button" role="tab" class="btn btn-outline" id="catalogTabSets" aria-selected="false" aria-controls="subjectSetsCard" onclick="showCatalogTab('sets')">
+              Saved Subject Sets <span id="catalogSetCount" class="badge" style="margin-left:6px; background:#EEF1F7; color:var(--accent-primary); font-size:11px;">0</span>
+            </button>
+          </div>
+          <div class="card" id="subjectCatalogCard" role="tabpanel" aria-labelledby="catalogTabSubjects" style="margin-bottom:20px;">
             <div class="card-header">
               <div>
                 <h3>Subject Catalog & Specialization</h3>
@@ -1002,11 +1037,93 @@
               </div>
             </div>
           </div>
+
+          <!-- Saved subject sets, loaded into a term in Step 3 of the Schedule Builder -->
+          <div class="card" id="subjectSetsCard" role="tabpanel" aria-labelledby="catalogTabSets" style="display:none;">
+            <div class="card-header">
+              <div>
+                <h3>Saved Subject Sets</h3>
+                <p>Reusable subject lists, such as a 1st or 2nd semester curriculum. Load one into a term with Load Saved Subjects in Step 3 of the Schedule Builder.</p>
+              </div>
+              <button class="btn btn-primary" id="btnAddSubjectSet" onclick="openSubjectSetModal()" style="font-size:12px; padding:7px 16px;">+ New Set</button>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Set Name</th>
+                      <th style="width:100px; text-align:center;">Subjects</th>
+                      <th>Programs</th>
+                      <th style="width:140px; text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="subjectSetTableBody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- ══════════════════════════════════════════════
              MODULE 6: USER MANAGEMENT & SECURITY
              ══════════════════════════════════════════════ -->
+        <!-- ══════════════════════════════════════════════
+             MODULE: ACTIVITY LOG (CHANGE HISTORY)
+             ══════════════════════════════════════════════ -->
+        <div class="module-page" id="page-activity">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Activity Log</h3>
+                <p>Every saved change, with who made it and when. Newest first.</p>
+              </div>
+              <button class="btn btn-outline" onclick="loadActivityLog(true)" style="font-size:12px; padding:7px 16px;">Refresh</button>
+            </div>
+            <div class="card-body" style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); background:#FAFCFF;">
+              <div class="grid-controls" style="margin-bottom:0;">
+                <div class="filter-group">
+                  <label for="activityCategoryFilter">Type:</label>
+                  <select id="activityCategoryFilter" onchange="loadActivityLog(true)">
+                    <option value="">All changes</option>
+                    <option value="Schedule">Schedule</option>
+                    <option value="Setup">Term setup</option>
+                    <option value="Resources">Rooms, faculty and subjects</option>
+                    <option value="Accounts">Accounts</option>
+                    <option value="Sign-in">Sign-ins</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label for="activitySearchInput">Search:</label>
+                  <input type="search" id="activitySearchInput" class="form-input" placeholder="Name, subject, section, room..." oninput="queueActivitySearch()" style="padding:6px 12px; font-size:12.5px; width:240px;" />
+                </div>
+              </div>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="data-table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width:180px;">When</th>
+                      <th style="width:200px;">Who</th>
+                      <th style="width:110px;">Type</th>
+                      <th>Change</th>
+                    </tr>
+                  </thead>
+                  <tbody id="activityTableBody">
+                    <!-- Populated by activity.js -->
+                  </tbody>
+                </table>
+              </div>
+              <div style="padding:12px 22px; text-align:center;">
+                <button class="btn btn-outline" id="activityLoadMore" onclick="loadActivityLog(false)" style="display:none; font-size:12px;">Load older changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="module-page" id="page-users">
           <div class="stats-row">
             <div class="stat-card">
@@ -1213,7 +1330,7 @@
       </div>
       <div style="padding:20px 24px;">
         <div id="addUserError" style="display:none; color:var(--danger); font-size:12px; margin-bottom:14px; padding:9px 14px; background:#FFF5F5; border-radius:6px; border:1px solid #FADBD8;"></div>
-        <p style="font-size:12px; color:var(--text-secondary); margin-bottom:14px;">Only administrators have permission to provision accounts for professors and academic staff.</p>
+        <p style="font-size:12px; color:var(--text-secondary); margin-bottom:14px;">Only System Administrators can create accounts.</p>
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Full Name</label>
           <input type="text" id="newUserName" class="form-input" placeholder="e.g. Prof. Maria Santos" />
@@ -1228,12 +1345,12 @@
         </div>
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Account Role</label>
-          <select id="newUserRole" class="form-input">
+          <select id="newUserRole" class="form-input" onchange="updateNewUserRoleFields()">
             <option value="faculty" selected>Faculty / Professor</option>
             <option value="program-head">Program Head</option>
-            <option value="academic-head">Academic Head</option>
             <option value="admin">System Administrator</option>
           </select>
+          <span id="newUserRoleHint" style="font-size:11px; color:var(--text-secondary); display:block; margin-top:4px;"></span>
         </div>
         <div class="form-group" style="margin-bottom:14px;" id="newUserStatusGroup">
           <label class="form-label">Employment Status</label>
@@ -1242,7 +1359,7 @@
             <option value="Part-time">Part-time</option>
           </select>
         </div>
-        <div class="form-group" style="margin-bottom:0;">
+        <div class="form-group" style="margin-bottom:0;" id="newUserDeptGroup">
           <label class="form-label">Academic Department</label>
           <select id="newUserDept" class="form-input"></select>
         </div>
@@ -1664,6 +1781,109 @@
     </div>
   </div>
 
+  <!-- ==================== SAVED SUBJECT SET MODAL ==================== -->
+  <div class="modal-overlay" id="subjectSetModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1150; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:660px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);" id="subjectSetModalTitle">New Subject Set</h3>
+        <button onclick="closeSubjectSetModal()" aria-label="Close" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:20px 22px; overflow-y:auto;">
+        <div id="subjectSetError" style="display:none; color:var(--danger); font-size:12px; margin-bottom:12px; padding:9px 14px; background:#FFF5F5; border-radius:6px; border:1px solid #FADBD8;"></div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" for="subjectSetName" style="font-weight:700; font-size:12px;">Set Name</label>
+          <input type="text" id="subjectSetName" class="form-input" maxlength="60" placeholder="e.g. 1st Semester (2024 Revised)" style="width:100%;" />
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" for="subjectSetCopyTerm" style="font-weight:700; font-size:12px;">Copy From a Term</label>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <select id="subjectSetCopyTerm" class="form-input" style="flex:1 1 220px;"></select>
+            <button type="button" class="btn btn-outline" onclick="copyTermIntoSubjectSet()" style="font-size:12px;">Copy subjects</button>
+          </div>
+          <span style="font-size:11px; color:var(--text-secondary); display:block; margin-top:4px;">Adds every subject that term offers. Subjects already in the set are skipped.</span>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label" for="subjectSetProgram" style="font-weight:700; font-size:12px;">Add From Subject Catalog</label>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+            <select id="subjectSetProgram" class="form-input" aria-label="Program" onchange="renderSubjectSetPicker()" style="flex:0 0 100px;">
+              <option value="BSIT">BSIT</option>
+              <option value="BSCS">BSCS</option>
+              <option value="BSCpE">BSCpE</option>
+              <option value="BSHM">BSHM</option>
+              <option value="BSTM">BSTM</option>
+              <option value="BSBA">BSBA</option>
+            </select>
+            <select id="subjectSetYear" class="form-input" aria-label="Year level" onchange="renderSubjectSetPicker()" style="flex:0 0 105px;">
+              <option value="1">1st Year</option>
+              <option value="2">2nd Year</option>
+              <option value="3">3rd Year</option>
+              <option value="4">4th Year</option>
+            </select>
+            <span style="font-size:11px; color:var(--text-secondary);">Tick the subjects this program and year take.</span>
+          </div>
+          <div id="subjectSetPicker" class="availability-options qual-picker" role="group" aria-label="Catalog subjects" style="margin-bottom:6px;"></div>
+          <div style="display:flex; gap:6px; justify-content:flex-end;">
+            <button type="button" class="btn btn-outline" onclick="tickAllSubjectSetPicker()" style="font-size:12px;">Select all</button>
+            <button type="button" class="btn btn-primary" onclick="addCatalogSubjectToSet()" style="font-size:12px;">+ Add selected</button>
+          </div>
+        </div>
+        <div style="border:1px solid var(--border-subtle); border-radius:8px; overflow:auto; max-height:280px;">
+          <table class="lifecycle-table" style="margin:0;">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Subject Name</th>
+                <th>Program</th>
+                <th>Year</th>
+                <th>Units</th>
+                <th style="text-align:right;" aria-label="Remove"></th>
+              </tr>
+            </thead>
+            <tbody id="subjectSetItemsBody"></tbody>
+          </table>
+        </div>
+        <div id="subjectSetCount" style="font-size:12px; color:var(--text-secondary); margin-top:6px;"></div>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeSubjectSetModal()">Cancel</button>
+        <button class="btn btn-primary" id="subjectSetSaveBtn" onclick="submitSubjectSet()">Save Set</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== LOAD SAVED SUBJECTS MODAL (STEP 3) ==================== -->
+  <div class="modal-overlay" id="loadSubjectSetModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:620px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--accent-primary);">Load Saved Subjects</h3>
+        <button onclick="closeLoadSubjectSetModal()" aria-label="Close" style="border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+      </div>
+      <div style="padding:20px 22px; overflow-y:auto;">
+        <p id="loadSubjectSetTarget" style="font-size:12.5px; margin:0 0 12px; color:var(--text-primary);"></p>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label class="form-label" for="loadSubjectSetSelect" style="font-weight:700; font-size:12px;">Subject Set</label>
+          <select id="loadSubjectSetSelect" class="form-input" onchange="renderLoadSubjectSetPreview()" style="width:100%;"></select>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin:8px 0 6px; gap:8px; flex-wrap:wrap;">
+          <span id="loadSubjectSetSummary" style="font-size:12px; color:var(--text-secondary);"></span>
+          <span style="display:inline-flex; gap:6px;">
+            <button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 8px;" onclick="tickAllLoadSubjectSet(true)">Select all</button>
+            <button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 8px;" onclick="tickAllLoadSubjectSet(false)">Clear</button>
+          </span>
+        </div>
+        <div id="loadSubjectSetPreview" style="border:1px solid var(--border-subtle); border-radius:8px; max-height:300px; overflow-y:auto;"></div>
+        <p style="margin:10px 0 0; font-size:11.5px; color:var(--text-secondary);">Subject sets are made and edited in <a href="#" onclick="closeLoadSubjectSetModal(); switchPage('subjects'); showCatalogTab('sets'); return false;">Subject Catalog</a>.</p>
+      </div>
+      <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-outline" id="btnSaveTermAsSet" onclick="saveTermAsSubjectSet()">Save this term as a set</button>
+        <span style="display:inline-flex; gap:8px; margin-left:auto;">
+          <button class="btn btn-outline" onclick="closeLoadSubjectSetModal()">Cancel</button>
+          <button class="btn btn-primary" id="loadSubjectSetSubmit" onclick="submitLoadSubjectSet()">Load subjects</button>
+        </span>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== CURRICULUM SUBJECT MODAL ==================== -->
   <div class="modal-overlay" id="manualSubjectModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
@@ -1676,7 +1896,7 @@
         <div class="form-group" id="curricSubjCatalogRow" style="margin-bottom:14px;">
           <label class="form-label" for="curricSubjCatalogSelect" style="font-weight:700; font-size:12px;">From Subject Catalog</label>
           <select id="curricSubjCatalogSelect" onchange="fillCurriculumFromCatalog(this.value)" style="width:100%;"></select>
-          <span style="font-size:11px; color:var(--text-secondary); display:block; margin-top:4px;">Pick a subject to fill in the details, or leave this blank and type a new one.</span>
+          <span style="font-size:11px; color:var(--text-secondary); display:block; margin-top:4px;">Pick a subject to fill in the details, or leave this blank and type a new one. Adding a whole semester? <a href="#" onclick="closeAddSubjectModal(); openLoadSubjectSetModal(); return false;">Load a saved subject set</a>.</span>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
           <div>
@@ -2001,6 +2221,7 @@
   <script src="assets/js/faculty.js"></script>
   <script src="assets/js/subjects.js"></script>
   <script src="assets/js/users.js"></script>
+  <script src="assets/js/activity.js"></script>
   <script src="assets/js/ai.js"></script>
   <script src="assets/js/sync.js"></script>
   <script src="assets/js/ai_schedule.js"></script>

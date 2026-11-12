@@ -8,7 +8,7 @@
 const RELOAD_AFTER_ACTIONS = new Set([
   'save_school_year', 'save_term_subject', 'save_section',
   'split_section', 'auto_generate_sections', 'delete_section',
-  'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications'
+  'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications', 'add_term_subjects'
 ]);
 const MAX_DB_INT = 2147483647;
 
@@ -119,6 +119,13 @@ function applyServerState(data) {
       addedOrder: Number(s.catalog_id) || undefined
     }));
   }
+  if (Array.isArray(data.subjectSets)) {
+    SUBJECT_SETS = data.subjectSets.map(s => {
+      let items = [];
+      try { items = JSON.parse(s.items_json) || []; } catch (e) {}
+      return { id: Number(s.set_id), name: s.set_name, items };
+    });
+  }
   applyServerFaculty(data);
 
   MASTER_SCHEDULE_DATA = data.schedules.map(row => mapServerClass(row, ACADEMIC_SECTIONS, CURRICULUM_SUBJECTS));
@@ -170,7 +177,7 @@ async function loadServerState() {
 
     if (body.data.initialized) {
       applyServerState(body.data);
-    } else if (CURRENT_USER.role === 'admin' && !publishOffered) {
+    } else if (canManageData() && !publishOffered) {
       publishOffered = true;
       const ok = await askConfirm('Publish the scheduling data in this browser so everyone uses it? This replaces the school years, terms, subjects, sections and schedules in the database.\n\nChoose Cancel if another browser has the correct data.', { title: 'The shared database has not been set up yet', confirmLabel: 'Publish this data' });
       if (ok) await publishLocalState();
@@ -209,6 +216,7 @@ async function publishLocalState() {
       subjects: CURRICULUM_SUBJECTS.filter(s => termIds.has(s.termId)),
       sections: ACADEMIC_SECTIONS.filter(s => termIds.has(s.termId)),
       catalog: SUBJECTS,
+      subject_sets: SUBJECT_SETS,
       departments: DEPARTMENTS,
       qualifications: FACULTY.map(f => ({ email: f.email, subjects: f.mainQuals || [] })),
       schedules: MASTER_SCHEDULE_DATA

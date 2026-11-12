@@ -7,7 +7,7 @@ requireLogin();
 $db = getDB();
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    requireAnyRole(['admin', 'academic-head', 'program-head']);
+    requireAnyRole(['admin', 'program-head']);
     try {
         $stmt = $db->query("SELECT user_id, first_name, last_name, email, role, subject_role, created_at FROM users ORDER BY user_id ASC");
         $users = $stmt->fetchAll();
@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'message' => 'Invalid request method'], 405);
 }
 
-requireRole('admin');
+requireAnyRole(['admin', 'program-head']);
 requireCSRF();
 
 $input = json_decode(file_get_contents('php://input'), true);
@@ -31,6 +31,17 @@ if (!$input || !isset($input['action'])) {
 }
 
 $action = $input['action'];
+
+// User Management is for the System Administrator. A Program Head may only update a teacher's
+// name and department from Faculty Profiles, and never a System Administrator's account.
+if (($_SESSION['role'] ?? '') !== 'admin') {
+    $target = $db->prepare("SELECT role FROM users WHERE email = ?");
+    $target->execute([trim((string)($input['email'] ?? ''))]);
+    if ($action !== 'edit_user' || !in_array($target->fetchColumn(), ['faculty', 'program-head'], true)) {
+        jsonResponse(['success' => false, 'message' => 'Only the System Administrator can manage user accounts.'], 403);
+    }
+}
+expectActivity($db, 'users', (string)$action, $input);
 
 if ($action === 'add') {
     $firstName = trim($input['first_name'] ?? '');
@@ -56,23 +67,19 @@ if ($action === 'add') {
     requireValidName('First name', $firstName);
     requireValidName('Last name', $lastName);
 
-    // Validate role
-    if (!in_array($role, ['admin', 'academic-head', 'program-head', 'faculty'])) {
-        jsonResponse(['success' => false, 'message' => 'Invalid role'], 400);
+    // The roles: System Administrator, Program Head and Faculty / Professor
+    if (!in_array($role, ['admin', 'program-head', 'faculty'], true)) {
+        jsonResponse(['success' => false, 'message' => 'Choose Faculty / Professor, Program Head or System Administrator.'], 400);
     }
 
-    // Set appropriate subject role per role category
+    // Program Heads and faculty belong to a department; the System Administrator doesn't
     if ($role === 'admin') {
         $subjectRole = null;
-    } elseif ($role === 'academic-head') {
-        $subjectRole = !empty($subjectRole) ? $subjectRole : 'Academic Leadership';
-    } elseif ($role === 'program-head') {
-        $subjectRole = !empty($subjectRole) ? $subjectRole : 'Program Leadership';
-    } elseif (empty($subjectRole)) {
-        $subjectRole = 'IT';
-    }
-    if ($subjectRole !== null) {
-        requireKnownDepartment($db, $subjectRole, ['IT', 'Academic Leadership', 'Program Leadership']);
+    } else {
+        if (empty($subjectRole)) {
+            $subjectRole = 'IT';
+        }
+        requireKnownDepartment($db, $subjectRole, ['IT']);
     }
 
     // Validate password length

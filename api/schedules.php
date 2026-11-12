@@ -164,9 +164,10 @@ function isWithinAvailability(array $availability, string $day, string $start, s
     return $from !== null && $start >= $from && $end <= $to;
 }
 
+// Managing scheduling data is for the System Administrator and Program Heads
 function requireAdminRole(): void {
-    if (($_SESSION['role'] ?? '') !== 'admin') {
-        jsonResponse(['success' => false, 'message' => 'Only an administrator can do this.'], 403);
+    if (!in_array($_SESSION['role'] ?? '', ['admin', 'program-head'], true)) {
+        jsonResponse(['success' => false, 'message' => 'Only the System Administrator or a Program Head can do this.'], 403);
     }
 }
 
@@ -178,6 +179,31 @@ function insertQualifications(PDO $db, int $userId, array $subjects): void {
             $ins->execute([$userId, $code]);
         }
     }
+}
+
+/** Checks one subject of a saved set or a set being loaded, and returns it in a fixed shape. */
+function cleanSubjectItem($item): array {
+    $item = is_array($item) ? $item : [];
+    $code = trim((string)($item['code'] ?? ''));
+    $name = trim((string)($item['name'] ?? ''));
+    $program = trim((string)($item['program'] ?? ''));
+    if ($code === '' || $name === '') {
+        rejectInput('Each subject needs a code and a name.');
+    }
+    requireFieldLengths(['Subject code' => [$code, 20], 'Subject name' => [$name, 100]]);
+    requireValidCode('Subject code', $code);
+    requireValidText('Subject name', $name);
+    requireValidProgram($program);
+    return [
+        'code' => $code,
+        'name' => $name,
+        'units' => requireIntInRange('Units', $item['units'] ?? 3, 1, 6),
+        'lecHours' => requireValidHours('Lecture hours', $item['lecHours'] ?? 0),
+        'labHours' => requireValidHours('Lab hours', $item['labHours'] ?? 0),
+        'type' => in_array($item['type'] ?? '', ['lecture', 'lab', 'pe', 'special'], true) ? $item['type'] : 'lecture',
+        'program' => $program,
+        'year' => requireIntInRange('Year level', $item['year'] ?? 1, 1, 4)
+    ];
 }
 
 function requireTermExists(PDO $db, int $termId): void {
@@ -224,9 +250,9 @@ function insertScheduleRows(PDO $db, array $rows): void {
     }
 }
 
-// Everything here needs a login. Changes are limited to scheduling staff.
+// Everything here needs a login. Only the System Administrator and Program Heads can make changes.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    requireAnyRole(['admin', 'academic-head', 'program-head']);
+    requireAnyRole(['admin', 'program-head']);
     requireCSRF();
 } else {
     requireLogin();
@@ -297,15 +323,15 @@ try {
             (2, 1, '2nd Sem', '2027-01-11', '2027-05-28', 'draft', 0),
             (3, 1, 'Summer',  '2027-06-07', '2027-07-23', 'draft', 0);
             INSERT INTO academic_sections (section_id, term_id, section_code, section_name, program, year_level, student_count, adviser) VALUES
-            (1, 1, 'IT701M',  'BSIT 1A',  'BSIT',  1, 38, 'Prof. Academic Head'),
+            (1, 1, 'IT701M',  'BSIT 1A',  'BSIT',  1, 38, 'Prof. IT Instructor'),
             (2, 1, 'IT702M',  'BSIT 1B',  'BSIT',  1, 36, 'Prof. Faculty Member'),
             (3, 1, 'IT801M',  'BSIT 2A',  'BSIT',  2, 35, 'Prof. Program Head'),
             (4, 1, 'IT802M',  'BSIT 2B',  'BSIT',  2, 34, 'Prof. Faculty Member'),
             (5, 1, 'CS701M',  'BSCS 1A',  'BSCS',  1, 32, 'Prof. Program Head'),
             (6, 1, 'CPE701M', 'BSCpE 1A', 'BSCpE', 1, 30, 'Engr. Faculty Member'),
             (7, 1, 'HM701M',  'BSHM 1A',  'BSHM',  1, 40, 'Chef Faculty Member'),
-            (8, 1, 'TM701M',  'BSTM 1A',  'BSTM',  1, 34, 'Prof. Academic Head'),
-            (9, 1, 'BA701M',  'BSBA 1A',  'BSBA',  1, 35, 'Prof. Academic Head');
+            (8, 1, 'TM701M',  'BSTM 1A',  'BSTM',  1, 34, 'Prof. IT Instructor'),
+            (9, 1, 'BA701M',  'BSBA 1A',  'BSBA',  1, 35, 'Prof. IT Instructor');
             INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES
             (1, 'ITE 101', 'Introduction to Computing', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
             (1, 'CC 103',  'Computer Programming 1', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
@@ -329,6 +355,28 @@ try {
     if (!$db->query("SHOW COLUMNS FROM subject_catalog LIKE 'catalog_id'")->fetch()) {
         $db->exec("ALTER TABLE subject_catalog ADD COLUMN catalog_id INT NOT NULL AUTO_INCREMENT UNIQUE");
     }
+    // Saved subject sets. The first time, each term's current subjects become a set.
+    $db->exec("CREATE TABLE IF NOT EXISTS subject_sets (set_id INT AUTO_INCREMENT PRIMARY KEY, set_name VARCHAR(60) NOT NULL UNIQUE, items_json MEDIUMTEXT NOT NULL)");
+    if (!(int)$db->query("SELECT COUNT(*) FROM subject_sets")->fetchColumn()) {
+        $seed = [];
+        $rows = $db->query("
+            SELECT t.term_name, y.year_code, s.* FROM term_subjects s
+            JOIN school_terms t ON t.term_id = s.term_id
+            JOIN school_years y ON y.year_id = t.year_id
+            ORDER BY y.year_id, t.term_id, s.program, s.year_level, s.subject_code
+        ")->fetchAll();
+        foreach ($rows as $r) {
+            $seed[mb_substr("{$r['term_name']} {$r['year_code']}", 0, 60)][] = [
+                'code' => $r['subject_code'], 'name' => $r['subject_name'], 'units' => (int)$r['units'],
+                'lecHours' => (float)$r['lecture_hours'], 'labHours' => (float)$r['lab_hours'], 'type' => $r['subject_type'],
+                'program' => $r['program'], 'year' => (int)$r['year_level']
+            ];
+        }
+        $insSet = $db->prepare("INSERT IGNORE INTO subject_sets (set_name, items_json) VALUES (?, ?)");
+        foreach ($seed as $name => $items) {
+            $insSet->execute([$name, json_encode($items)]);
+        }
+    }
     $db->prepare("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('schema_lifecycle', ?)")->execute([SCHEMA_VERSION]);
 } catch (Exception $e) {
     // Non-fatal if DB permissions restrict DDL
@@ -346,7 +394,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $subjects = $db->query("SELECT * FROM term_subjects ORDER BY year_level ASC, subject_code ASC")->fetchAll();
             $sections = $db->query("SELECT * FROM academic_sections ORDER BY year_level ASC, section_code ASC")->fetchAll();
             $rooms = $db->query("SELECT room_id, room_name_number, room_type, capacity, floor_level, current_status FROM classrooms ORDER BY floor_level, room_name_number")->fetchAll();
-            $faculty = $db->query("SELECT user_id, first_name, last_name, email, role, subject_role, employment_status, available_days, available_shifts, max_load FROM users WHERE role IN ('faculty', 'academic-head', 'program-head')")->fetchAll();
+            $faculty = $db->query("SELECT user_id, first_name, last_name, email, role, subject_role, employment_status, available_days, available_shifts, max_load FROM users WHERE role IN ('faculty', 'program-head')")->fetchAll();
             $schedules = $db->query("
                 SELECT s.*, c.room_name_number, CONCAT(u.first_name, ' ', u.last_name) AS faculty_name
                 FROM schedules s
@@ -364,6 +412,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 ORDER BY q.subject_code
             ")->fetchAll();
             $snapshots = $db->query("SELECT term_id, saved_at FROM schedule_snapshots")->fetchAll();
+            try {
+                $subjectSets = $db->query("SELECT set_id, set_name, items_json FROM subject_sets ORDER BY set_name")->fetchAll();
+            } catch (Exception $e) {
+                $subjectSets = []; // The table could not be created, so there are no sets
+            }
 
             jsonResponse([
                 'success' => true,
@@ -379,7 +432,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     'catalog' => $catalog,
                     'departments' => $departments,
                     'qualifications' => $qualifications,
-                    'snapshots' => $snapshots
+                    'snapshots' => $snapshots,
+                    'subjectSets' => $subjectSets
                 ]
             ]);
         } catch (Exception $e) {
@@ -393,6 +447,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = json_decode(file_get_contents('php://input'), true) ?? [];
     $action = $input['action'] ?? '';
+    expectActivity($db, 'schedules', (string)$action, $input);
 
     // ─── 0. ONE-TIME PUBLISH OF AN ADMIN BROWSER'S DATA ───
     if ($action === 'publish_state') {
@@ -409,6 +464,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $catalog = is_array($input['catalog'] ?? null) ? $input['catalog'] : [];
         $departments = is_array($input['departments'] ?? null) ? $input['departments'] : [];
         $qualifications = is_array($input['qualifications'] ?? null) ? $input['qualifications'] : [];
+        $subjectSets = [];
+        foreach (is_array($input['subject_sets'] ?? null) ? $input['subject_sets'] : [] as $set) {
+            $setName = trim((string)($set['name'] ?? ''));
+            $setItems = is_array($set['items'] ?? null) ? $set['items'] : [];
+            if ($setName !== '' && mb_strlen($setName) <= 60 && $setItems) {
+                $subjectSets[$setName] = array_map('cleanSubjectItem', $setItems);
+            }
+        }
 
         if (!$years || !$terms) {
             jsonResponse(['success' => false, 'message' => 'School years and terms are required.'], 400);
@@ -462,6 +525,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             }
 
             insertScheduleRows($db, $rows);
+            $insSet = $db->prepare("INSERT INTO subject_sets (set_name, items_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE items_json = VALUES(items_json)");
+            foreach ($subjectSets as $setName => $setItems) {
+                $insSet->execute([$setName, json_encode($setItems)]);
+            }
             $db->exec("INSERT INTO app_settings (setting_key, setting_value) VALUES ('state_published', '1')");
             $db->commit();
             jsonResponse(['success' => true, 'message' => 'Scheduling data published.']);
@@ -477,7 +544,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         requireAdminRole();
         $subjects = is_array($input['subjects'] ?? null) ? $input['subjects'] : [];
 
-        $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ? AND role IN ('faculty', 'academic-head', 'program-head')");
+        $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ? AND role IN ('faculty', 'program-head')");
         $findUser->execute([trim($input['email'] ?? '')]);
         $userId = (int)$findUser->fetchColumn();
         if (!$userId) {
@@ -538,7 +605,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             rejectInput('Choose at least one day and one shift.');
         }
 
-        $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ? AND role IN ('faculty', 'academic-head', 'program-head')");
+        $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ? AND role IN ('faculty', 'program-head')");
         $findUser->execute([trim((string)($input['email'] ?? ''))]);
         $userId = (int)$findUser->fetchColumn();
         if (!$userId) {
@@ -625,6 +692,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
         $db->commit();
         jsonResponse(['success' => true, 'message' => 'Departments saved']);
+    }
+
+    // ─── SAVED SUBJECT SETS ───
+    if ($action === 'save_subject_set') {
+        requireAdminRole();
+        $setId = (int)($input['set_id'] ?? 0);
+        $setName = preg_replace('/\s+/', ' ', trim((string)($input['set_name'] ?? '')));
+        $items = is_array($input['items'] ?? null) ? $input['items'] : [];
+        if ($setName === '') {
+            jsonResponse(['success' => false, 'message' => 'Please name the subject set.'], 400);
+        }
+        requireFieldLengths(['Set name' => [$setName, 60]]);
+        requireValidText('Set name', $setName);
+        if (!$items || count($items) > 300) {
+            jsonResponse(['success' => false, 'message' => 'A subject set needs from 1 to 300 subjects.'], 400);
+        }
+        $clean = array_map('cleanSubjectItem', $items);
+        $dupe = $db->prepare("SELECT COUNT(*) FROM subject_sets WHERE set_name = ? AND set_id <> ?");
+        $dupe->execute([$setName, $setId]);
+        if ((int)$dupe->fetchColumn()) {
+            jsonResponse(['success' => false, 'message' => 'Another subject set already has that name.'], 400);
+        }
+        if ($setId > 0) {
+            $stmt = $db->prepare("UPDATE subject_sets SET set_name = ?, items_json = ? WHERE set_id = ?");
+            $stmt->execute([$setName, json_encode($clean), $setId]);
+            if (!$stmt->rowCount()) {
+                $find = $db->prepare("SELECT COUNT(*) FROM subject_sets WHERE set_id = ?");
+                $find->execute([$setId]);
+                if (!(int)$find->fetchColumn()) {
+                    jsonResponse(['success' => false, 'message' => 'That subject set no longer exists. Please reload and try again.'], 404);
+                }
+            }
+        } else {
+            $db->prepare("INSERT INTO subject_sets (set_name, items_json) VALUES (?, ?)")->execute([$setName, json_encode($clean)]);
+            $setId = (int)$db->lastInsertId();
+        }
+        jsonResponse(['success' => true, 'message' => 'Subject set saved', 'set_id' => $setId]);
+    }
+
+    if ($action === 'delete_subject_set') {
+        requireAdminRole();
+        $db->prepare("DELETE FROM subject_sets WHERE set_id = ?")->execute([(int)($input['set_id'] ?? 0)]);
+        jsonResponse(['success' => true, 'message' => 'Subject set removed']);
+    }
+
+    // Loads chosen subjects of a saved set into a term, skipping any the term already offers
+    if ($action === 'add_term_subjects') {
+        $termId = (int)($input['term_id'] ?? 0);
+        requireTermExists($db, $termId);
+        $items = is_array($input['items'] ?? null) ? $input['items'] : [];
+        if (!$items || count($items) > 300) {
+            jsonResponse(['success' => false, 'message' => 'Choose from 1 to 300 subjects to load.'], 400);
+        }
+        $clean = array_map('cleanSubjectItem', $items);
+        $exists = $db->prepare("SELECT COUNT(*) FROM term_subjects WHERE term_id = ? AND UPPER(subject_code) = UPPER(?) AND program = ? AND year_level = ?");
+        $ins = $db->prepare("INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '2024 Revised', 1)");
+        $added = 0;
+        $db->beginTransaction();
+        foreach ($clean as $s) {
+            $exists->execute([$termId, $s['code'], $s['program'], $s['year']]);
+            if ((int)$exists->fetchColumn()) continue;
+            $ins->execute([$termId, $s['code'], $s['name'], $s['units'], $s['lecHours'], $s['labHours'], $s['type'], $s['program'], $s['year']]);
+            $added++;
+        }
+        $db->commit();
+        setActivitySummary($added > 0 ? 'Loaded ' . activityCount($added, 'saved subject') . ' into ' . activityTerm($db, $termId) : '');
+        jsonResponse(['success' => true, 'message' => "{$added} subject(s) added", 'added' => $added]);
     }
 
     // ─── 1. SCHOOL YEAR ACTIONS ───
@@ -1032,6 +1166,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             // A full regenerate can be undone; ordinary edits don't replace the undo copy
             if ($action !== 'bulk_save_schedules') {
                 saveScheduleSnapshot($db, $term_id);
+            } else {
+                // The log says which classes changed; a save that changed nothing isn't logged
+                setActivitySummary(describeScheduleChanges($db, $term_id, $rows));
             }
             // Replace this term only. NULL rows are old records saved before terms were tracked.
             $del = $db->prepare("DELETE FROM schedules WHERE term_id = ? OR term_id IS NULL");

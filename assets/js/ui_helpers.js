@@ -47,6 +47,48 @@ document.addEventListener('keydown', event => {
   else top.style.display = 'none';
 });
 
+// Each dialog's × button is announced as "Close"
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.modal-overlay button').forEach(btn => {
+    if (!btn.getAttribute('aria-label') && /^[×✕]$/.test(btn.textContent.trim())) btn.setAttribute('aria-label', 'Close');
+  });
+});
+
+// An opened dialog takes keyboard focus, and gives it back to where it was when it closes.
+// On touch screens the dialog itself gets focus, so the on-screen keyboard doesn't pop up.
+const dialogReturnFocus = new Map();
+function focusOpenedDialog(overlay) {
+  const box = overlay.querySelector('.modal') || overlay;
+  const visible = el => el.offsetParent !== null;
+  let target = null;
+  if (!window.matchMedia('(pointer: coarse)').matches) {
+    target = [...box.querySelectorAll('input:not([type=hidden]):not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled])')].find(visible)
+      || [...box.querySelectorAll('button:not([disabled])')].find(visible);
+  }
+  if (!target) {
+    if (!box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
+    target = box;
+  }
+  target.focus({ preventScroll: true });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  new MutationObserver(records => {
+    records.forEach(record => {
+      const overlay = record.target;
+      if (!overlay.classList || !overlay.classList.contains('modal-overlay')) return;
+      const isOpen = getComputedStyle(overlay).display !== 'none';
+      if (isOpen && !dialogReturnFocus.has(overlay)) {
+        dialogReturnFocus.set(overlay, document.activeElement);
+        setTimeout(() => focusOpenedDialog(overlay), 0); // after the dialog has been filled in
+      } else if (!isOpen && dialogReturnFocus.has(overlay)) {
+        const previous = dialogReturnFocus.get(overlay);
+        dialogReturnFocus.delete(overlay);
+        if (previous && previous.isConnected && typeof previous.focus === 'function') previous.focus({ preventScroll: true });
+      }
+    });
+  }).observe(document.body, { attributes: true, attributeFilter: ['style', 'class'], subtree: true });
+});
+
 // The sidebar and step bar are div elements, so they need keyboard support added
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.nav-item, .stepper-step').forEach(item => {
@@ -56,10 +98,49 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 document.addEventListener('keydown', event => {
   if (event.key !== 'Enter' && event.key !== ' ') return;
-  const item = event.target.closest && event.target.closest('.nav-item, .stepper-step');
+  // Real buttons and fields inside a card handle their own keys
+  if (event.target.matches && event.target.matches('button, a, input, select, textarea')) return;
+  const item = event.target.closest && event.target.closest('.nav-item, .stepper-step, .class-block-cell[tabindex]');
   if (!item) return;
   event.preventDefault();
   item.click();
+});
+
+// Connects each visible label to its field, so screen readers announce the label and clicking it focuses the field.
+// A field with only a placeholder gets the placeholder as its name. Runs again whenever forms are drawn.
+const LABELLED_FIELD = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea';
+let labelLinkCount = 0;
+function linkFormLabels() {
+  document.querySelectorAll('label:not([for]), .form-label:not(label)').forEach(label => {
+    if (label.querySelector('input, select, textarea')) return;
+    let field = label.nextElementSibling && label.nextElementSibling.matches(LABELLED_FIELD) ? label.nextElementSibling : null;
+    if (!field) {
+      const group = label.closest('.form-group');
+      const fields = group ? group.querySelectorAll(LABELLED_FIELD) : [];
+      if (fields.length === 1) field = fields[0];
+    }
+    if (!field || field.getAttribute('aria-labelledby') || (field.labels && field.labels.length)) return;
+    if (!field.id) field.id = `labelled-field-${++labelLinkCount}`;
+    if (label.tagName === 'LABEL') {
+      label.htmlFor = field.id;
+    } else {
+      if (!label.id) label.id = `field-label-${++labelLinkCount}`;
+      field.setAttribute('aria-labelledby', label.id);
+    }
+  });
+  document.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(field => {
+    if (!(field.labels && field.labels.length) && !field.getAttribute('aria-label') && !field.getAttribute('aria-labelledby')) {
+      field.setAttribute('aria-label', field.placeholder);
+    }
+  });
+}
+let labelLinkTimer = null;
+document.addEventListener('DOMContentLoaded', () => {
+  linkFormLabels();
+  new MutationObserver(() => {
+    clearTimeout(labelLinkTimer);
+    labelLinkTimer = setTimeout(linkFormLabels, 100);
+  }).observe(document.body, { childList: true, subtree: true });
 });
 
 // Returns a sorted copy for a "Sort by" dropdown. Items with no saved order yet count as newest.

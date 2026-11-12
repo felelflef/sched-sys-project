@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_name VARCHAR(50) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'academic-head', 'program-head', 'faculty') NOT NULL,
+    role ENUM('admin', 'program-head', 'faculty') NOT NULL,
     subject_role VARCHAR(50) DEFAULT 'IT',
     active_session_token VARCHAR(255) DEFAULT NULL,
     employment_status VARCHAR(20) NOT NULL DEFAULT 'Full-time',
@@ -131,6 +131,25 @@ CREATE TABLE IF NOT EXISTS subject_catalog (
     catalog_id INT NOT NULL AUTO_INCREMENT UNIQUE
 );
 
+-- Change history: who saved what, and when
+CREATE TABLE IF NOT EXISTS activity_log (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_email VARCHAR(100) NOT NULL,
+    user_name VARCHAR(101) NOT NULL,
+    user_role VARCHAR(20) NOT NULL,
+    category VARCHAR(20) NOT NULL,
+    summary VARCHAR(500) NOT NULL,
+    INDEX idx_activity_time (created_at)
+);
+
+-- Reusable subject lists (for example a 1st or 2nd semester), loaded into a term in Step 3
+CREATE TABLE IF NOT EXISTS subject_sets (
+    set_id INT AUTO_INCREMENT PRIMARY KEY,
+    set_name VARCHAR(60) NOT NULL UNIQUE,
+    items_json MEDIUMTEXT NOT NULL
+);
+
 -- The subjects each teacher is allowed to teach
 CREATE TABLE IF NOT EXISTS faculty_qualifications (
     user_id INT NOT NULL,
@@ -166,7 +185,7 @@ INSERT INTO classrooms (room_name_number, room_type, capacity, floor_level) VALU
 -- Seed Data: Users
 INSERT INTO users (first_name, last_name, email, password_hash, role, subject_role) VALUES
 ('System', 'Administrator', 'admin@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', NULL),
-('Academic', 'Head', 'acah@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'academic-head', 'IT'),
+('Prof.', 'IT Instructor', 'acah@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'faculty', 'IT'),
 ('Program', 'Head', 'proh@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'program-head', 'IT'),
 ('Faculty', 'Member', 'faculty@sti.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'faculty', 'IT'),
 -- Teaching records with no usable password ('!' never matches a hash)
@@ -187,15 +206,15 @@ INSERT INTO school_terms (term_id, year_id, term_name, start_date, end_date, sta
 
 -- Seed Data: Academic Sections
 INSERT INTO academic_sections (section_id, term_id, section_code, section_name, program, year_level, student_count, adviser) VALUES
-(1, 1, 'IT701M',  'BSIT 1A',  'BSIT',  1, 38, 'Prof. Academic Head'),
+(1, 1, 'IT701M',  'BSIT 1A',  'BSIT',  1, 38, 'Prof. IT Instructor'),
 (2, 1, 'IT702M',  'BSIT 1B',  'BSIT',  1, 36, 'Prof. Faculty Member'),
 (3, 1, 'IT801M',  'BSIT 2A',  'BSIT',  2, 35, 'Prof. Program Head'),
 (4, 1, 'IT802M',  'BSIT 2B',  'BSIT',  2, 34, 'Prof. Faculty Member'),
 (5, 1, 'CS701M',  'BSCS 1A',  'BSCS',  1, 32, 'Prof. Program Head'),
 (6, 1, 'CPE701M', 'BSCpE 1A', 'BSCpE', 1, 30, 'Engr. Faculty Member'),
 (7, 1, 'HM701M',  'BSHM 1A',  'BSHM',  1, 40, 'Chef Faculty Member'),
-(8, 1, 'TM701M',  'BSTM 1A',  'BSTM',  1, 34, 'Prof. Academic Head'),
-(9, 1, 'BA701M',  'BSBA 1A',  'BSBA',  1, 35, 'Prof. Academic Head');
+(8, 1, 'TM701M',  'BSTM 1A',  'BSTM',  1, 34, 'Prof. IT Instructor'),
+(9, 1, 'BA701M',  'BSBA 1A',  'BSBA',  1, 35, 'Prof. IT Instructor');
 
 -- Seed Data: Term Subjects
 INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES
