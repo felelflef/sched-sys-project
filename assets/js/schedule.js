@@ -1752,8 +1752,12 @@ function closeConfirmRegenerateModal() {
   if (modal) modal.style.display = 'none';
 }
 
-function executeGenerateBaseline() {
+async function executeGenerateBaseline() {
   closeConfirmRegenerateModal();
+  // Teachers, qualifications and rooms come fresh from the database, as the server will check them
+  if (!IS_STANDALONE && typeof loadServerState === 'function') {
+    try { await loadServerState(); } catch (e) {}
+  }
   const sectionsToSchedule = (typeof ACADEMIC_SECTIONS !== 'undefined' ? ACADEMIC_SECTIONS : []).filter(s => s.termId === (getActiveAcademicContext().activeTerm.id));
 
   if (sectionsToSchedule.length === 0) {

@@ -12,6 +12,7 @@ header('Content-Type: application/json');
 function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifications = null): array {
     $roomStmt = $db->prepare("SELECT room_id FROM classrooms WHERE room_name_number = ? LIMIT 1");
     $facultyStmt = $db->prepare("SELECT user_id FROM users WHERE CONCAT(first_name, ' ', last_name) = ? LIMIT 1");
+    $facultyByEmail = $db->prepare("SELECT user_id FROM users WHERE email = ? AND role IN ('faculty', 'program-head') LIMIT 1");
     $validDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     $availability = loadAvailability($db);
     $rows = [];
@@ -29,6 +30,12 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
 
         $instructor = (string)($item['instructor'] ?? '');
         $facultyId = (int)($item['faculty_id'] ?? 0);
+        // The account email never changes, unlike a display name; the name is only a fallback for older pages
+        $facultyEmail = trim((string)($item['faculty_email'] ?? ''));
+        if (!$facultyId && $facultyEmail !== '') {
+            $facultyByEmail->execute([$facultyEmail]);
+            $facultyId = (int)$facultyByEmail->fetchColumn();
+        }
         if (!$facultyId && $instructor !== '') {
             $facultyStmt->execute([$instructor]);
             $facultyId = (int)$facultyStmt->fetchColumn();

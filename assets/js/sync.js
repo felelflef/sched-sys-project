@@ -8,7 +8,7 @@
 const RELOAD_AFTER_ACTIONS = new Set([
   'save_school_year', 'save_term_subject', 'save_section',
   'split_section', 'auto_generate_sections', 'delete_section',
-  'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications', 'add_term_subjects'
+  'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications', 'add_term_subjects', 'edit_user'
 ]);
 const MAX_DB_INT = 2147483647;
 
@@ -219,7 +219,7 @@ async function publishLocalState() {
       subject_sets: SUBJECT_SETS,
       departments: DEPARTMENTS,
       qualifications: FACULTY.map(f => ({ email: f.email, subjects: f.mainQuals || [] })),
-      schedules: MASTER_SCHEDULE_DATA
+      schedules: withFacultyEmails(MASTER_SCHEDULE_DATA)
         .map(c => ({ ...c, termId: c.termId || activeTerm.id }))
         .filter(c => termIds.has(c.termId))
     })
@@ -246,6 +246,14 @@ function handleApiWriteSaved(url, body) {
 // If someone else saved first the server refuses, and the latest schedule is loaded.
 let scheduleSaveChain = Promise.resolve();
 
+// Adds each class's teacher email, which the server uses to find the teacher
+function withFacultyEmails(schedules) {
+  return schedules.map(c => {
+    const fac = FACULTY.find(f => f.name === c.instructor);
+    return fac && fac.email ? { ...c, faculty_email: fac.email } : c;
+  });
+}
+
 function saveTermSchedule(action, termId, schedules, extra = {}) {
   if (IS_STANDALONE) return Promise.resolve({ ok: true });
   const result = scheduleSaveChain.then(async () => {
@@ -253,7 +261,7 @@ function saveTermSchedule(action, termId, schedules, extra = {}) {
     const res = await fetch('api/schedules.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, term_id: termId, schedules, expected_version: term ? term.scheduleVersion : undefined, ...extra })
+      body: JSON.stringify({ action, term_id: termId, schedules: withFacultyEmails(schedules), expected_version: term ? term.scheduleVersion : undefined, ...extra })
     });
     if (res.ok) {
       const body = await res.clone().json();
