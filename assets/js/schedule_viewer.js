@@ -311,7 +311,7 @@ window.exportViewerExcel = function() {
 window.exportViewerPdf = function() {
   const selected = viewerSelection[viewerMode];
   if (!selected) return;
-  saveTimetableSheetPdf(document.querySelector('#page-viewer .schedule-viewer-sheet'), selected);
+  saveTimetableSheetPdf(document.querySelector('#page-viewer .schedule-viewer-sheet'), selected, viewerSelectedClasses(), viewerMode);
 };
 
 window.setViewerMode = function(mode) {
