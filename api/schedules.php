@@ -860,6 +860,12 @@ try {
     if (!$db->query("SHOW INDEX FROM school_years WHERE Key_name IN ('uniq_year_code', 'year_code')")->fetch()) {
         $db->exec("ALTER TABLE school_years ADD UNIQUE KEY uniq_year_code (year_code)");
     }
+    // Terms are named freely, such as "3rd Term", instead of a fixed list. This comes before the SHS terms are
+    // added below: an old database only accepts 1st Sem, 2nd Sem and Summer, and would refuse "1st Term".
+    $termNameColumn = $db->query("SHOW COLUMNS FROM school_terms LIKE 'term_name'")->fetch();
+    if ($termNameColumn && stripos($termNameColumn['Type'], 'enum') === 0) {
+        $db->exec("ALTER TABLE school_terms MODIFY COLUMN term_name VARCHAR(30) NOT NULL");
+    }
     // Years made before terms had levels only have one level's terms. Once, each year missing a level gets
     // that level's standard terms (SHS 1st, 2nd, 3rd Term and Summer; College 1st Sem, 2nd Sem and Summer). It is recorded as
     // done, so terms deleted later on purpose don't come back.
@@ -883,11 +889,6 @@ try {
             }
         }
         $db->exec("INSERT INTO app_settings (setting_key, setting_value) VALUES ('term_levels_filled', '1')");
-    }
-    // Terms are named freely, such as "3rd Term", instead of a fixed list
-    $termNameColumn = $db->query("SHOW COLUMNS FROM school_terms LIKE 'term_name'")->fetch();
-    if ($termNameColumn && stripos($termNameColumn['Type'], 'enum') === 0) {
-        $db->exec("ALTER TABLE school_terms MODIFY COLUMN term_name VARCHAR(30) NOT NULL");
     }
     if (!$db->query("SHOW COLUMNS FROM subject_catalog LIKE 'catalog_id'")->fetch()) {
         $db->exec("ALTER TABLE subject_catalog ADD COLUMN catalog_id INT NOT NULL AUTO_INCREMENT UNIQUE");
