@@ -851,10 +851,3 @@ select:focus, input:focus {
 .step-help-icon { flex: 0 0 auto; width: 1.75rem; height: 1.75rem; border-radius: 50%; background: var(--accent-primary); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; }
 .step-help-title { font-weight: 800; margin-bottom: 2px; }
 .step-help p { margin: 0; line-height: 1.5; }
-
-/* Text size choice in the user menu */
-.text-size-menu { padding: 8px 14px; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); margin: 4px 0; }
-.text-size-menu-label { font-size: 0.857rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; }
-.text-size-options { display: flex; gap: 6px; }
-.text-size-options button { flex: 1; min-height: 2.5rem; border: 1px solid var(--border-subtle); background: #fff; border-radius: 6px; cursor: pointer; font-weight: 700; color: var(--text-primary); }
-.text-size-options button.active { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
