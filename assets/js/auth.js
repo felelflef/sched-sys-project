@@ -261,7 +261,7 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
     if (activeSessionToken) localStorage.setItem('sti_session_token', activeSessionToken);
     document.documentElement.classList.add('has-active-session');
     if (!localStorage.getItem('sti_active_page')) {
-      localStorage.setItem('sti_active_page', 'schedule');
+      localStorage.setItem('sti_active_page', homePageForRole(user.role));
     }
   } catch (e) {}
 
@@ -303,8 +303,9 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
 
   // A new sign-in never opens on a page this role can't use, such as the previous user's User Management
   const openNavItem = document.querySelector('.nav-item.active');
-  if (!openNavItem || getComputedStyle(openNavItem).display === 'none' || (openNavItem.dataset.module === 'users' && user.role !== 'admin')) {
-    window.switchPage('schedule');
+  if (!openNavItem || getComputedStyle(openNavItem).display === 'none' || (openNavItem.dataset.module === 'users' && user.role !== 'admin')
+    || (openNavItem.dataset.module === 'schedule' && user.role === 'faculty')) {
+    window.switchPage(homePageForRole(user.role));
   }
 
   // Transition: fade out login, reveal dashboard
@@ -363,10 +364,10 @@ async function syncUsersFromDB() {
               FACULTY.push({
                 name: fullName,
                 email: email,
-                dept: u.subject_role || 'IT / CS',
+                dept: u.subject_role || DEPARTMENTS[0],
                 status: 'Full-time',
-                maxLoad: 24,
-                mainQuals: [],
+                maxLoad: 30,
+                certificates: [],
                 bg: colors[Math.floor(Math.random() * colors.length)]
               });
             }
@@ -397,7 +398,9 @@ async function handleLogin() {
     return;
   }
 
-  // Show loading state
+  // One sign-in at a time: Enter fires both the key handler and the form's submit button, and two
+  // sign-ins at once leave the browser holding a session the server has already replaced
+  if (btn.classList.contains('loading')) return;
   btn.classList.add('loading');
   const normalizedEmail = email.toLowerCase();
 

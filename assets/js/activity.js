@@ -32,7 +32,7 @@ function activityTimeHtml(seconds) {
     : minutes < 1440 ? `${Math.round(minutes / 60)} hr ago`
     : `${Math.round(minutes / 1440)} day${Math.round(minutes / 1440) === 1 ? '' : 's'} ago`;
   const full = when.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
-  return `<div style="font-weight:600;">${escapeHtml(full)}</div><div style="font-size:11.5px; color:var(--text-secondary);">${ago}</div>`;
+  return `<div style="font-weight:600;">${escapeHtml(full)}</div><div style="font-size:0.857rem; color:var(--text-secondary);">${ago}</div>`;
 }
 
 function renderActivityTable() {
@@ -46,9 +46,9 @@ function renderActivityTable() {
         <td>${activityTimeHtml(row.at)}</td>
         <td>
           <div style="font-weight:600;">${escapeHtml(row.user_name || row.user_email)}</div>
-          <div style="font-size:11.5px; color:var(--text-secondary);">${escapeHtml(ACTIVITY_ROLE_LABELS[row.user_role] || row.user_role)}</div>
+          <div style="font-size:0.857rem; color:var(--text-secondary);">${escapeHtml(ACTIVITY_ROLE_LABELS[row.user_role] || row.user_role)}</div>
         </td>
-        <td><span class="badge" style="${ACTIVITY_CATEGORY_STYLES[row.category] || ''} font-size:11px; font-weight:700; white-space:nowrap;">${escapeHtml(row.category)}</span></td>
+        <td><span class="badge" style="${ACTIVITY_CATEGORY_STYLES[row.category] || ''} font-size:0.857rem; font-weight:700; white-space:nowrap;">${escapeHtml(row.category)}</span></td>
         <td style="overflow-wrap:anywhere;">${escapeHtml(row.summary)}</td>
       </tr>
     `).join('');

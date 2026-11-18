@@ -19,7 +19,7 @@ function renderUserTable() {
     const tr = document.createElement('tr');
     const roleBadgeClass = u.role === 'admin' ? 'role-admin' : u.role === 'program-head' ? 'role-program-head' : 'role-faculty';
     const isSelf = CURRENT_USER && (u.email.toLowerCase() === CURRENT_USER.email.toLowerCase());
-    const matchingFac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.email && f.email.toLowerCase() === u.email.toLowerCase());
+    const matchingFac = FACULTY.find(f => f.email && f.email.toLowerCase() === u.email.toLowerCase());
     const empStatus = u.employmentType || (matchingFac ? matchingFac.status : 'Full-time');
     const empBadgeStyle = empStatus === 'Part-time'
       ? 'background:#fef3c7; color:#b45309; border:1px solid #fde68a;'
@@ -27,24 +27,24 @@ function renderUserTable() {
 
     let actionCellHtml = '';
     if (isSelf) {
-      actionCellHtml = '<span style="font-size:11px; color:var(--text-secondary);">(Current User)</span>';
+      actionCellHtml = '<span style="font-size:0.857rem; color:var(--text-secondary);">(Current User)</span>';
     } else if (isAdmin) {
       actionCellHtml = `
         <div style="display:inline-flex; gap:4px; align-items:center;">
-          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openEditUserModal(${jsArg(u.email)})">Edit</button>
-          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; cursor:pointer;" onclick="window.openResetPasswordModal(${jsArg(u.email)})">Reset Password</button>
-          <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8; cursor:pointer;" onclick="window.promptDeleteUser(${jsArg(u.email)})">Remove</button>
+          <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; cursor:pointer;" onclick="window.openEditUserModal(${jsArg(u.email)})">Edit</button>
+          <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; cursor:pointer;" onclick="window.openResetPasswordModal(${jsArg(u.email)})">Reset Password</button>
+          <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; color:var(--danger); border-color:#fadbd8; cursor:pointer;" onclick="window.promptDeleteUser(${jsArg(u.email)})">Remove</button>
         </div>
       `;
     } else {
-      actionCellHtml = '<span style="font-size:11px; color:var(--text-secondary);">—</span>';
+      actionCellHtml = '<span style="font-size:0.857rem; color:var(--text-secondary);">—</span>';
     }
 
     tr.innerHTML = `
       <td style="font-weight:600;">${escapeHtml(u.name)}</td>
       <td>${escapeHtml(u.email)}</td>
       <td><span class="role-badge ${roleBadgeClass}">${escapeHtml(u.roleLabel)}</span></td>
-      <td><span class="badge" style="${empBadgeStyle} font-size:10.5px; font-weight:700;">${escapeHtml(empStatus)}</span></td>
+      <td><span class="badge" style="${empBadgeStyle} font-size:0.857rem; font-weight:700;">${escapeHtml(empStatus)}</span></td>
       <td style="text-align:right;">
         ${actionCellHtml}
       </td>
@@ -88,6 +88,7 @@ window.openAddUserModal = function() {
   document.getElementById('newUserEmail').value = '';
   document.getElementById('newUserPassword').value = '';
   document.getElementById('newUserRole').value = 'faculty';
+  document.getElementById('newUserLevel').value = 'tertiary';
   updateNewUserRoleFields();
   document.getElementById('addUserModal').style.display = 'flex';
 };
@@ -98,6 +99,7 @@ window.updateNewUserRoleFields = function() {
   const isAdmin = role === 'admin';
   document.getElementById('newUserStatusGroup').style.display = isAdmin ? 'none' : '';
   document.getElementById('newUserDeptGroup').style.display = isAdmin ? 'none' : '';
+  document.getElementById('newUserLevelGroup').style.display = isAdmin ? 'none' : '';
   document.getElementById('newUserRoleHint').textContent = {
     admin: 'Can manage accounts, rooms, faculty, subjects and schedules.',
     'program-head': 'Can manage rooms, faculty, subjects and schedules, but not user accounts. Also gets a faculty profile for teaching.',
@@ -122,7 +124,7 @@ window.submitAddUser = async function() {
   let password = document.getElementById('newUserPassword').value.trim();
   const chosenRole = document.getElementById('newUserRole').value;
   const role = ['admin', 'program-head'].includes(chosenRole) ? chosenRole : 'faculty';
-  const dept = document.getElementById('newUserDept').value || 'IT / CS';
+  const dept = document.getElementById('newUserDept').value || DEPARTMENTS[0];
 
   if (!name) {
     showAddUserError('Please enter the full name.');
@@ -191,7 +193,8 @@ window.submitAddUser = async function() {
           email: email,
           password: password,
           role: role,
-          subject_role: dept
+          subject_role: dept,
+          teaching_level: document.getElementById('newUserLevel').value
         })
       });
       data = await res.json();
@@ -230,10 +233,12 @@ window.submitAddUser = async function() {
       FACULTY.push({
         name,
         email,
-        dept: dept || 'IT / CS',
+        dept: dept || DEPARTMENTS[0],
         status: status,
-        maxLoad: status === 'Part-time' ? 15 : 24,
-        mainQuals: [],
+        maxLoad: defaultLoadUnits(status).max,
+        minLoad: defaultLoadUnits(status).min,
+        teachingLevel: document.getElementById('newUserLevel').value,
+        certificates: [],
         bg: colors[Math.floor(Math.random() * colors.length)]
       });
       saveFacultyAvailability(FACULTY[FACULTY.length - 1]);
@@ -262,7 +267,7 @@ window.openEditUserModal = function(email) {
   const nameInput = document.getElementById('editUserNameInput');
   if (nameInput) nameInput.value = user.name;
 
-  const fac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.email && f.email.toLowerCase() === user.email.toLowerCase());
+  const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === user.email.toLowerCase());
   const statusSelect = document.getElementById('editUserStatusSelect');
   if (statusSelect) {
     statusSelect.value = user.employmentType || (fac ? fac.status : 'Full-time');
@@ -271,7 +276,7 @@ window.openEditUserModal = function(email) {
   const deptSelect = document.getElementById('editUserDeptSelect');
   if (deptSelect) {
     deptSelect.innerHTML = '';
-    const currentDept = fac ? fac.dept : 'IT / CS';
+    const currentDept = fac ? fac.dept : DEPARTMENTS[0];
     DEPARTMENTS.forEach(dept => {
       const opt = document.createElement('option');
       opt.value = dept;
@@ -298,7 +303,7 @@ window.submitEditUser = function() {
   const email = document.getElementById('editUserTargetEmail')?.value;
   const newName = document.getElementById('editUserNameInput')?.value.trim();
   const newStatus = document.getElementById('editUserStatusSelect')?.value || 'Full-time';
-  const newDept = document.getElementById('editUserDeptSelect')?.value || 'IT / CS';
+  const newDept = document.getElementById('editUserDeptSelect')?.value || DEPARTMENTS[0];
 
   if (!email || !newName) {
     alert('Please enter a valid user name.');
@@ -326,19 +331,20 @@ window.submitEditUser = function() {
   }
 
   // 3. Update or sync corresponding FACULTY profile
-  const fac = (typeof FACULTY !== 'undefined' ? FACULTY : []).find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
+  const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   if (fac) {
     fac.name = newName;
+    const previousStatus = fac.status;
     fac.status = newStatus;
     if (newStatus === 'Full-time') {
       fac.availableDays = [];
       fac.availableShifts = [];
     }
     if (newDept) fac.dept = newDept;
-    if (newStatus === 'Part-time' && fac.maxLoad > 18) {
-      fac.maxLoad = 15;
-    } else if (newStatus === 'Full-time' && fac.maxLoad < 20) {
-      fac.maxLoad = 24;
+    // A new status starts from that status's usual load range
+    if (fac.status !== undefined && previousStatus !== newStatus) {
+      fac.maxLoad = defaultLoadUnits(newStatus).max;
+      fac.minLoad = defaultLoadUnits(newStatus).min;
     }
   }
 
@@ -533,5 +539,3 @@ window.confirmDeleteUser = function() {
   renderGrid();
 };
 
-// Backward-compatible alias
-window.deleteUser = window.promptDeleteUser;

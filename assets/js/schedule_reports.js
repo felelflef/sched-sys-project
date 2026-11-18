@@ -26,8 +26,11 @@ function renderScheduleReports() {
     status: fac.status || 'Full-time',
     classes: classes.filter(c => c.instructor === fac.name).length,
     hours: facultyWeeklyHours(fac.name),
-    max: fac.maxLoad || 24
-  })).sort((a, b) => b.hours - a.hours);
+    units: facultyLoadUnits(fac.name) + concurrentLoadUnits(fac.name, activeTerm.id),
+    otherUnits: concurrentLoadUnits(fac.name, activeTerm.id),
+    min: facultyMinUnits(fac),
+    max: facultyMaxUnits(fac)
+  })).sort((a, b) => b.units - a.units);
 
   const rooms = ROOMS.map(room => {
     const roomClasses = classes.filter(c => c.room === room.code);
@@ -38,14 +41,18 @@ function renderScheduleReports() {
   const missing = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id).flatMap(section =>
     sectionSubjectProgress(section)
       .filter(p => p.scheduledMinutes < p.requiredMinutes)
-      .map(p => ({ section: section.code, subject: p.subject, required: p.requiredMinutes / 60, scheduled: p.scheduledMinutes / 60 })));
-  const overLimit = loads.filter(l => l.hours > l.max);
+      .map(p => ({ section: section.code, subject: p.subject, label: p.label, required: p.requiredMinutes / 60, scheduled: p.scheduledMinutes / 60 })));
+  const overLimit = loads.filter(l => l.units > l.max + 0.001);
+  const underMin = loads.filter(l => l.units < l.min);
 
   const summary = [
     ['Classes This Term', classes.length],
     ['Subjects Missing Hours', missing.length],
-    ['Professors Over Limit', overLimit.length]
+    ['Professors Over Max', overLimit.length],
+    ['Professors Under Min', underMin.length]
   ];
+  const loadBadge = l => l.units > l.max + 0.001 ? '<span class="badge badge-danger">Over max</span>'
+    : l.units < l.min ? '<span class="badge badge-warning">Under min</span>' : '<span class="badge badge-success">Within range</span>';
 
   const statusBadge = (ok, okText, badText) => `<span class="badge ${ok ? 'badge-success' : 'badge-danger'}">${escapeHtml(ok ? okText : badText)}</span>`;
 
@@ -55,10 +62,10 @@ function renderScheduleReports() {
       <div class="stat-card"><div><div class="stat-value">${value}</div><div class="stat-label">${escapeHtml(label)}</div></div></div>`).join('')}
     </div>
     <div class="card report-card"><div class="card-header"><div><h3>Subjects Missing Hours</h3><p>Included subjects that don't have their full weekly hours yet</p></div></div>
-      ${reportTable(['Section', 'Subject', 'Required', 'Scheduled'], missing.map(m => [escapeHtml(m.section), `${escapeHtml(m.subject.code)} ${escapeHtml(m.subject.name)}`, `${m.required} hrs`, `${m.scheduled} hrs`]), 'Every subject has its full weekly hours.')}
+      ${reportTable(['Section', 'Subject', 'Required', 'Scheduled'], missing.map(m => [escapeHtml(m.section), `${escapeHtml(m.label)} ${escapeHtml(m.subject.name)}`, `${m.required} hrs`, `${m.scheduled} hrs`]), 'Every subject has its full weekly hours.')}
     </div>
-    <div class="card report-card"><div class="card-header"><div><h3>Professor Loads</h3><p>Weekly teaching hours against each professor's limit</p></div></div>
-      ${reportTable(['Professor', 'Status', 'Classes', 'Hours', 'Limit', ''], loads.map(l => [escapeHtml(l.name), escapeHtml(l.status), l.classes, `${l.hours.toFixed(1)} hrs`, `${l.max} hrs`, statusBadge(l.hours <= l.max, 'Within limit', 'Over limit')]), 'No professors yet.')}
+    <div class="card report-card"><div class="card-header"><div><h3>Professor Loads</h3><p>Teaching units against each professor's minimum and maximum, counting the College or SHS term that runs at the same time</p></div></div>
+      ${reportTable(['Professor', 'Status', 'Classes', 'Units', 'Hours', 'Min–Max', ''], loads.map(l => [escapeHtml(l.name), escapeHtml(l.status), l.classes, `${formatUnits(l.units)} units${l.otherUnits > 0 ? ` <span style="font-size:0.857rem; color:var(--text-secondary);" title="Their classes in the term of the other level that runs at the same time">(incl. ${formatUnits(l.otherUnits)} from overlapping terms)</span>` : ''}`, `${l.hours.toFixed(1)} hrs`, `${l.min}–${l.max} units`, loadBadge(l)]), 'No professors yet.')}
     </div>
     <div class="card report-card"><div class="card-header"><div><h3>Room Use</h3><p>Share of the ${ROOM_WEEKLY_HOURS}-hour school week (Mon–Sat, 7:00 AM–8:30 PM) each room is booked</p></div></div>
       ${reportTable(['Room', 'Type', 'Classes', 'Hours', 'Use'], rooms.map(r => [escapeHtml(r.code), escapeHtml(r.type), r.classes, `${r.hours.toFixed(1)} hrs`, `${r.percent}%`]), 'No rooms yet.')}

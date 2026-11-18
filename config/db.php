@@ -31,7 +31,7 @@ define('DB_PASS', getenv('DB_PASS') ?: '');
 
 // Aiven requires SSL. Set DB_SSL=true in Koyeb env vars.
 // Raise this whenever a new database column or table is added
-define('SCHEMA_VERSION', '2026-11-13.2');
+define('SCHEMA_VERSION', '2026-11-19.1');
 define('DB_SSL', filter_var(getenv('DB_SSL') ?: 'false', FILTER_VALIDATE_BOOLEAN));
 
 // Gemini API
@@ -111,6 +111,21 @@ function getDB(): PDO {
                     $checkMaxLoad = $pdo->query("SHOW COLUMNS FROM users LIKE 'max_load'")->fetch();
                     if (!$checkMaxLoad) {
                         $pdo->exec("ALTER TABLE users ADD COLUMN max_load INT NOT NULL DEFAULT 24");
+                    }
+                    // Which levels a teacher may teach: college (tertiary), Senior High School, or both (mixed)
+                    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'teaching_level'")->fetch()) {
+                        $pdo->exec("ALTER TABLE users ADD COLUMN teaching_level VARCHAR(10) NOT NULL DEFAULT 'tertiary'");
+                    }
+                    // Loads are counted in units from here on: a minimum and a maximum per teacher. Saved maximums
+                    // were hours (usually 24 full-time, 15 part-time), so they are raised once to the unit defaults.
+                    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'min_load'")->fetch()) {
+                        $pdo->exec("ALTER TABLE users ADD COLUMN min_load INT DEFAULT NULL");
+                        $pdo->exec("UPDATE users SET max_load = GREATEST(max_load, 24) WHERE employment_status = 'Part-time'");
+                        $pdo->exec("UPDATE users SET max_load = GREATEST(max_load, 30) WHERE employment_status <> 'Part-time' OR employment_status IS NULL");
+                    }
+                    // Seasoned teachers are preferred when the generator hands out classes
+                    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'seasoned'")->fetch()) {
+                        $pdo->exec("ALTER TABLE users ADD COLUMN seasoned TINYINT(1) NOT NULL DEFAULT 0");
                     }
                     // Change history (the statement is repeated in includes/activity.php for a database that lacks it)
                     $pdo->exec("CREATE TABLE IF NOT EXISTS activity_log (log_id INT AUTO_INCREMENT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, user_email VARCHAR(100) NOT NULL, user_name VARCHAR(101) NOT NULL, user_role VARCHAR(20) NOT NULL, category VARCHAR(20) NOT NULL, summary VARCHAR(500) NOT NULL, INDEX idx_activity_time (created_at))");

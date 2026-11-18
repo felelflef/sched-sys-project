@@ -54,10 +54,10 @@ function renderRoomTable() {
     }
 
     const actionButtons = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>
-         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditRoomModal(${jsArg(room.code)})">Edit</button>
-         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteRoom(${jsArg(room.code)})">Remove</button>`
-      : `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>`;
+      ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; margin-right:4px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>
+         <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; margin-right:4px;" onclick="openEditRoomModal(${jsArg(room.code)})">Edit</button>
+         <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteRoom(${jsArg(room.code)})">Remove</button>`
+      : `<button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>`;
 
     tr.innerHTML = `
       <td style="font-weight:700;">${escapeHtml(room.code)}</td>
@@ -211,6 +211,9 @@ window.confirmDeleteRoom = function() {
   }
   if (deletedRoom) saveRoomToServer('delete', deletedRoom);
   ROOMS = ROOMS.filter(r => r.code !== code);
+  ACADEMIC_SECTIONS.forEach(s => {
+    if (s.homeRoom === code) s.homeRoom = '';
+  });
   if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
     MASTER_SCHEDULE_DATA.forEach(c => {
       if (c.room === code) c.room = 'TBA';
@@ -223,5 +226,3 @@ window.confirmDeleteRoom = function() {
   renderGrid();
 };
 
-// Backward-compatible alias
-window.deleteRoom = window.promptDeleteRoom;

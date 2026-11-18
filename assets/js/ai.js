@@ -109,25 +109,25 @@ function renderAiMarkdown(text) {
     // Inline formatting: bold, italic, code
     trimmed = trimmed.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text-primary); font-weight:700;">$1</strong>');
     trimmed = trimmed.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    trimmed = trimmed.replace(/`([^`]+)`/g, '<code style="background:#F1F3F9; padding:2px 6px; border-radius:4px; font-size:12px; font-family:monospace;">$1</code>');
+    trimmed = trimmed.replace(/`([^`]+)`/g, '<code style="background:#F1F3F9; padding:2px 6px; border-radius:4px; font-size:0.857rem; font-family:monospace;">$1</code>');
 
     // Headers
     if (/^###\s+/.test(trimmed)) {
       closeList();
       const content = trimmed.replace(/^###\s+/, '');
-      output.push(`<h4 style="margin:16px 0 8px; color:var(--text-primary); font-size:15px; font-weight:700;">${content}</h4>`);
+      output.push(`<h4 style="margin:16px 0 8px; color:var(--text-primary); font-size:1.071rem; font-weight:700;">${content}</h4>`);
       continue;
     }
     if (/^##\s+/.test(trimmed)) {
       closeList();
       const content = trimmed.replace(/^##\s+/, '');
-      output.push(`<h3 style="margin:20px 0 10px; color:var(--accent-primary); font-size:16px; font-weight:800; border-bottom:1px solid var(--border-subtle); padding-bottom:6px;">${content}</h3>`);
+      output.push(`<h3 style="margin:20px 0 10px; color:var(--accent-primary); font-size:1.143rem; font-weight:800; border-bottom:1px solid var(--border-subtle); padding-bottom:6px;">${content}</h3>`);
       continue;
     }
     if (/^#\s+/.test(trimmed)) {
       closeList();
       const content = trimmed.replace(/^#\s+/, '');
-      output.push(`<h3 style="margin:20px 0 10px; color:var(--accent-primary); font-size:17px; font-weight:800;">${content}</h3>`);
+      output.push(`<h3 style="margin:20px 0 10px; color:var(--accent-primary); font-size:1.214rem; font-weight:800;">${content}</h3>`);
       continue;
     }
 
@@ -140,7 +140,7 @@ function renderAiMarkdown(text) {
         inList = true;
         listType = 'ul';
       }
-      output.push(`<li style="margin-bottom:6px; line-height:1.55; font-size:13.5px;">${bulletMatch[1]}</li>`);
+      output.push(`<li style="margin-bottom:6px; line-height:1.55; font-size:0.964rem;">${bulletMatch[1]}</li>`);
       continue;
     }
 
@@ -153,13 +153,13 @@ function renderAiMarkdown(text) {
         inList = true;
         listType = 'ol';
       }
-      output.push(`<li style="margin-bottom:6px; line-height:1.55; font-size:13.5px;"><strong style="color:var(--text-primary);">${numMatch[1]}.</strong> ${numMatch[2]}</li>`);
+      output.push(`<li style="margin-bottom:6px; line-height:1.55; font-size:0.964rem;"><strong style="color:var(--text-primary);">${numMatch[1]}.</strong> ${numMatch[2]}</li>`);
       continue;
     }
 
     // Regular paragraph
     closeList();
-    output.push(`<p style="margin:8px 0; line-height:1.6; color:var(--text-secondary); font-size:13.5px;">${trimmed}</p>`);
+    output.push(`<p style="margin:8px 0; line-height:1.6; color:var(--text-secondary); font-size:0.964rem;">${trimmed}</p>`);
   }
 
   closeList();
@@ -174,8 +174,8 @@ function renderAiError(message) {
     <div style="background:#FFF5F5; border:1px solid #FEB2B2; border-radius:8px; padding:16px; color:#C53030; display:flex; align-items:flex-start; gap:12px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px; height:20px; flex-shrink:0; margin-top:2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <div style="flex:1;">
-        <div style="font-weight:700; font-size:14px; margin-bottom:4px;">AI Request Notice</div>
-        <div style="font-size:13px; line-height:1.45;">${escapeAiHtml(message)}</div>
+        <div style="font-weight:700; font-size:1rem; margin-bottom:4px;">AI Request Notice</div>
+        <div style="font-size:0.929rem; line-height:1.45;">${escapeAiHtml(message)}</div>
       </div>
     </div>
   `;

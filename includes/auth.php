@@ -152,10 +152,3 @@ function currentUser(): ?array {
     return null;
 }
 
-function isLoggedIn(): bool {
-    return isset($_SESSION['user_id']) && validateActiveSession();
-}
-
-function isAdmin(): bool {
-    return isLoggedIn() && isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
-}

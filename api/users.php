@@ -49,7 +49,7 @@ if ($action === 'add') {
     $email = trim($input['email'] ?? '');
     $password = trim($input['password'] ?? '');
     $role = $input['role'] ?? 'faculty';
-    $subjectRole = trim($input['subject_role'] ?? 'IT');
+    $subjectRole = trim($input['subject_role'] ?? 'IT / Computing');
 
     // Validate required fields
     if (empty($firstName) || empty($lastName) || empty($email)) {
@@ -77,9 +77,9 @@ if ($action === 'add') {
         $subjectRole = null;
     } else {
         if (empty($subjectRole)) {
-            $subjectRole = 'IT';
+            $subjectRole = 'IT / Computing';
         }
-        requireKnownDepartment($db, $subjectRole, ['IT']);
+        requireKnownDepartment($db, $subjectRole, ['IT', 'IT / Computing']);
     }
 
     // Validate password length
@@ -100,6 +100,12 @@ if ($action === 'add') {
     try {
         $stmt = $db->prepare("INSERT INTO users (first_name, last_name, email, password_hash, role, subject_role) VALUES (?, ?, ?, ?, ?, ?)");
         $stmt->execute([$firstName, $lastName, $email, $passwordHash, $role, $subjectRole]);
+        $teachingLevel = in_array($input['teaching_level'] ?? '', TEACHING_LEVELS, true) ? $input['teaching_level'] : 'tertiary';
+        try {
+            $db->prepare("UPDATE users SET teaching_level = ? WHERE email = ?")->execute([$teachingLevel, $email]);
+        } catch (\Throwable $e) {
+            // Before the column exists, the teacher counts as college
+        }
 
         jsonResponse([
             'success' => true,
@@ -173,9 +179,11 @@ if ($action === 'add') {
 
     try {
         if (!empty($email)) {
+            $db->prepare("UPDATE academic_sections SET adviser = NULL WHERE adviser = ?")->execute([$email]);
             $stmt = $db->prepare("DELETE FROM users WHERE email = ?");
             $stmt->execute([$email]);
         } elseif ($userId > 0) {
+            $db->prepare("UPDATE academic_sections SET adviser = NULL WHERE adviser = (SELECT email FROM users WHERE user_id = ?)")->execute([$userId]);
             $stmt = $db->prepare("DELETE FROM users WHERE user_id = ?");
             $stmt->execute([$userId]);
         } else {

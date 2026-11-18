@@ -30,6 +30,10 @@ function renderFacultyCards() {
   if (btnManageDepts) {
     btnManageDepts.style.display = isAdmin ? 'inline-flex' : 'none';
   }
+  const btnManageCerts = document.getElementById('btnManageCerts');
+  if (btnManageCerts) {
+    btnManageCerts.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
 
   const deptFilter = document.getElementById('facultyDeptFilter')?.value || 'all';
   const statusFilter = document.getElementById('facultyStatusFilter')?.value || 'all';
@@ -43,8 +47,8 @@ function renderFacultyCards() {
   if (filtered.length === 0) {
     grid.innerHTML = `
       <div style="grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: var(--text-secondary); background: white; border-radius: var(--radius-md); border: 1px dashed var(--border-subtle);">
-        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">No faculty profiles found</div>
-        <div style="font-size: 12.5px;">No faculty members match the selected department and status filter criteria.</div>
+        <div style="font-size: 1.071rem; font-weight: 600; margin-bottom: 4px;">No faculty profiles found</div>
+        <div style="font-size: 0.893rem;">No faculty members match the selected department and status filter criteria.</div>
       </div>
     `;
     return;
@@ -53,19 +57,16 @@ function renderFacultyCards() {
   filtered.forEach(fac => {
     const initials = fac.name.split(' ').filter(w => w.length > 1).map(w => w[0]).join('').slice(0,2);
 
-    const mainList = fac.mainQuals || [];
     const safeEmailId = fac.email.replace(/[^a-zA-Z0-9]/g, '_');
 
-    const mainQualsHtml = mainList.length > 0
-      ? mainList.map(q => {
-          const removeBtn = isAdmin ? `<span onclick="removeFacultyQual(${jsArg(fac.email)}, 'main', ${jsArg(q)}, event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(q)}">✕</span>` : '';
-          return `<span class="qual-tag locked" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center;" title="Allowed to teach this subject">★ ${escapeHtml(q)}${removeBtn}</span>`;
-        }).join('')
-      : `<span style="font-size:11px; color:var(--danger); font-style:italic;">None: cannot be assigned any classes</span>`;
+    const certsHtml = facultyCertificates(fac).map(c => {
+      const removeBtn = isAdmin ? `<span onclick="removeFacultyCertificate(${jsArg(fac.email)}, ${c.id}, event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(c.name)}">✕</span>` : '';
+      return `<span class="qual-tag locked" style="background:#F5F3FF; color:#6D28D9; border:1px solid #DDD6FE; font-weight:600; display:inline-flex; align-items:center;" title="Can teach every ${escapeHtml(c.areas.join(', '))} subject in the catalog">🎓 ${escapeHtml(c.name)}<span style="font-weight:500; opacity:0.75; margin-left:4px;">(${escapeHtml(c.areas.join(', '))})</span>${removeBtn}</span>`;
+    }).join('') || `<span style="font-size:0.857rem; color:var(--danger); font-style:italic;">None: cannot be assigned any classes</span>`;
 
     const facultyActionBtns = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal(${jsArg(fac.email)})">Edit Profile</button>
-         <button class="btn btn-outline" style="font-size:10px; padding:1px 6px; border-radius:4px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteFaculty(${jsArg(fac.email)})">Remove</button>`
+      ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal(${jsArg(fac.email)})">Edit Profile</button>
+         <button class="btn btn-outline" style="font-size:0.857rem; padding:1px 6px; border-radius:4px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteFaculty(${jsArg(fac.email)})">Remove</button>`
       : ``;
 
     const card = document.createElement('div');
@@ -77,7 +78,9 @@ function renderFacultyCards() {
           <div class="faculty-name">${escapeHtml(fac.name)}</div>
           <div class="faculty-dept" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span>${escapeHtml(fac.dept)} · ${escapeHtml(fac.status)}</span>
-            <span class="badge badge-success" style="font-size:10px; padding:1px 6px;">✓ Account: ${escapeHtml(fac.email)}</span>
+            <span class="badge" style="${facultyTeachingLevel(fac) === 'shs' ? 'background:#F3E8FF; color:#6B21A8;' : facultyTeachingLevel(fac) === 'mixed' ? 'background:#FEF3C7; color:#92400E;' : 'background:#DBEAFE; color:#1E40AF;'} font-size:0.857rem; padding:1px 6px;" title="Levels this teacher may teach">Teaches: ${escapeHtml(TEACHING_LEVEL_NAMES[facultyTeachingLevel(fac)])}</span>
+            ${fac.seasoned ? '<span class="badge" style="background:#FEF9C3; color:#854D0E; font-size:0.857rem; padding:1px 6px;" title="Preferred when the generator hands out classes">⭐ Seasoned</span>' : ''}
+            <span class="badge badge-success" style="font-size:0.857rem; padding:1px 6px;">✓ Account: ${escapeHtml(fac.email)}</span>
             ${fac.status === 'Part-time' ? `<div class="faculty-availability">${(fac.availableDays || []).length
               ? `Available: ${escapeHtml(fac.availableDays.join(', '))} · ${escapeHtml(fac.availableShifts.join(', ').replace('MIDSHIFT', 'Midshift'))}`
               : 'Availability not set: can be scheduled any time'}</div>` : ''}
@@ -87,39 +90,18 @@ function renderFacultyCards() {
       </div>
       <div class="faculty-body">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; margin-bottom:4px;">
-          <span class="faculty-meta-label" style="margin:0; font-weight:700; color:#0369a1;">★ Main Qualifications</span>
-          ${isAdmin ? `<button class="btn btn-outline" style="font-size:11px; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px; color:#0369a1; border-color:#bae6fd;" onclick="toggleAddQualDropdown(${jsArg(fac.email)}, 'main', event)" title="Add Subject Qualification">+ Add</button>` : ''}
+          <span class="faculty-meta-label" style="margin:0; font-weight:700; color:#7C3AED;">🎓 FCC Certificates</span>
+          ${isAdmin ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px; color:#6D28D9; border-color:#DDD6FE;" onclick="toggleAddCertDropdown(${jsArg(fac.email)}, event)" title="Add an FCC certificate">+ Add</button>` : ''}
         </div>
-        <div id="addQualContainer-${safeEmailId}-main" style="display:none; margin-bottom:8px;"></div>
-        <div class="qual-tags">${mainQualsHtml}</div>
-        <div style="font-size:11px; color:var(--text-secondary); margin-top:6px;">Subjects this teacher is allowed to teach</div>
+        <div id="addCertContainer-${safeEmailId}" style="display:none; margin-bottom:8px;"></div>
+        <div class="qual-tags">${certsHtml}</div>
+        <div style="font-size:0.857rem; color:var(--text-secondary); margin-top:6px;">Each certificate lets this teacher teach every catalog subject in its areas</div>
       </div>
     `;
     grid.appendChild(card);
   });
 }
 
-function getAllCatalogSubjects() {
-  const map = new Map();
-  if (typeof SUBJECTS !== 'undefined' && Array.isArray(SUBJECTS)) {
-    SUBJECTS.forEach(s => {
-      const code = (s.code || '').toUpperCase().trim();
-      if (code) {
-        map.set(code, { code: s.code.trim(), title: s.title || s.name || s.code, dept: s.dept || '' });
-      }
-    });
-  }
-  if (typeof CURRICULUM_SUBJECTS !== 'undefined' && Array.isArray(CURRICULUM_SUBJECTS)) {
-    CURRICULUM_SUBJECTS.forEach(s => {
-      const code = (s.code || '').toUpperCase().trim();
-      if (code && !map.has(code)) {
-        map.set(code, { code: s.code.trim(), title: s.name || s.title || s.code, dept: s.dept || '' });
-      }
-    });
-  }
-  return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
-}
-window.getAllCatalogSubjects = getAllCatalogSubjects;
 
 // Asks before removing qualifications a professor still teaches this term. If the user agrees,
 // those classes come off the schedule with the qualification, so Quick Generate can reassign them.
@@ -142,116 +124,270 @@ function facultyChangeImpact(fac, status, days, shifts, maxLoad) {
   const theirs = MASTER_SCHEDULE_DATA.filter(c => c.instructor === fac.name);
   const limited = status === 'Part-time' && days.length > 0 && shifts.length > 0;
   const broken = limited ? theirs.filter(c => !isWithinAvailability(days, shifts, c.day, c.startTime, c.endTime)) : [];
-  if (maxLoad < (fac.maxLoad || 24)) {
+  if (maxLoad < facultyMaxUnits(fac)) {
+    // Each term's units plus the busiest overlapping term of each other level, as the scheduler counts them
+    const unitsIn = id => facultyLoadUnits(fac.name, theirs.filter(c => c.termId === id && !broken.includes(c)));
     for (const termId of new Set(theirs.map(c => c.termId))) {
-      const minutes = theirs.filter(c => c.termId === termId && !broken.includes(c))
-        .reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
-      if (minutes > maxLoad * 60) {
+      const busiest = {};
+      concurrentTermIds(termId).forEach(other => {
+        const level = termSchoolLevel(other);
+        busiest[level] = Math.max(busiest[level] || 0, unitsIn(other));
+      });
+      const otherUnits = Object.values(busiest).reduce((sum, u) => sum + u, 0);
+      const units = unitsIn(termId) + otherUnits;
+      if (units > maxLoad + 0.001) {
         const term = SCHOOL_TERMS.find(t => t.id === termId);
-        return { refuse: `${fac.name} already teaches ${+(minutes / 60).toFixed(1)} hrs a week${term ? ` in ${term.termName}` : ''}, so the max load can't be set to ${maxLoad}. Move some of their classes to another professor first.` };
+        return { refuse: `${fac.name} already teaches ${formatUnits(units)} units${term ? ` in ${term.termName}` : ''}${otherUnits > 0 ? ', counting the overlapping College or SHS term' : ''}, so the max load can't be set to ${maxLoad}. Move some of their classes to another professor first.` };
       }
     }
   }
   return { broken };
 }
 
+// Min and max load inputs (units). Changing the status fills in that status's usual range.
+function setLoadInputs(prefix, min, max) {
+  document.getElementById(`${prefix}MinLoad`).value = min;
+  document.getElementById(`${prefix}MaxLoad`).value = max;
+}
+function applyLoadDefaults(prefix, status) {
+  const range = defaultLoadUnits(status);
+  setLoadInputs(prefix, range.min, range.max);
+}
+window.applyLoadDefaults = applyLoadDefaults;
+function readLoadInputs(prefix) {
+  const minRaw = document.getElementById(`${prefix}MinLoad`).value;
+  const maxRaw = document.getElementById(`${prefix}MaxLoad`).value;
+  const problem = INPUT_RULES.int('Minimum load', minRaw, 0, 40) || INPUT_RULES.int('Maximum load', maxRaw, 3, 40);
+  if (problem) return { problem };
+  const min = parseInt(minRaw, 10);
+  const max = parseInt(maxRaw, 10);
+  if (min > max) return { problem: `The minimum load (${min} units) can't be more than the maximum (${max} units).` };
+  return { min, max };
+}
+
+// Classes a teacher would no longer be allowed to teach under a new teaching level
+function teachingLevelBroken(fac, newLevel) {
+  if (newLevel === 'mixed') return [];
+  return MASTER_SCHEDULE_DATA.filter(c => c.instructor === fac.name && c.termId && termSchoolLevel(c.termId) !== newLevel);
+}
+
+function askTeachingLevelUnschedule(fac, broken, newLevel) {
+  return askToUnscheduleBroken(broken, 'Change teaching level?', `As a ${TEACHING_LEVEL_NAMES[newLevel]} teacher, ${fac.name} can't keep their ${newLevel === 'shs' ? 'college' : 'Senior High School'} classes.`);
+}
+
 function askAvailabilityUnschedule(fac, broken) {
   return askToUnscheduleBroken(broken, 'Change availability?', `${fac.name}'s new available days and shifts don't cover some of their classes.`);
 }
 
-function confirmQualificationRemoval(fac, removedCodes) {
-  const removed = removedCodes.map(c => c.toUpperCase());
-  return confirmClassRemoval(activeTermClasses().filter(c => c.instructor === fac.name && removed.includes((c.subjectCode || '').toUpperCase())));
+// Current classes (active term and terms running alongside it) whose teacher stops being qualified after a change.
+// change.certs is the certificate list after the change; change.fac holds one teacher's new certificates.
+function classesLosingQualification(change) {
+  const certs = change.certs || FCC_CERTIFICATES;
+  return currentAndOverlappingClasses().filter(c => {
+    const fac = FACULTY.find(f => f.name === c.instructor);
+    if (!fac || !isFacultyQualified(fac, c.subjectCode)) return false;
+    const after = change.fac && (fac.email || '').toLowerCase() === change.fac.email.toLowerCase() ? { ...fac, ...change.fac } : fac;
+    return !isFacultyQualified(after, c.subjectCode, certs);
+  });
 }
 
-function renderQualificationPicker(selected = []) {
-  const chosen = selected.map(c => c.toUpperCase());
-  document.getElementById('newFacQualPicker').innerHTML = getAllCatalogSubjects().map(s =>
-    `<label class="availability-option" title="${escapeHtml(s.title)}"><input type="checkbox" data-group="newFac-qual" value="${escapeHtml(s.code.toUpperCase())}" ${chosen.includes(s.code.toUpperCase()) ? 'checked' : ''} /> ${escapeHtml(s.code)}</label>`
+
+function renderCertificatePicker(containerId, selected = []) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  box.innerHTML = FCC_CERTIFICATES.map(c =>
+    `<label class="availability-option" title="Covers ${escapeHtml(c.areas.join(', '))}"><input type="checkbox" data-cert="${containerId}" value="${c.id}" ${selected.includes(c.id) ? 'checked' : ''} /> ${escapeHtml(c.name)}</label>`
+  ).join('') || '<span style="font-size:0.857rem; color:var(--text-secondary);">No FCC certificates yet. Add them with the FCC Certificates button.</span>';
+}
+
+function readCertificatePicker(containerId) {
+  return [...document.querySelectorAll(`input[data-cert="${containerId}"]:checked`)].map(i => Number(i.value));
+}
+
+// ─── FCC certificate manager ───
+window.openCertModal = function() {
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can manage FCC certificates.');
+    return;
+  }
+  resetCertForm();
+  renderCertList();
+  document.getElementById('certModal').style.display = 'flex';
+};
+
+window.closeCertModal = function() {
+  document.getElementById('certModal').style.display = 'none';
+};
+
+function renderCertAreaPicker(selected = []) {
+  document.getElementById('certAreaPicker').innerHTML = DEPARTMENTS.map(dept =>
+    `<label class="availability-option"><input type="checkbox" data-group="cert-area" value="${escapeHtml(dept)}" ${selected.includes(dept) ? 'checked' : ''} /> ${escapeHtml(dept)}</label>`
   ).join('');
 }
 
-window.toggleAddQualDropdown = function(email, type, event) {
+function resetCertForm() {
+  document.getElementById('certEditId').value = '';
+  document.getElementById('certNameInput').value = '';
+  document.getElementById('certFormTitle').textContent = 'New certificate';
+  document.getElementById('certSubmitBtn').textContent = '+ Add Certificate';
+  document.getElementById('certCancelEditBtn').style.display = 'none';
+  renderCertAreaPicker();
+}
+window.resetCertForm = resetCertForm;
+
+function renderCertList() {
+  const box = document.getElementById('certListContainer');
+  if (!box) return;
+  box.innerHTML = FCC_CERTIFICATES.map(c => {
+    const holders = FACULTY.filter(f => (f.certificates || []).includes(c.id)).map(f => f.name);
+    const subjects = SUBJECTS.filter(s => c.areas.includes(s.dept)).length;
+    return `<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; gap:8px;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:0.929rem; color:var(--text-primary);">🎓 ${escapeHtml(c.name)}</div>
+        <div style="font-size:0.857rem; color:var(--text-secondary);">Covers ${escapeHtml(c.areas.join(', '))} · ${subjects} catalog subject${subjects === 1 ? '' : 's'}</div>
+        <div style="font-size:0.857rem; color:var(--text-secondary);">${holders.length ? `Held by ${escapeHtml(holders.join(', '))}` : 'No holders yet: give it to teachers in Edit Profile'}</div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-outline" style="padding:4px 8px; font-size:0.857rem;" onclick="editCertificate(${c.id})">Edit</button>
+        <button class="btn btn-outline" style="padding:4px 8px; font-size:0.857rem; color:var(--danger); border-color:#fadbd8;" onclick="deleteCertificate(${c.id})">Delete</button>
+      </div>
+    </div>`;
+  }).join('') || '<div style="font-size:0.857rem; color:var(--text-secondary);">No certificates yet.</div>';
+}
+
+window.editCertificate = function(id) {
+  const cert = FCC_CERTIFICATES.find(c => c.id === id);
+  if (!cert) return;
+  document.getElementById('certEditId').value = cert.id;
+  document.getElementById('certNameInput').value = cert.name;
+  document.getElementById('certFormTitle').textContent = `Edit ${cert.name}`;
+  document.getElementById('certSubmitBtn').textContent = 'Save Certificate';
+  document.getElementById('certCancelEditBtn').style.display = '';
+  renderCertAreaPicker(cert.areas);
+  document.getElementById('certNameInput').focus();
+};
+
+function refreshAfterCertificateChange() {
+  saveStateToStorage();
+  resetCertForm();
+  renderCertList();
+  renderFacultyCards();
+  renderSubjectTable();
+  if (typeof renderSubjectOfferingTable === 'function') renderSubjectOfferingTable();
+  if (typeof renderGrid === 'function') renderGrid();
+}
+
+window.submitCertificate = async function() {
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can manage FCC certificates.');
+    return;
+  }
+  const id = parseInt(document.getElementById('certEditId').value, 10) || 0;
+  const name = document.getElementById('certNameInput').value.trim().replace(/\s+/g, ' ');
+  const areas = [...document.querySelectorAll('input[data-group="cert-area"]:checked')].map(i => i.value);
+  if (!name) {
+    alert('Please name the certificate, for example FCC - IT / CS.');
+    return;
+  }
+  const nameProblem = name.length > 60 ? 'Certificate name must be 60 characters or fewer.' : INPUT_RULES.text('Certificate name', name);
+  if (nameProblem) {
+    alert(nameProblem);
+    return;
+  }
+  if (areas.length === 0) {
+    alert('Tick at least one subject area the certificate covers.');
+    return;
+  }
+  if (FCC_CERTIFICATES.some(c => c.id !== id && c.name.toLowerCase() === name.toLowerCase())) {
+    alert('Another certificate already has that name.');
+    return;
+  }
+  const newId = FCC_CERTIFICATES.reduce((max, c) => Math.max(max, c.id), 0) + 1;
+  const cert = { id: id || newId, name, areas };
+  const updated = id ? FCC_CERTIFICATES.map(c => c.id === id ? cert : c) : [...FCC_CERTIFICATES, cert];
+  const lost = id ? classesLosingQualification({ certs: updated }) : [];
+  if (!(await askToUnscheduleBroken(lost, `Change ${name}?`, `${name} would no longer cover some subjects its holders teach this term.`))) return;
+  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !lost.includes(c));
+  FCC_CERTIFICATES = updated;
+  saveCertificateToServer(cert, !id, lost.length > 0);
+  refreshAfterCertificateChange();
+};
+
+window.deleteCertificate = async function(id) {
+  if (!canManageData()) {
+    alert('Access Denied: Only the System Administrator or a Program Head can manage FCC certificates.');
+    return;
+  }
+  const cert = FCC_CERTIFICATES.find(c => c.id === id);
+  if (!cert) return;
+  const remaining = FCC_CERTIFICATES.filter(c => c.id !== id);
+  const lost = classesLosingQualification({ certs: remaining });
+  const holders = FACULTY.filter(f => (f.certificates || []).includes(id));
+  const ok = lost.length > 0
+    ? await askToUnscheduleBroken(lost, `Delete ${cert.name}?`, `Teachers rely on ${cert.name} for some of their classes this term.`)
+    : await askConfirm(`${cert.name} will be deleted${holders.length ? ` and taken away from ${holders.map(f => f.name).join(', ')}` : ''}.`, { title: 'Delete this certificate?', confirmLabel: 'Delete certificate', danger: true });
+  if (!ok) return;
+  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !lost.includes(c));
+  FCC_CERTIFICATES = remaining;
+  holders.forEach(f => { f.certificates = f.certificates.filter(c => c !== id); });
+  deleteCertificateFromServer(id, lost.length > 0);
+  refreshAfterCertificateChange();
+};
+
+// Card quick actions: add or remove one FCC certificate
+window.toggleAddCertDropdown = function(email, event) {
   if (event) event.stopPropagation();
   const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
-  const container = document.getElementById(`addQualContainer-${safeId}-${type}`);
+  const container = document.getElementById(`addCertContainer-${safeId}`);
   if (!container) return;
-
   if (container.style.display === 'block') {
     container.style.display = 'none';
     return;
   }
-
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   if (!fac) return;
-
-  const currentQuals = new Set((fac.mainQuals || []).map(q => q.toUpperCase()));
-  const allSubjs = getAllCatalogSubjects();
-  const availableSubjs = allSubjs.filter(s => !currentQuals.has(s.code.toUpperCase()));
-
-  if (availableSubjs.length === 0) {
-    container.innerHTML = `<div style="font-size:11px; color:var(--text-secondary); padding:4px;">All catalog subjects are already assigned.</div>`;
-    container.style.display = 'block';
-    return;
-  }
-
-  container.innerHTML = `
-    <div style="background:#F8FAFD; border:1px solid #BAE6FD; border-radius:6px; padding:6px 8px; margin-top:4px;">
-      <div id="selectAddQual-${safeId}-${type}" class="availability-options qual-picker" style="margin-bottom:6px;">
-        ${availableSubjs.map(s => `<label class="availability-option" title="${escapeHtml(s.title)}"><input type="checkbox" value="${escapeHtml(s.code)}" /> ${escapeHtml(s.code)}</label>`).join('')}
-      </div>
-      <div style="display:flex; gap:6px; justify-content:flex-end;">
-        <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; height:28px; line-height:1;" onclick="closeAddQualDropdown(${jsArg(fac.email)}, '${type}')">Cancel</button>
-        <button class="btn btn-primary" style="font-size:11px; padding:3px 10px; height:28px; line-height:1;" onclick="confirmAddFacultyQual(${jsArg(fac.email)}, '${type}')">Add selected</button>
-      </div>
-    </div>
-  `;
+  const available = FCC_CERTIFICATES.filter(c => !(fac.certificates || []).includes(c.id));
+  container.innerHTML = available.length === 0
+    ? '<div style="font-size:0.857rem; color:var(--text-secondary); padding:4px;">This teacher already holds every certificate. Make new ones with the FCC Certificates button.</div>'
+    : `<div style="background:#F8FAFD; border:1px solid #DDD6FE; border-radius:6px; padding:6px 8px; margin-top:4px;">
+        <div id="selectAddCert-${safeId}" class="availability-options" style="margin-bottom:6px;">
+          ${available.map(c => `<label class="availability-option" title="Covers ${escapeHtml(c.areas.join(', '))}"><input type="checkbox" value="${c.id}" /> ${escapeHtml(c.name)}</label>`).join('')}
+        </div>
+        <div style="display:flex; gap:6px; justify-content:flex-end;">
+          <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; height:28px; line-height:1;" onclick="toggleAddCertDropdown(${jsArg(fac.email)})">Cancel</button>
+          <button class="btn btn-primary" style="font-size:0.857rem; padding:3px 10px; height:28px; line-height:1;" onclick="confirmAddFacultyCert(${jsArg(fac.email)})">Add selected</button>
+        </div>
+      </div>`;
   container.style.display = 'block';
 };
 
-window.closeAddQualDropdown = function(email, type) {
+window.confirmAddFacultyCert = function(email) {
   const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
-  const container = document.getElementById(`addQualContainer-${safeId}-${type}`);
-  if (container) container.style.display = 'none';
-};
-
-window.confirmAddFacultyQual = function(email, type) {
-  const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
-  const picker = document.getElementById(`selectAddQual-${safeId}-${type}`);
-  const subjCodes = picker ? [...picker.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value.trim().toUpperCase()) : [];
-  if (subjCodes.length === 0) {
-    alert('Tick at least one subject to add.');
+  const picker = document.getElementById(`selectAddCert-${safeId}`);
+  const ids = picker ? [...picker.querySelectorAll('input[type="checkbox"]:checked')].map(cb => Number(cb.value)) : [];
+  if (ids.length === 0) {
+    alert('Tick at least one certificate to add.');
     return;
   }
-
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   if (!fac) return;
-
-  if (!Array.isArray(fac.mainQuals)) fac.mainQuals = [];
-  subjCodes.forEach(subjCode => {
-    if (!fac.mainQuals.some(q => q.toUpperCase() === subjCode)) fac.mainQuals.push(subjCode);
-  });
-
+  fac.certificates = [...new Set([...(fac.certificates || []), ...ids])];
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   saveFacultyQualifications(fac);
-
   renderFacultyCards();
   if (typeof renderGrid === 'function') renderGrid();
 };
 
-window.removeFacultyQual = async function(email, type, subjectCode, event) {
+window.removeFacultyCertificate = async function(email, certId, event) {
   if (event) event.stopPropagation();
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   if (!fac) return;
-
-  const target = (subjectCode || '').toUpperCase();
-  const removal = await confirmQualificationRemoval(fac, [target]);
+  const kept = (fac.certificates || []).filter(id => id !== certId);
+  const removal = await confirmClassRemoval(classesLosingQualification({ fac: { email: fac.email, certificates: kept } }));
   if (!removal) return;
-  fac.mainQuals = (fac.mainQuals || []).filter(q => q.toUpperCase() !== target);
-
+  fac.certificates = kept;
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   saveFacultyQualifications(fac, removal.removeClasses);
-
   renderFacultyCards();
   if (typeof renderGrid === 'function') renderGrid();
 };
@@ -286,11 +422,11 @@ function renderDeptList() {
     row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; gap:8px;';
     row.innerHTML = `
       <div style="flex:1;">
-        <div style="font-weight:600; font-size:13px; color:var(--text-primary);">${escapeHtml(dept)}</div>
-        <div style="font-size:11px; color:var(--text-secondary);">${facultyCount} faculty assigned</div>
+        <div style="font-weight:600; font-size:0.929rem; color:var(--text-primary);">${escapeHtml(dept)}</div>
+        <div style="font-size:0.857rem; color:var(--text-secondary);">${facultyCount} faculty assigned</div>
       </div>
       <div style="display:flex; gap:6px;">
-        <button class="btn btn-outline" style="padding:4px 8px; font-size:11px; color:var(--danger); border-color:#fadbd8;" onclick="deleteDepartment(${idx})">Delete</button>
+        <button class="btn btn-outline" style="padding:4px 8px; font-size:0.857rem; color:var(--danger); border-color:#fadbd8;" onclick="deleteDepartment(${idx})">Delete</button>
       </div>
     `;
     container.appendChild(row);
@@ -346,6 +482,9 @@ window.deleteDepartment = function(idx) {
   SUBJECTS.forEach(s => {
     if (s.dept === target) s.dept = fallback;
   });
+  FCC_CERTIFICATES.forEach(c => {
+    c.areas = [...new Set(c.areas.map(a => a === target ? fallback : a))];
+  });
   saveStateToStorage();
   saveDepartmentsToServer();
   renderDeptList();
@@ -353,67 +492,6 @@ window.deleteDepartment = function(idx) {
   renderFacultyCards();
   renderSubjectDeptFilterOptions();
   renderSubjectTable();
-};
-
-let modalCurrentMainQuals = [];
-
-function renderModalQualBadges() {
-  const container = document.getElementById('modalMainQualsBadgeContainer');
-  const hiddenInput = document.getElementById('changeFacultyMainQualsInput');
-  const quals = modalCurrentMainQuals;
-
-  if (hiddenInput) {
-    hiddenInput.value = quals.join(', ');
-  }
-
-  if (!container) return;
-
-  if (quals.length === 0) {
-    container.innerHTML = `<span style="font-size:11px; color:var(--danger); font-style:italic; padding:3px 0;">No subjects: this teacher cannot be assigned any classes</span>`;
-    return;
-  }
-
-  container.innerHTML = quals.map(q => {
-    return `<span class="qual-tag" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px;">
-      ★ ${escapeHtml(q)}
-      <span onclick="removeModalQual(${jsArg(q)})" style="cursor:pointer; font-weight:800; opacity:0.6; margin-left:4px;" title="Remove ${escapeHtml(q)}">✕</span>
-    </span>`;
-  }).join('');
-}
-
-function populateModalQualSelects() {
-  const allSubjs = getAllCatalogSubjects();
-  const currentAssigned = new Set(modalCurrentMainQuals.map(q => q.toUpperCase()));
-  const availableSubjs = allSubjs.filter(s => !currentAssigned.has(s.code.toUpperCase()));
-
-  const sel = document.getElementById('modalAddMainQualSelect');
-  if (!sel) return;
-  sel.innerHTML = `<option value="">-- Choose Subject --</option>` +
-    availableSubjs.map(s => `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} — ${escapeHtml(s.title)}</option>`).join('');
-}
-
-window.addModalQual = function() {
-  const sel = document.getElementById('modalAddMainQualSelect');
-  const code = sel ? sel.value.trim().toUpperCase() : '';
-  if (!code) {
-    alert('Please select a subject from the catalog to add.');
-    return;
-  }
-
-  if (!modalCurrentMainQuals.some(q => q.toUpperCase() === code)) {
-    modalCurrentMainQuals.push(code);
-  }
-
-  renderModalQualBadges();
-  populateModalQualSelects();
-};
-
-window.removeModalQual = function(code) {
-  const target = (code || '').toUpperCase();
-  modalCurrentMainQuals = modalCurrentMainQuals.filter(q => q.toUpperCase() !== target);
-
-  renderModalQualBadges();
-  populateModalQualSelects();
 };
 
 const AVAILABILITY_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -464,10 +542,6 @@ window.openChangeFacultyDeptModal = function(identifier) {
   const nameInput = document.getElementById('changeFacultyNameInput');
   if (nameInput) nameInput.value = fac.name;
 
-  modalCurrentMainQuals = [...(fac.mainQuals || [])];
-
-  renderModalQualBadges();
-  populateModalQualSelects();
 
   const emailDisplay = document.getElementById('changeFacultyDeptEmailDisplay');
   if (emailDisplay) emailDisplay.textContent = `${fac.email} · Current Dept: ${fac.dept}`;
@@ -486,7 +560,11 @@ window.openChangeFacultyDeptModal = function(identifier) {
   if (statusSelect) {
     statusSelect.value = fac.status || 'Full-time';
   }
+  document.getElementById('changeFacultyLevelSelect').value = facultyTeachingLevel(fac);
+  renderCertificatePicker('changeFacultyCertPicker', fac.certificates || []);
+  document.getElementById('changeFacultySeasoned').checked = !!fac.seasoned;
   renderAvailabilityPicker('changeFaculty', fac.status || 'Full-time', fac.availableDays || [], fac.availableShifts || []);
+  setLoadInputs('changeFaculty', facultyMinUnits(fac), facultyMaxUnits(fac));
 
   document.getElementById('changeFacultyDeptModal').style.display = 'flex';
 };
@@ -530,21 +608,25 @@ window.submitChangeFacultyDept = async function() {
 
   const statusSelect = document.getElementById('changeFacultyStatusSelect');
   const newStatus = statusSelect ? statusSelect.value : (fac.status || 'Full-time');
-  let newMaxLoad = fac.maxLoad;
-  if (newStatus === 'Part-time' && fac.maxLoad > 18) {
-    newMaxLoad = 15;
-  } else if (newStatus === 'Full-time' && fac.maxLoad < 20) {
-    newMaxLoad = 24;
+  const load = readLoadInputs('changeFaculty');
+  if (load.problem) {
+    alert(load.problem);
+    return;
   }
-  const impact = facultyChangeImpact(fac, newStatus, newStatus === 'Part-time' ? pickedAvailability.days : [], newStatus === 'Part-time' ? pickedAvailability.shifts : [], newMaxLoad || 24);
+  const newMaxLoad = load.max;
+  const impact = facultyChangeImpact(fac, newStatus, newStatus === 'Part-time' ? pickedAvailability.days : [], newStatus === 'Part-time' ? pickedAvailability.shifts : [], newMaxLoad);
   if (impact.refuse) {
     alert(impact.refuse);
     return;
   }
   if (!(await askAvailabilityUnschedule(fac, impact.broken))) return;
+  const newTeachingLevel = document.getElementById('changeFacultyLevelSelect').value;
+  const levelBroken = teachingLevelBroken(fac, newTeachingLevel).filter(c => !impact.broken.includes(c));
+  if (!(await askTeachingLevelUnschedule(fac, levelBroken, newTeachingLevel))) return;
+  impact.broken.push(...levelBroken);
 
-  const keptQuals = document.getElementById('changeFacultyMainQualsInput').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-  const qualRemoval = await confirmQualificationRemoval(fac, (fac.mainQuals || []).filter(q => !keptQuals.includes(q.toUpperCase())));
+  const newCerts = readCertificatePicker('changeFacultyCertPicker');
+  const qualRemoval = await confirmClassRemoval(classesLosingQualification({ fac: { email: fac.email, certificates: newCerts } }));
   if (!qualRemoval) return;
   removeClassesAndSave(impact.broken);
 
@@ -557,8 +639,10 @@ window.submitChangeFacultyDept = async function() {
   fac.availableDays = newStatus === 'Part-time' ? pickedAvailability.days : [];
   fac.availableShifts = newStatus === 'Part-time' ? pickedAvailability.shifts : [];
   fac.maxLoad = newMaxLoad;
-  const mainQualsRaw = document.getElementById('changeFacultyMainQualsInput') ? document.getElementById('changeFacultyMainQualsInput').value.trim() : '';
-  fac.mainQuals = mainQualsRaw ? mainQualsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+  fac.minLoad = load.min;
+  fac.teachingLevel = newTeachingLevel;
+  fac.seasoned = document.getElementById('changeFacultySeasoned').checked;
+  fac.certificates = newCerts;
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   saveFacultyQualifications(fac, qualRemoval.removeClasses);
   saveFacultyAvailability(fac);
@@ -623,11 +707,6 @@ window.submitChangeFacultyDept = async function() {
   renderDeptFilterOptions();
 };
 
-// Backward-compatible aliases
-window.changeFacultyDept = window.openChangeFacultyDeptModal;
-window.openEditFacultyModal = window.openChangeFacultyDeptModal;
-window.submitChangeFacultyProfile = window.submitChangeFacultyDept;
-
 // Add Faculty Modal Functions
 window.openAddFacultyModal = function() {
   if (!canManageData()) {
@@ -666,9 +745,11 @@ window.openAddFacultyModal = function() {
   });
 
   document.getElementById('newFacStatus').value = 'Full-time';
+  document.getElementById('newFacLevel').value = 'tertiary';
+  document.getElementById('newFacSeasoned').checked = false;
   renderAvailabilityPicker('newFac', 'Full-time');
-  document.getElementById('newFacMaxLoad').value = '24';
-  renderQualificationPicker();
+  applyLoadDefaults('newFac', 'Full-time');
+  renderCertificatePicker('newFacCertPicker');
 
   if (userSelect && userSelect.value) {
     window.handleFacultyUserDropdownChange(userSelect.value);
@@ -698,9 +779,11 @@ window.handleFacultyUserDropdownChange = function(email) {
   if (existingFac) {
     if (existingFac.dept) deptSelect.value = existingFac.dept;
     if (existingFac.status) document.getElementById('newFacStatus').value = existingFac.status;
+    document.getElementById('newFacLevel').value = facultyTeachingLevel(existingFac);
+    document.getElementById('newFacSeasoned').checked = !!existingFac.seasoned;
     renderAvailabilityPicker('newFac', existingFac.status || 'Full-time', existingFac.availableDays || [], existingFac.availableShifts || []);
-    if (existingFac.maxLoad) document.getElementById('newFacMaxLoad').value = existingFac.maxLoad;
-    renderQualificationPicker(existingFac.mainQuals || []);
+    setLoadInputs('newFac', facultyMinUnits(existingFac), facultyMaxUnits(existingFac));
+    renderCertificatePicker('newFacCertPicker', existingFac.certificates || []);
   }
 };
 
@@ -724,9 +807,9 @@ window.submitAddFaculty = async function() {
 
   const dept = document.getElementById('newFacDept').value;
   const status = document.getElementById('newFacStatus').value;
-  const maxLoadProblem = INPUT_RULES.int('Max load', document.getElementById('newFacMaxLoad').value, 6, 30);
-  if (maxLoadProblem) {
-    alert(maxLoadProblem);
+  const load = readLoadInputs('newFac');
+  if (load.problem) {
+    alert(load.problem);
     return;
   }
   const picked = readAvailabilityPicker('newFac');
@@ -737,8 +820,11 @@ window.submitAddFaculty = async function() {
   }
   const availableDays = status === 'Part-time' ? picked.days : [];
   const availableShifts = status === 'Part-time' ? picked.shifts : [];
-  const maxLoad = parseInt(document.getElementById('newFacMaxLoad').value, 10) || 24;
-  const mainQuals = [...document.querySelectorAll('input[data-group="newFac-qual"]:checked')].map(i => i.value);
+  const maxLoad = load.max;
+  const minLoad = load.min;
+  const teachingLevel = document.getElementById('newFacLevel').value;
+  const certificates = readCertificatePicker('newFacCertPicker');
+  const seasoned = document.getElementById('newFacSeasoned').checked;
 
   const existingFacIndex = FACULTY.findIndex(f => f.email.toLowerCase() === email.toLowerCase());
   let removeClasses = false;
@@ -749,8 +835,10 @@ window.submitAddFaculty = async function() {
       return;
     }
     if (!(await askAvailabilityUnschedule(FACULTY[existingFacIndex], impact.broken))) return;
-    const removedQuals = (FACULTY[existingFacIndex].mainQuals || []).filter(q => !mainQuals.includes(q.toUpperCase()));
-    const removal = await confirmQualificationRemoval(FACULTY[existingFacIndex], removedQuals);
+    const levelBroken = teachingLevelBroken(FACULTY[existingFacIndex], teachingLevel).filter(c => !impact.broken.includes(c));
+    if (!(await askTeachingLevelUnschedule(FACULTY[existingFacIndex], levelBroken, teachingLevel))) return;
+    impact.broken.push(...levelBroken);
+    const removal = await confirmClassRemoval(classesLosingQualification({ fac: { email, certificates } }));
     if (!removal) return;
     removeClasses = removal.removeClasses;
     removeClassesAndSave(impact.broken);
@@ -762,7 +850,10 @@ window.submitAddFaculty = async function() {
     FACULTY[existingFacIndex].dept = dept;
     FACULTY[existingFacIndex].status = status;
     FACULTY[existingFacIndex].maxLoad = maxLoad;
-    FACULTY[existingFacIndex].mainQuals = mainQuals;
+    FACULTY[existingFacIndex].minLoad = minLoad;
+    FACULTY[existingFacIndex].teachingLevel = teachingLevel;
+    FACULTY[existingFacIndex].certificates = certificates;
+    FACULTY[existingFacIndex].seasoned = seasoned;
     FACULTY[existingFacIndex].availableDays = availableDays;
     FACULTY[existingFacIndex].availableShifts = availableShifts;
   } else {
@@ -773,7 +864,10 @@ window.submitAddFaculty = async function() {
       dept,
       status,
       maxLoad,
-      mainQuals,
+      minLoad,
+      teachingLevel,
+      certificates,
+      seasoned,
       availableDays,
       availableShifts,
       bg: colors[Math.floor(Math.random() * colors.length)]
@@ -789,8 +883,8 @@ window.submitAddFaculty = async function() {
   }
 
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
-  saveFacultyQualifications({ email: user.email, mainQuals }, removeClasses);
-  saveFacultyAvailability({ email: user.email, status, availableDays, availableShifts, maxLoad });
+  saveFacultyQualifications({ email: user.email, certificates }, removeClasses);
+  saveFacultyAvailability({ email: user.email, status, availableDays, availableShifts, maxLoad, minLoad, teachingLevel, seasoned });
   closeAddFacultyModal();
   renderFacultyCards();
   renderUserTable();
@@ -831,7 +925,7 @@ window.confirmDeleteFacultyProfile = function() {
     closeDeleteFacultyModal();
     return;
   }
-  saveFacultyQualifications({ email, mainQuals: [] });
+  saveFacultyQualifications({ email, certificates: [] });
   FACULTY = FACULTY.filter(f => !f.email || f.email.toLowerCase() !== email.toLowerCase());
   if (facName) {
     if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
@@ -846,5 +940,3 @@ window.confirmDeleteFacultyProfile = function() {
   renderGrid();
 };
 
-// Backward-compatible alias
-window.deleteFacultyProfile = window.promptDeleteFaculty;

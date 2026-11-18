@@ -5,10 +5,14 @@
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.nav-item[data-module]').forEach(item => {
     item.addEventListener('click', () => {
-      // A page hidden from this role, such as User Management, opens Master Schedule instead, even from a saved page
-      const hiddenForRole = getComputedStyle(item).display === 'none' || (item.dataset.module === 'users' && CURRENT_USER && CURRENT_USER.role !== 'admin');
-      if (hiddenForRole && item.dataset.module !== 'schedule') {
-        window.switchPage('schedule');
+      // A page hidden from this role, such as User Management, opens the role's home page instead, even from a saved page
+      const role = CURRENT_USER && CURRENT_USER.role;
+      const home = homePageForRole(role);
+      const hiddenForRole = getComputedStyle(item).display === 'none'
+        || (item.dataset.module === 'users' && CURRENT_USER && role !== 'admin')
+        || (item.dataset.module === 'schedule' && role === 'faculty');
+      if (hiddenForRole && item.dataset.module !== home) {
+        window.switchPage(home);
         return;
       }
       const mod = item.dataset.module;

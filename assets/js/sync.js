@@ -8,7 +8,8 @@
 const RELOAD_AFTER_ACTIONS = new Set([
   'save_school_year', 'save_term_subject', 'save_section',
   'split_section', 'auto_generate_sections', 'delete_section',
-  'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications', 'add_term_subjects', 'edit_user'
+  'delete_catalog_subject', 'save_departments', 'save_faculty_qualifications', 'add_term_subjects', 'edit_user',
+  'save_term', 'delete_term', 'save_certificate', 'delete_certificate', 'save_catalog_subject'
 ]);
 const MAX_DB_INT = 2147483647;
 
@@ -22,7 +23,7 @@ function mapServerClass(row, sections, subjects) {
   const subject = subjects.find(s => s.code === row.subject_code && (!termId || s.termId === termId) && (!section || s.program === section.program))
     || subjects.find(s => s.code === row.subject_code);
   const units = subject ? subject.units : 3;
-  const weeklyHours = subject ? (subject.lecHours || 0) + (subject.labHours || 0) : 0;
+  const weeklyHours = subject ? (subjectPartMinutes(subject).lec + subjectPartMinutes(subject).lab) / 60 : 0;
   const classHours = (timeToMinutes(String(row.end_time).slice(0, 5)) - timeToMinutes(String(row.start_time).slice(0, 5))) / 60;
 
   return {
@@ -57,6 +58,7 @@ function applyServerState(data) {
     id: Number(t.term_id),
     yearId: Number(t.year_id),
     termName: t.term_name,
+    level: t.level === 'shs' ? 'shs' : 'tertiary',
     startDate: t.start_date,
     endDate: t.end_date,
     status: t.status,
@@ -74,6 +76,7 @@ function applyServerState(data) {
       code: s.subject_code,
       name: s.subject_name,
       units: Number(s.units),
+      labUnits: s.lab_units === null || s.lab_units === undefined ? null : Number(s.lab_units),
       lecHours: parseFloat(s.lecture_hours),
       labHours: parseFloat(s.lab_hours),
       type: s.subject_type,
@@ -92,7 +95,10 @@ function applyServerState(data) {
     program: s.program,
     year: Number(s.year_level),
     studentCount: Number(s.student_count),
-    shift: s.shift || 'AM'
+    shift: s.shift || 'AM',
+    homeRoom: s.home_room || '',
+    subjectTeachers: (() => { try { const plan = JSON.parse(s.subject_teachers || '{}'); return plan && typeof plan === 'object' ? plan : {}; } catch (e) { return {}; } })(),
+    adviser: s.adviser || ''
   }));
 
   const previousRooms = ROOMS;
@@ -114,7 +120,7 @@ function applyServerState(data) {
       code: s.subject_code,
       title: s.subject_title,
       dept: s.department,
-      itOnly: Number(s.it_only) === 1,
+      level: ['tertiary', 'shs', 'both'].includes(s.level) ? s.level : 'both',
       units: Number(s.units),
       addedOrder: Number(s.catalog_id) || undefined
     }));
@@ -126,6 +132,13 @@ function applyServerState(data) {
       return { id: Number(s.set_id), name: s.set_name, items };
     });
   }
+  if (Array.isArray(data.certificates)) {
+    FCC_CERTIFICATES = data.certificates.map(c => {
+      let areas = [];
+      try { areas = JSON.parse(c.areas_json) || []; } catch (e) {}
+      return { id: Number(c.cert_id), name: c.cert_name, areas };
+    });
+  }
   applyServerFaculty(data);
 
   MASTER_SCHEDULE_DATA = data.schedules.map(row => mapServerClass(row, ACADEMIC_SECTIONS, CURRICULUM_SUBJECTS));
@@ -133,8 +146,6 @@ function applyServerState(data) {
   saveStateToStorage();
   refreshAllSchedulingViews();
   updateUndoButton();
-  updateRoomDropdown();
-  updateTeacherDropdown();
   renderRoomTable();
   renderDeptFilterOptions();
   renderSubjectDeptFilterOptions();
@@ -150,21 +161,28 @@ function applyServerFaculty(data) {
     const email = row.email.toLowerCase();
     let fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email);
     if (!fac) {
-      fac = { email, status: 'Full-time', maxLoad: 24, bg: colors[index % colors.length] };
+      fac = { email, status: 'Full-time', maxLoad: 30, bg: colors[index % colors.length] };
       FACULTY.push(fac);
     }
     fac.name = `${row.first_name} ${row.last_name}`.trim();
     if (DEPARTMENTS.includes(row.subject_role) || !fac.dept) fac.dept = row.subject_role || DEPARTMENTS[0];
     fac.status = row.employment_status || 'Full-time';
-    fac.maxLoad = Number(row.max_load) || 24;
+    fac.maxLoad = Number(row.max_load) || defaultLoadUnits(fac.status).max;
+    fac.minLoad = row.min_load === null || row.min_load === undefined ? null : Number(row.min_load);
+    fac.teachingLevel = TEACHING_LEVEL_NAMES[row.teaching_level] ? row.teaching_level : 'tertiary';
+    fac.seasoned = Number(row.seasoned) === 1;
     fac.availableDays = (row.available_days || '').split(',').filter(Boolean);
     fac.availableShifts = (row.available_shifts || '').split(',').filter(Boolean);
     const account = USERS.find(u => u.email.toLowerCase() === email);
     if (account) account.employmentType = fac.status;
-    fac.mainQuals = data.qualifications
-      .filter(q => q.email.toLowerCase() === email)
-      .map(q => q.subject_code);
+
+    fac.certificates = (data.facultyCertificates || [])
+      .filter(c => c.email.toLowerCase() === email)
+      .map(c => Number(c.cert_id));
   });
+  // Teachers with no account in the database (such as the built-in demo ones) can't be given classes
+  const onServer = new Set(data.faculty.map(row => row.email.toLowerCase()));
+  FACULTY.splice(0, FACULTY.length, ...FACULTY.filter(f => f.email && onServer.has(f.email.toLowerCase())));
 }
 
 async function loadServerState() {
@@ -218,7 +236,7 @@ async function publishLocalState() {
       catalog: SUBJECTS,
       subject_sets: SUBJECT_SETS,
       departments: DEPARTMENTS,
-      qualifications: FACULTY.map(f => ({ email: f.email, subjects: f.mainQuals || [] })),
+      certificates: FCC_CERTIFICATES.map(c => ({ ...c, holders: FACULTY.filter(f => (f.certificates || []).includes(c.id)).map(f => f.email) })),
       schedules: withFacultyEmails(MASTER_SCHEDULE_DATA)
         .map(c => ({ ...c, termId: c.termId || activeTerm.id }))
         .filter(c => termIds.has(c.termId))
@@ -300,15 +318,23 @@ function postScheduleAction(body) {
 }
 
 function saveFacultyQualifications(fac, removeClasses = false) {
-  postScheduleAction({ action: 'save_faculty_qualifications', email: fac.email, subjects: fac.mainQuals || [], remove_classes: removeClasses });
+  postScheduleAction({ action: 'save_faculty_qualifications', email: fac.email, cert_ids: fac.certificates || [], remove_classes: removeClasses });
+}
+
+function saveCertificateToServer(cert, isNew, removeClasses = false) {
+  postScheduleAction({ action: 'save_certificate', cert_id: isNew ? 0 : cert.id, cert_name: cert.name, areas: cert.areas, remove_classes: removeClasses });
+}
+
+function deleteCertificateFromServer(certId, removeClasses = false) {
+  postScheduleAction({ action: 'delete_certificate', cert_id: certId, remove_classes: removeClasses });
 }
 
 function saveFacultyAvailability(fac) {
-  postScheduleAction({ action: 'save_faculty_availability', email: fac.email, status: fac.status, days: fac.availableDays || [], shifts: fac.availableShifts || [], max_load: fac.maxLoad || 24 });
+  postScheduleAction({ action: 'save_faculty_availability', email: fac.email, status: fac.status, days: fac.availableDays || [], shifts: fac.availableShifts || [], max_load: facultyMaxUnits(fac), min_load: facultyMinUnits(fac), teaching_level: facultyTeachingLevel(fac), seasoned: fac.seasoned ? 1 : 0 });
 }
 
 function saveCatalogSubject(subj) {
-  return postScheduleAction({ action: 'save_catalog_subject', subject_code: subj.code, subject_title: subj.title, department: subj.dept, it_only: subj.itOnly ? 1 : 0, units: subj.units });
+  return postScheduleAction({ action: 'save_catalog_subject', subject_code: subj.code, subject_title: subj.title, department: subj.dept, units: subj.units, level: catalogLevel(subj) });
 }
 
 function deleteCatalogSubject(code) {
