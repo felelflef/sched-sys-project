@@ -1509,6 +1509,25 @@ function renderResourceValidation() {
   const elFac = document.getElementById('valFacultyCapacity');
   if (elFac) elFac.textContent = `${readiness.totalMaxLoad} Units Max (${formatUnits(totalCurrentLoad)} Assigned)`;
 
+  // The lines under each total, counted from the actual rooms and teachers
+  const lectureCaps = ROOMS.filter(r => r.type === 'Lecture').map(r => r.cap);
+  const elLecDetail = document.getElementById('valLecRoomsDetail');
+  if (elLecDetail) {
+    const low = Math.min(...lectureCaps), high = Math.max(...lectureCaps);
+    elLecDetail.textContent = lectureCaps.length ? `Capacity: ${low === high ? low : `${low}-${high}`} students/room` : 'No lecture rooms yet';
+  }
+  const elLabDetail = document.getElementById('valLabRoomsDetail');
+  if (elLabDetail) {
+    const kitchen = ROOMS.filter(r => r.type !== 'Lecture' && /kitchen/i.test(r.code)).length;
+    const tourism = ROOMS.filter(r => r.type !== 'Lecture' && /tourism/i.test(r.code)).length;
+    const otherSpecial = ROOMS.filter(r => r.type === 'Special' && !/kitchen|tourism/i.test(r.code)).length;
+    const parts = [[ROOMS.filter(r => r.type === 'CompLab').length, 'CompLab', 'CompLabs'], [kitchen, 'Kitchen', 'Kitchens'], [tourism, 'Tourism', 'Tourism'], [otherSpecial, 'Other Lab', 'Other Labs']]
+      .filter(([n]) => n > 0).map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
+    elLabDetail.textContent = parts.length ? parts.join(' • ') : 'No labs yet';
+  }
+  const elFacDetail = document.getElementById('valFacultyDetail');
+  if (elFacDetail) elFacDetail.textContent = `${FACULTY.length} Active Teaching Faculty`;
+
   // Populate Room Table
   if (roomTbody && typeof ROOMS !== 'undefined') {
     roomTbody.innerHTML = ROOMS.map(r => `

@@ -373,6 +373,9 @@ async function syncUsersFromDB() {
             }
           }
         });
+        // Built-in demo accounts with no account in the database are dropped, so the list matches the server
+        const onServer = new Set(data.data.map(u => u.email.toLowerCase()));
+        USERS.splice(0, USERS.length, ...USERS.filter(u => onServer.has(u.email.toLowerCase())));
         try { if (typeof renderUserTable === 'function') renderUserTable(); } catch (e) {}
         try { if (typeof renderFacultyCards === 'function') renderFacultyCards(); } catch (e) {}
       }
