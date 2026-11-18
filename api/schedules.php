@@ -1457,8 +1457,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     if ($action === 'delete_school_year') {
         $year_id = (int)($input['year_id'] ?? 0);
-        $stmt = $db->prepare("DELETE FROM school_years WHERE year_id = ?");
-        $stmt->execute([$year_id]);
+        // The year's terms and everything in them go too. Databases made without the foreign key would
+        // otherwise keep those terms, sections and classes after the year is gone.
+        $db->beginTransaction();
+        try {
+            $termsOfYear = "SELECT term_id FROM school_terms WHERE year_id = ?";
+            foreach (['schedules', 'schedule_snapshots', 'academic_sections', 'term_subjects'] as $table) {
+                $db->prepare("DELETE FROM {$table} WHERE term_id IN ({$termsOfYear})")->execute([$year_id]);
+            }
+            $db->prepare("DELETE FROM school_terms WHERE year_id = ?")->execute([$year_id]);
+            $db->prepare("DELETE FROM school_years WHERE year_id = ?")->execute([$year_id]);
+            $db->commit();
+        } catch (Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
         jsonResponse(['success' => true, 'message' => 'School year removed']);
     }
 

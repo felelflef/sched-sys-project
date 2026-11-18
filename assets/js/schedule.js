@@ -347,8 +347,8 @@ function closeSchoolYearModal() {
 }
 
 // Program and year dropdowns list the active school year's programs or strands, and years or grades
-const LEVEL_PROGRAM_SELECTS = ['curriculumProgFilter', 'programFilter', 'slotProgramSelect', 'curricSubjProgram', 'secProgramInput', 'autoGenProgram'];
-const LEVEL_YEAR_SELECTS = ['curriculumYearFilter', 'yearFilter', 'curricSubjYear', 'secYearInput', 'autoGenYear'];
+const LEVEL_PROGRAM_SELECTS = ['programFilter', 'slotProgramSelect', 'curricSubjProgram', 'secProgramInput', 'autoGenProgram'];
+const LEVEL_YEAR_SELECTS = ['yearFilter', 'curricSubjYear', 'secYearInput', 'autoGenYear'];
 
 function fillLevelSelect(id, values, label) {
   const select = document.getElementById(id);
@@ -845,7 +845,17 @@ function filteredCurriculumSubjects() {
   return list;
 }
 
+// Step 3's Program and Year filters list the programs and years of the term being viewed, which need not be
+// the active one (an SHS term viewed while College is active lists the strands and Grades 11-12); All Terms lists both
+function fillCurriculumFilterOptions() {
+  const value = document.getElementById('curriculumTermFilter')?.value;
+  const levels = value && value !== 'all' ? [termSchoolLevel(parseInt(value, 10))] : Object.keys(LEVEL_PROGRAMS);
+  fillLevelSelect('curriculumProgFilter', levels.flatMap(level => LEVEL_PROGRAMS[level]), p => p);
+  fillLevelSelect('curriculumYearFilter', levels.flatMap(level => LEVEL_YEARS[level]), yearLevelOptionLabel);
+}
+
 function renderSubjectOfferingTable() {
+  fillCurriculumFilterOptions();
   const tbody = document.getElementById('subjectOfferingTableBody');
   if (!tbody) return;
 
@@ -3782,7 +3792,7 @@ function updateScheduleStats() {
 
   const sub3 = document.getElementById('stepSub-3');
   if (sub3 && typeof CURRICULUM_SUBJECTS !== 'undefined') {
-    const inc = CURRICULUM_SUBJECTS.filter(s => s.isIncluded).length;
+    const inc = CURRICULUM_SUBJECTS.filter(s => s.isIncluded && s.termId === activeTerm.id).length;
     sub3.textContent = `${inc} Subjects`;
   }
 

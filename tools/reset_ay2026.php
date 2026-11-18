@@ -275,7 +275,8 @@ $PROGRAM_LEVEL = ['BSIT' => 'tertiary', 'BSCS' => 'tertiary', 'BSTM' => 'tertiar
 $SECTION_COUNTS = ['BSIT' => [1 => 3, 2 => 2, 3 => 2, 4 => 1], 'BSCS' => [1 => 2, 2 => 1, 3 => 1, 4 => 1], 'BSTM' => [1 => 2, 2 => 1, 3 => 1, 4 => 1], 'HRS' => [1 => 2, 2 => 1],
     'HTCUA' => [11 => 2, 12 => 1], 'HTTO' => [11 => 2, 12 => 1], 'ICT-SCPT' => [11 => 2, 12 => 1], 'B&E' => [11 => 2, 12 => 1], 'ASSH' => [11 => 2, 12 => 1]];
 $ROOMS = [];
-foreach ([2, 3, 4] as $floor) for ($n = 1; $n <= 6; $n++) $ROOMS[] = [sprintf('LR-%d%02d', $floor, $n), 'Lecture', 45, $floor];
+// Floors 1-3: the app's room form and server accept floors 1 to 3 only
+foreach ([1, 2, 3] as $floor) for ($n = 1; $n <= 6; $n++) $ROOMS[] = [sprintf('LR-%d%02d', $floor, $n), 'Lecture', 45, $floor];
 for ($n = 1; $n <= 6; $n++) $ROOMS[] = [sprintf('CL-1%02d', $n), 'CompLab', 40, 1];
 $ROOMS[] = ['Kitchen Lab 1', 'Special', 35, 1];
 $ROOMS[] = ['Kitchen Lab 2', 'Special', 35, 1];
