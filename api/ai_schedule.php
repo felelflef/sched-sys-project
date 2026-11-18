@@ -36,30 +36,58 @@ requireFieldLengths(['Instructions' => [$instructions, 500]]);
 $db = getDB();
 
 $placeholders = implode(',', array_fill(0, count($sectionCodes), '?'));
-$stmt = $db->prepare("SELECT section_code, program, year_level, student_count, shift FROM academic_sections WHERE term_id = ? AND section_code IN ($placeholders)");
-$stmt->execute(array_merge([$termId], array_map('strval', $sectionCodes)));
+try {
+    $stmt = $db->prepare("SELECT section_code, program, year_level, student_count, shift, home_room FROM academic_sections WHERE term_id = ? AND section_code IN ($placeholders)");
+    $stmt->execute(array_merge([$termId], array_map('strval', $sectionCodes)));
+} catch (\Throwable $e) {
+    // Before the home room column exists
+    $stmt = $db->prepare("SELECT section_code, program, year_level, student_count, shift FROM academic_sections WHERE term_id = ? AND section_code IN ($placeholders)");
+    $stmt->execute(array_merge([$termId], array_map('strval', $sectionCodes)));
+}
 $sections = $stmt->fetchAll();
 if (!$sections) {
     jsonResponse(['success' => false, 'message' => 'None of those sections exist in this term.'], 400);
 }
 
-$stmt = $db->prepare("SELECT subject_code, subject_name, lecture_hours, lab_hours, subject_type, program, year_level FROM term_subjects WHERE term_id = ? AND is_included = 1");
+$stmt = $db->prepare("SELECT subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level FROM term_subjects WHERE term_id = ? AND is_included = 1");
 $stmt->execute([$termId]);
 $subjects = $stmt->fetchAll();
 
 $rooms = $db->query("SELECT room_name_number, room_type, capacity, floor_level FROM classrooms ORDER BY floor_level, room_name_number")->fetchAll();
 
+// Each teacher's subjects use the same rule as the save check: the areas their FCC certificates cover.
+// Only subjects these sections need are listed, and only teachers set to teach this term's level.
+$neededCodes = [];
+foreach ($subjects as $subject) {
+    foreach ($sections as $section) {
+        if ($subject['program'] === $section['program'] && (int)$subject['year_level'] === (int)$section['year_level']) {
+            $neededCodes[strtoupper($subject['subject_code'])] = $subject['subject_code'];
+        }
+    }
+}
+$qualifications = loadQualifications($db);
+$termLevel = termSchoolLevel($db, $termId);
 $teachers = [];
 foreach ($db->query("
-    SELECT u.email, CONCAT(u.first_name, ' ', u.last_name) AS name, q.subject_code, u.employment_status, u.available_days, u.available_shifts
-    FROM users u JOIN faculty_qualifications q ON q.user_id = u.user_id
-    WHERE u.role IN ('faculty', 'program-head')
-    ORDER BY u.email
+    SELECT user_id, email, CONCAT(first_name, ' ', last_name) AS name, employment_status, available_days, available_shifts, teaching_level, seasoned
+    FROM users WHERE role IN ('faculty', 'program-head')
+    ORDER BY email
 ")->fetchAll() as $row) {
-    $teachers[$row['email']]['name'] = $row['name'];
-    $teachers[$row['email']]['subjects'][] = $row['subject_code'];
-    $teachers[$row['email']]['availability'] = ($row['employment_status'] === 'Part-time' && $row['available_days'] !== '' && $row['available_shifts'] !== '')
-        ? " [only {$row['available_days']}, shifts {$row['available_shifts']}]" : '';
+    $level = $row['teaching_level'] ?: 'tertiary';
+    if ($level !== 'mixed' && $level !== $termLevel) {
+        continue;
+    }
+    $codes = array_values(array_intersect_key($neededCodes, $qualifications[(int)$row['user_id']] ?? []));
+    if (!$codes) {
+        continue;
+    }
+    $limited = $row['employment_status'] === 'Part-time' && $row['available_days'] !== '' && $row['available_shifts'] !== '';
+    $teachers[$row['email']] = [
+        'name' => $row['name'],
+        'subjects' => $codes,
+        'availability' => $limited ? " [only {$row['available_days']}, shifts {$row['available_shifts']}]" : '',
+        'tags' => implode(', ', array_keys(array_filter(['part-time' => $row['employment_status'] === 'Part-time', 'seasoned' => !empty($row['seasoned'])]))),
+    ];
 }
 
 // Short teacher IDs keep the response small; emails are never sent to the AI
@@ -68,8 +96,9 @@ $teacherLines = [];
 foreach (array_values($teachers) as $index => $teacher) {
     $id = 'T' . ($index + 1);
     $teacherNames[$id] = $teacher['name'];
-    $maxHours = (int)($limits[$teacher['name']] ?? 24);
-    $teacherLines[] = "{$id} = {$teacher['name']} (max {$maxHours} hrs/week){$teacher['availability']}: " . implode(', ', $teacher['subjects']);
+    $maxUnits = (int)($limits[$teacher['name']] ?? 30);
+    $tags = $teacher['tags'] !== '' ? ", {$teacher['tags']}" : '';
+    $teacherLines[] = "{$id} = {$teacher['name']} (max {$maxUnits} units{$tags}){$teacher['availability']}: " . implode(', ', $teacher['subjects']);
 }
 $teacherIds = array_flip($teacherNames);
 
@@ -78,13 +107,23 @@ foreach ($sections as $section) {
     $needs = [];
     foreach ($subjects as $subject) {
         if ($subject['program'] === $section['program'] && (int)$subject['year_level'] === (int)$section['year_level']) {
-            $hours = (float)$subject['lecture_hours'] + (float)$subject['lab_hours'];
-            $kind = (float)$subject['lab_hours'] > 0 ? 'lab room' : 'lecture room';
-            $needs[] = "{$subject['subject_code']} ({$hours} hrs, {$kind})";
+            // Lecture hours meet in a lecture room and lab hours in a lab, as separate meetings
+            $lec = (float)$subject['lecture_hours'];
+            $lab = (float)$subject['lab_hours'];
+            if ($subject['subject_type'] === 'lab' && $lab <= 0) {
+                [$lec, $lab] = [0.0, $lec ?: (float)($subject['units'] ?: 3)];
+            } elseif ($lec + $lab <= 0) {
+                $lec = (float)($subject['units'] ?: 3);
+            }
+            $parts = [];
+            if ($lec > 0) $parts[] = "{$lec} hrs lecture room";
+            if ($lab > 0) $parts[] = "{$lab} hrs lab";
+            $needs[] = "{$subject['subject_code']} ({$subject['units']} units: " . implode(' + ', $parts) . ")";
         }
     }
     if ($needs) {
-        $sectionLines[] = "{$section['section_code']} ({$section['program']}, {$section['student_count']} students, {$section['shift']} shift): " . implode('; ', $needs);
+        $homeRoom = !empty($section['home_room']) ? ", home room {$section['home_room']}" : '';
+        $sectionLines[] = "{$section['section_code']} ({$section['program']}, {$section['student_count']} students, {$section['shift']} shift{$homeRoom}): " . implode('; ', $needs);
     }
 }
 if (!$sectionLines) {
@@ -107,14 +146,17 @@ $prompt = "Create a weekly class timetable.\n\n"
     . "TEACHERS AND THE ONLY SUBJECTS EACH MAY TEACH:\n" . implode("\n", $teacherLines) . "\n\n"
     . "ALREADY BOOKED (day start end room teacher), never overlap these:\n" . ($bookedLines ? implode("\n", $bookedLines) : 'none') . "\n\n"
     . "RULES:\n"
-    . "- Give every subject of every section its full weekly hours, split into 2 or 3 meetings of 1 to 3 hours on different days.\n"
+    . "- Give every subject of every section its full weekly lecture and lab hours, in meetings of 1 to 4 hours on different days.\n"
     . "- Use only days Mon, Tue, Wed, Thu, Fri, Sat and times from 07:00 to 19:00 in 24-hour HH:MM format.\n"
     . "- A room, teacher or section can never be in two classes at overlapping times.\n"
-    . "- A teacher may only be given subjects listed for them, and must stay within their maximum weekly hours.\n"
+    . "- A teacher may only be given subjects listed for them, and must stay within their maximum units. A subject's meetings carry its units in proportion to their hours.\n"
     . "- A teacher marked [only ...] may only teach on those days and within those shifts: AM is 07:00-13:00, MIDSHIFT is 10:00-16:00, PM is 13:00-19:00.\n"
-    . "- The room must seat all the section's students. Lab subjects use CompLab rooms, except BSHM uses the Kitchen Lab and BSTM uses the Tourism Lab.\n"
+    . "- The room must seat all the section's students. Lecture hours use Lecture rooms. Lab hours use CompLab rooms, except HRS and HTCUA use the Kitchen Lab and BSTM and HTTO use the Tourism Lab. A subject with both gets separate lecture and lab meetings, preferably with the same teacher.\n"
     . "- Keep each section mostly within its shift: AM is morning, MIDSHIFT is midday, PM is afternoon and evening.\n"
-    . "- Spread classes across all suitable rooms and across the week.\n";
+    . "- Keep each section in one room per room type as much as possible: use its home room when the room type fits, otherwise reuse the same room for its other classes.\n"
+    . "- Give part-time teachers their classes first, since their available times are limited.\n"
+    . "- When several teachers may teach a subject, prefer seasoned teachers, but keep loads balanced.\n"
+    . "- Spread the classes of different sections across the suitable rooms and across the week.\n";
 
 if ($instructions !== '') {
     $prompt .= "\nSCHEDULER'S PREFERENCES (follow them when they don't break a rule above):\n" . $instructions . "\n";

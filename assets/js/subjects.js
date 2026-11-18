@@ -6,11 +6,11 @@ function renderSubjectDeptFilterOptions() {
   const select = document.getElementById('subjectDeptFilter');
   if (!select) return;
   const currentVal = select.value;
-  select.innerHTML = '<option value="all">All Departments & Subjects</option>';
+  select.innerHTML = '<option value="all">All Subject Areas</option>';
   DEPARTMENTS.forEach(dept => {
     const opt = document.createElement('option');
     opt.value = dept;
-    opt.textContent = `${dept} Department`;
+    opt.textContent = dept;
     if (dept === currentVal) opt.selected = true;
     select.appendChild(opt);
   });
@@ -23,7 +23,7 @@ function renderSubjectDatalist() {
   SUBJECTS.forEach(s => {
     const opt = document.createElement('option');
     opt.value = s.code;
-    opt.label = `${s.title} (${s.itOnly ? 'IT/CS Only' : s.dept})`;
+    opt.label = `${s.title} (${s.dept})`;
     dl.appendChild(opt);
   });
 }
@@ -43,6 +43,7 @@ function renderSubjectTable() {
   showCatalogTab(catalogTab);
 
   const filterVal = document.getElementById('subjectDeptFilter')?.value || 'all';
+  const levelFilter = document.getElementById('subjectLevelFilter')?.value || 'all';
   const searchVal = (document.getElementById('subjectSearchInput')?.value || '').trim().toLowerCase();
 
   const filtered = SUBJECTS.filter(s => {
@@ -58,13 +59,13 @@ function renderSubjectTable() {
       matchSearch = s.code.toLowerCase().includes(searchVal) || s.title.toLowerCase().includes(searchVal);
     }
 
-    return matchDept && matchSearch;
+    return matchDept && matchSearch && (levelFilter === 'all' || catalogFitsLevel(s, levelFilter));
   });
 
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align:center; padding:32px 16px; color:var(--text-secondary);">
+        <td colspan="7" style="text-align:center; padding:32px 16px; color:var(--text-secondary);">
           No subjects found matching the selected criteria.
         </td>
       </tr>
@@ -77,17 +78,18 @@ function renderSubjectTable() {
     const tr = document.createElement('tr');
 
     const actionButtons = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditSubjectModal(${jsArg(subj.code)})">Edit</button>
-         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteSubject(${jsArg(subj.code)})">Remove</button>`
-      : `<span style="font-size:11px; color:var(--text-secondary);">&mdash;</span>`;
+      ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; margin-right:4px;" onclick="openEditSubjectModal(${jsArg(subj.code)})">Edit</button>
+         <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteSubject(${jsArg(subj.code)})">Remove</button>`
+      : `<span style="font-size:0.857rem; color:var(--text-secondary);">&mdash;</span>`;
 
     tr.innerHTML = `
       <td style="font-weight:700; color:var(--accent-primary);">${escapeHtml(subj.code)}</td>
       <td>
-        <div style="font-weight:600; color:var(--text-primary); font-size:13px;">${escapeHtml(subj.title)}</div>
+        <div style="font-weight:600; color:var(--text-primary); font-size:0.929rem;">${escapeHtml(subj.title)}</div>
       </td>
+      <td><span class="badge" style="${catalogLevel(subj) === 'shs' ? 'background:#F3E8FF; color:#6B21A8;' : catalogLevel(subj) === 'both' ? 'background:#FEF3C7; color:#92400E;' : 'background:#DBEAFE; color:#1E40AF;'} font-size:0.857rem;">${CATALOG_LEVEL_NAMES[catalogLevel(subj)]}</span></td>
       <td><span class="badge" style="background:#F8FAFC; border:1px solid var(--border-subtle); color:var(--text-primary);">${escapeHtml(subj.dept)}</span></td>
-      <td>${qualifiedProfessorsHtml(subj)}</td>
+      <td>${subjectCertificatesHtml(subj.dept)}</td>
       <td style="text-align:center; font-weight:600;">${subj.units || 3}</td>
       <td style="text-align:right;">${actionButtons}</td>
     `;
@@ -95,94 +97,50 @@ function renderSubjectTable() {
   });
 }
 
-// The professors allowed to teach a subject, stored in each professor's Main Qualifications
-function qualifiedProfessorsHtml(subj) {
-  const tags = FACULTY.filter(f => isFacultyQualified(f, subj.code)).map(f =>
-    `<span class="qual-tag locked" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center;">★ ${escapeHtml(f.name)}</span>`
-  ).join('');
-  return `<div class="qual-tags">${tags || '<span style="font-size:11px; color:var(--danger); font-style:italic;">None: no one can teach this</span>'}</div>`;
+// A subject is linked to the FCC certificates that cover its subject area; their holders may teach it
+function certificatesCoveringArea(area) {
+  return FCC_CERTIFICATES.filter(c => (c.areas || []).includes(area));
 }
-
-// Main Qualification picker shared by the Subject Catalog and Step 3 subject forms
-const subjectFormProfessors = { subject: [], curricSubj: [] };
-
-function renderSubjectFormProfessors(form) {
-  const selected = subjectFormProfessors[form];
-  const isAdmin = canManageData();
-
-  document.getElementById(`${form}ProfAddRow`).style.display = isAdmin ? 'flex' : 'none';
-  document.getElementById(`${form}ProfSelect`).innerHTML = '<option value="">-- Choose Professor --</option>' +
-    FACULTY.filter(f => !selected.includes(f.email))
-      .map(f => `<option value="${escapeHtml(f.email)}">${escapeHtml(f.name)}</option>`).join('');
-
-  const badges = selected.map(email => {
-    const fac = FACULTY.find(f => f.email === email);
-    if (!fac) return '';
-    const remove = isAdmin
-      ? `<span data-form="${form}" data-email="${escapeHtml(email)}" onclick="removeSubjectFormProfessor(this)" style="cursor:pointer; font-weight:800; opacity:0.6; margin-left:4px;" title="Remove ${escapeHtml(fac.name)}">✕</span>`
-      : '';
-    return `<span class="qual-tag" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:600; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px;">★ ${escapeHtml(fac.name)}${remove}</span>`;
-  }).join('');
-  document.getElementById(`${form}ProfBadges`).innerHTML = badges ||
-    '<span style="font-size:11px; color:var(--danger); font-style:italic; padding:3px 0;">No professors: this subject cannot be scheduled</span>';
+function certificateHolderCount(cert) {
+  return FACULTY.filter(f => (f.certificates || []).includes(cert.id)).length;
 }
-
-function openSubjectFormProfessors(form, code) {
-  subjectFormProfessors[form] = code ? FACULTY.filter(f => isFacultyQualified(f, code)).map(f => f.email) : [];
-  renderSubjectFormProfessors(form);
+function subjectCertificatesHtml(area) {
+  const certs = certificatesCoveringArea(area);
+  if (certs.length === 0) return '<span style="font-size:0.857rem; color:var(--danger); font-weight:600;">⚠ No certificate covers this area</span>';
+  return `<div class="qual-tags">${certs.map(c => {
+    const holders = certificateHolderCount(c);
+    return `<span class="qual-tag locked" style="background:#F5F3FF; color:#6D28D9; border:1px solid #DDD6FE; font-weight:600;" title="${holders} teacher${holders === 1 ? '' : 's'} hold this certificate">🎓 ${escapeHtml(c.name)}</span>`;
+  }).join('')}</div>`;
 }
-
-window.addSubjectFormProfessor = function(form) {
-  const email = document.getElementById(`${form}ProfSelect`).value;
-  if (!email) {
-    alert('Please select a professor to add.');
-    return;
-  }
-  subjectFormProfessors[form].push(email);
-  renderSubjectFormProfessors(form);
-};
-
-window.removeSubjectFormProfessor = function(button) {
-  const { form, email } = button.dataset;
-  subjectFormProfessors[form] = subjectFormProfessors[form].filter(e => e !== email);
-  renderSubjectFormProfessors(form);
-};
-
-// Runs after the subject is saved, because the server only accepts subjects it already knows
-// Professors taken off a subject they still teach this term need confirmation, and lose those classes
-function confirmSubjectFormRemoval(form, code) {
-  const target = code.toUpperCase();
-  const removedNames = FACULTY.filter(fac => !subjectFormProfessors[form].includes(fac.email) && isFacultyQualified(fac, target)).map(fac => fac.name);
-  return confirmClassRemoval(activeTermClasses().filter(c => removedNames.includes(c.instructor) && (c.subjectCode || '').toUpperCase() === target));
+// The line under Subject Area in the subject form
+function renderSubjectCertLink() {
+  const box = document.getElementById('subjectCertLink');
+  const area = document.getElementById('subjectDeptSelect')?.value || '';
+  if (!box) return;
+  const certs = certificatesCoveringArea(area);
+  box.innerHTML = certs.length === 0
+    ? `<span style="color:var(--danger); font-weight:600;">⚠ No FCC certificate covers ${escapeHtml(area)} yet, so no one can teach this subject. Create one with the FCC Certificates button in Faculty Profiles.</span>`
+    : `<span style="color:#6D28D9;">🎓 Covered by: ${certs.map(c => {
+        const holders = certificateHolderCount(c);
+        return `<strong>${escapeHtml(c.name)}</strong> · ${holders} teacher${holders === 1 ? '' : 's'} hold${holders === 1 ? 's' : ''} it`;
+      }).join('; ')}</span>`;
 }
+window.renderSubjectCertLink = renderSubjectCertLink;
 
-function saveSubjectFormProfessors(form, code, subjectSaved, removeClasses = false) {
-  if (!canManageData()) return;
-
-  const target = code.toUpperCase();
-  const selected = subjectFormProfessors[form];
-  const changed = [];
-
-  FACULTY.forEach(fac => {
-    const wanted = selected.includes(fac.email);
-    if (wanted === isFacultyQualified(fac, target)) return;
-    if (wanted) {
-      fac.mainQuals = [...(fac.mainQuals || []), target];
-    } else {
-      fac.mainQuals = fac.mainQuals.filter(q => q.trim().toUpperCase() !== target);
-    }
-    changed.push(fac);
-  });
-
-  if (changed.length === 0) return;
-  saveStateToStorage();
-  renderSubjectTable();
-  renderFacultyCards();
-
-  Promise.resolve(subjectSaved).then(response => {
-    if (response && !response.ok) return;
-    changed.forEach(fac => saveFacultyQualifications(fac, removeClasses));
-  });
+// Moving a catalog subject to another area must not strand classes taught through a certificate for its old area
+function areaChangeProblem(code, newArea) {
+  const subj = SUBJECTS.find(s => s.code.toUpperCase() === code.toUpperCase());
+  if (!subj || subj.dept === newArea) return null;
+  const oldArea = subj.dept;
+  subj.dept = newArea;
+  const stillQualified = new Set(currentAndOverlappingClasses().filter(c => (c.subjectCode || '').toUpperCase() === code.toUpperCase())
+    .filter(c => { const fac = FACULTY.find(f => f.name === c.instructor); return fac && isFacultyQualified(fac, code); }));
+  subj.dept = oldArea;
+  const lost = currentAndOverlappingClasses().filter(c => (c.subjectCode || '').toUpperCase() === code.toUpperCase() && !stillQualified.has(c))
+    .filter(c => { const fac = FACULTY.find(f => f.name === c.instructor); return fac && isFacultyQualified(fac, code); });
+  if (lost.length === 0) return null;
+  const names = [...new Set(lost.map(c => c.instructor))].join(', ');
+  return `${names} teach${lost.length === 1 && !names.includes(',') ? 'es' : ''} ${code} through an FCC certificate for ${oldArea}. Moving ${code} to ${newArea} would leave ${lost.length === 1 ? 'that class' : 'those classes'} without a qualified teacher. Give them a certificate covering ${newArea} or reassign the classes first.`;
 }
 
 window.openAddSubjectModal = function() {
@@ -196,6 +154,7 @@ window.openAddSubjectModal = function() {
   document.getElementById('subjectCodeInput').disabled = false;
   document.getElementById('subjectTitleInput').value = '';
   document.getElementById('subjectUnitsInput').value = '3';
+  document.getElementById('subjectLevelSelect').value = 'tertiary';
 
   const deptSelect = document.getElementById('subjectDeptSelect');
   deptSelect.innerHTML = '';
@@ -205,9 +164,9 @@ window.openAddSubjectModal = function() {
     opt.textContent = dept;
     deptSelect.appendChild(opt);
   });
-  deptSelect.value = 'IT / CS';
+  deptSelect.value = DEPARTMENTS[0];
+  renderSubjectCertLink();
 
-  openSubjectFormProfessors('subject', '');
   document.getElementById('subjectModalSubmitBtn').textContent = 'Add Subject';
   document.getElementById('subjectModal').style.display = 'flex';
 };
@@ -226,6 +185,7 @@ window.openEditSubjectModal = function(code) {
   document.getElementById('subjectCodeInput').disabled = true;
   document.getElementById('subjectTitleInput').value = subj.title;
   document.getElementById('subjectUnitsInput').value = subj.units || 3;
+  document.getElementById('subjectLevelSelect').value = catalogLevel(subj);
 
   const deptSelect = document.getElementById('subjectDeptSelect');
   deptSelect.innerHTML = '';
@@ -236,8 +196,8 @@ window.openEditSubjectModal = function(code) {
     if (dept === subj.dept) opt.selected = true;
     deptSelect.appendChild(opt);
   });
+  renderSubjectCertLink();
 
-  openSubjectFormProfessors('subject', subj.code);
   document.getElementById('subjectModalSubmitBtn').textContent = 'Save Changes';
   document.getElementById('subjectModal').style.display = 'flex';
 };
@@ -257,7 +217,7 @@ window.submitSubjectForm = async function() {
   const title = document.getElementById('subjectTitleInput').value.trim();
   const units = parseInt(document.getElementById('subjectUnitsInput').value, 10) || 3;
   const dept = document.getElementById('subjectDeptSelect').value;
-  const isItDept = dept === 'IT / CS';
+  const level = document.getElementById('subjectLevelSelect').value;
 
   if (!code) {
     alert('Please enter a course code.');
@@ -275,20 +235,20 @@ window.submitSubjectForm = async function() {
     return;
   }
 
-  const subjectRemoval = origCode ? await confirmSubjectFormRemoval('subject', origCode) : { removeClasses: false };
-  if (!subjectRemoval) return;
-
-  let subjectSaved;
+  const areaProblem = origCode ? areaChangeProblem(origCode, dept) : null;
+  if (areaProblem) {
+    alert(areaProblem);
+    return;
+  }
   if (origCode) {
     // Edit existing
     const subj = SUBJECTS.find(s => s.code.toLowerCase() === origCode.toLowerCase());
     if (subj) {
-      // Eligibility follows the department; an unchanged department keeps its saved value
-      if (subj.dept !== dept) subj.itOnly = isItDept;
       subj.title = title;
       subj.units = units;
       subj.dept = dept;
-      subjectSaved = saveCatalogSubject(subj);
+      subj.level = level;
+      saveCatalogSubject(subj);
     }
   } else {
     // Add new
@@ -300,17 +260,16 @@ window.submitSubjectForm = async function() {
       code,
       title,
       dept,
-      itOnly: isItDept,
-      units
+      units,
+      level
     });
-    subjectSaved = saveCatalogSubject(SUBJECTS[SUBJECTS.length - 1]);
+    saveCatalogSubject(SUBJECTS[SUBJECTS.length - 1]);
   }
 
   saveStateToStorage();
   closeSubjectModal();
   renderSubjectTable();
   renderSubjectDatalist();
-  saveSubjectFormProfessors('subject', origCode || code, subjectSaved, subjectRemoval.removeClasses);
 };
 
 window.promptDeleteSubject = function(code) {
@@ -323,7 +282,7 @@ window.promptDeleteSubject = function(code) {
 
   document.getElementById('deleteSubjectTargetCode').value = subj.code;
   document.getElementById('deleteSubjectCodeDisplay').textContent = subj.code;
-  document.getElementById('deleteSubjectTitleDisplay').textContent = `${subj.title} \u2022 ${subj.dept} (${subj.itOnly ? 'IT/CS Only' : 'Other Dept'})`;
+  document.getElementById('deleteSubjectTitleDisplay').textContent = `${subj.title} \u2022 ${subj.dept}`;
   document.getElementById('deleteSubjectModal').style.display = 'flex';
 };
 
@@ -337,6 +296,14 @@ window.confirmDeleteSubject = function() {
     return;
   }
   const code = document.getElementById('deleteSubjectTargetCode').value;
+  // An FCC certificate only covers catalog subjects, so its holders would lose these classes (the server refuses the same)
+  const certTaught = currentAndOverlappingClasses().filter(c => (c.subjectCode || '').toUpperCase() === code.toUpperCase())
+    .filter(c => { const fac = FACULTY.find(f => f.name === c.instructor); return fac && isFacultyQualified(fac, code); });
+  if (certTaught.length > 0) {
+    const names = [...new Set(certTaught.map(c => c.instructor))].join(', ');
+    alert(`${names} teach${names.includes(',') ? '' : 'es'} ${code} through an FCC certificate, which only covers catalog subjects. Reassign ${certTaught.length === 1 ? 'that class' : 'those classes'} before removing ${code}. No changes were made.`);
+    return;
+  }
   SUBJECTS = SUBJECTS.filter(s => s.code.toLowerCase() !== code.toLowerCase());
   deleteCatalogSubject(code);
 
@@ -345,9 +312,6 @@ window.confirmDeleteSubject = function() {
   renderSubjectTable();
   renderSubjectDatalist();
 };
-
-// Backward-compatible alias
-window.deleteSubject = window.promptDeleteSubject;
 
 /* ─── SAVED SUBJECT SETS ───
    Reusable subject lists (for example a 1st or 2nd semester), made here in the Subject Catalog
@@ -420,14 +384,14 @@ function renderSubjectSetTable() {
   tbody.innerHTML = SUBJECT_SETS.slice().sort((a, b) => a.name.localeCompare(b.name)).map(set => {
     const programs = [...new Set(set.items.map(i => i.program))].sort();
     const actions = canManage
-      ? `<button class="btn btn-outline" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openSubjectSetModal(${Number(set.id)})">Edit</button>
-         <button class="btn btn-outline" style="font-size:11px; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="deleteSubjectSet(${Number(set.id)})">Remove</button>`
-      : '<span style="font-size:11px; color:var(--text-secondary);">&mdash;</span>';
+      ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; margin-right:4px;" onclick="openSubjectSetModal(${Number(set.id)})">Edit</button>
+         <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="deleteSubjectSet(${Number(set.id)})">Remove</button>`
+      : '<span style="font-size:0.857rem; color:var(--text-secondary);">&mdash;</span>';
     return `
       <tr>
         <td style="font-weight:700; color:var(--accent-primary);">${escapeHtml(set.name)}</td>
         <td style="text-align:center; font-weight:600;">${set.items.length}</td>
-        <td>${programs.map(p => `<span class="badge" style="background:#F3F4F6; color:#374151; font-size:10.5px; margin:1px 2px;">${escapeHtml(p)}</span>`).join('')}</td>
+        <td>${programs.map(p => `<span class="badge" style="background:#F3F4F6; color:#374151; font-size:0.857rem; margin:1px 2px;">${escapeHtml(p)}</span>`).join('')}</td>
         <td style="text-align:right;">${actions}</td>
       </tr>
     `;
@@ -474,9 +438,9 @@ function renderSubjectSetItems() {
         <td style="font-weight:700; color:var(--accent-primary);">${escapeHtml(item.code)}</td>
         <td>${escapeHtml(item.name)}</td>
         <td>${escapeHtml(item.program)}</td>
-        <td>Year ${Number(item.year)}</td>
+        <td>${yearLevelLabel(item.year)}</td>
         <td>${Number(item.units)}</td>
-        <td style="text-align:right;"><button type="button" class="btn btn-outline" style="font-size:11px; padding:2px 7px; color:var(--danger); border-color:#fadbd8;" onclick="removeSubjectSetItem(${index})" aria-label="Remove ${escapeHtml(item.code)} for ${escapeHtml(item.program)} Year ${Number(item.year)}">&times;</button></td>
+        <td style="text-align:right;"><button type="button" class="btn btn-outline" style="font-size:0.857rem; padding:2px 7px; color:var(--danger); border-color:#fadbd8;" onclick="removeSubjectSetItem(${index})" aria-label="Remove ${escapeHtml(item.code)} for ${escapeHtml(item.program)} ${yearLevelLabel(item.year)}">&times;</button></td>
       </tr>
     `).join('');
   document.getElementById('subjectSetCount').textContent = `${items.length} subject${items.length === 1 ? '' : 's'} in this set`;
@@ -492,7 +456,7 @@ function renderSubjectSetPicker() {
   const inSet = new Set(subjectSetDraft.items.map(subjectSetKey));
   const catalog = SUBJECTS.slice().sort((a, b) => a.code.localeCompare(b.code));
   picker.innerHTML = catalog.length === 0
-    ? '<span style="font-size:12px; color:var(--text-secondary);">The Subject Catalog has no subjects yet.</span>'
+    ? '<span style="font-size:0.857rem; color:var(--text-secondary);">The Subject Catalog has no subjects yet.</span>'
     : catalog.map(s => {
       const added = inSet.has(subjectSetKey({ code: s.code, program, year }));
       return `<label class="availability-option" title="${escapeHtml(s.title || s.code)}${added ? ' (already in this set)' : ''}" style="${added ? 'opacity:0.55;' : ''}">
@@ -543,8 +507,9 @@ function addCatalogSubjectToSet() {
       code: subj.code,
       name: subj.title || subj.code,
       units,
-      lecHours: previous ? (previous.lecHours || 0) : units,
-      labHours: previous ? (previous.labHours || 0) : 0,
+      labUnits: previous && Number(previous.units) === Number(units) ? subjectLabUnits(previous) : 0,
+      lecHours: previous && Number(previous.units) === Number(units) ? (previous.lecHours || 0) : units,
+      labHours: previous && Number(previous.units) === Number(units) ? (previous.labHours || 0) : 0,
       type: previous ? (previous.type || 'lecture') : 'lecture',
       program,
       year
@@ -662,23 +627,31 @@ function renderLoadSubjectSetPreview() {
   const preview = document.getElementById('loadSubjectSetPreview');
   const set = selectedLoadSubjectSet();
   if (!set) {
-    preview.innerHTML = `<div style="padding:18px; text-align:center; color:var(--text-secondary); font-size:12.5px;">No saved subject sets yet. ${canManageSubjectSets() ? 'Make one in Subject Catalog, or save this term as a set.' : 'The System Administrator or a Program Head can make one in Subject Catalog.'}</div>`;
+    preview.innerHTML = `<div style="padding:18px; text-align:center; color:var(--text-secondary); font-size:0.893rem;">No saved subject sets yet. ${canManageSubjectSets() ? 'Make one in Subject Catalog, or save this term as a set.' : 'The System Administrator or a Program Head can make one in Subject Catalog.'}</div>`;
     updateLoadSubjectSetSummary();
     return;
   }
   const offered = new Set(CURRICULUM_SUBJECTS.filter(s => s.termId === loadSubjectSetTermId).map(subjectSetKey));
-  preview.innerHTML = set.items.map((item, index) => {
+  // Only subjects for this year's level are offered: college programs, or SHS strands
+  const level = termSchoolLevel(loadSubjectSetTermId);
+  const fits = item => LEVEL_PROGRAMS[level].includes(item.program) && LEVEL_YEARS[level].includes(Number(item.year));
+  const otherLevel = set.items.filter(item => !fits(item)).length;
+  const otherLevelNote = otherLevel
+    ? `<div style="padding:8px 12px; font-size:0.857rem; color:var(--text-secondary); background:#F8FAFD;">${otherLevel} subject${otherLevel === 1 ? ' is' : 's are'} for ${level === 'shs' ? 'college' : 'Senior High School'} and ${otherLevel === 1 ? 'is' : 'are'} not shown.</div>`
+    : '';
+  preview.innerHTML = otherLevelNote + set.items.map((item, index) => {
+    if (!fits(item)) return '';
     const already = offered.has(subjectSetKey(item));
     return `
-      <label style="display:flex; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--border-subtle); font-size:12.5px; margin:0; ${already ? 'opacity:0.55;' : 'cursor:pointer;'}">
+      <label style="display:flex; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--border-subtle); font-size:0.893rem; margin:0; ${already ? 'opacity:0.55;' : 'cursor:pointer;'}">
         <input type="checkbox" class="load-set-item" data-index="${index}" ${already ? 'disabled' : 'checked'} onchange="updateLoadSubjectSetSummary()" style="width:16px; height:16px; flex:none;" />
         <span style="font-weight:700; color:var(--accent-primary); min-width:68px;">${escapeHtml(item.code)}</span>
         <span style="flex:1; min-width:0;">${escapeHtml(item.name)}</span>
-        <span class="badge" style="background:#F3F4F6; color:#374151; font-size:10.5px; white-space:nowrap;">${escapeHtml(item.program)} · Year ${Number(item.year)}</span>
-        ${already ? '<span style="font-size:11px; color:var(--text-secondary); white-space:nowrap;">Already in this term</span>' : ''}
+        <span class="badge" style="background:#F3F4F6; color:#374151; font-size:0.857rem; white-space:nowrap;">${escapeHtml(item.program)} · ${yearLevelLabel(item.year)}</span>
+        ${already ? '<span style="font-size:0.857rem; color:var(--text-secondary); white-space:nowrap;">Already in this term</span>' : ''}
       </label>
     `;
-  }).join('') || '<div style="padding:18px; text-align:center; color:var(--text-secondary); font-size:12.5px;">This set has no subjects.</div>';
+  }).join('') || '<div style="padding:18px; text-align:center; color:var(--text-secondary); font-size:0.893rem;">This set has no subjects.</div>';
   updateLoadSubjectSetSummary();
 }
 
@@ -720,6 +693,7 @@ function submitLoadSubjectSet() {
       code: item.code,
       name: item.name,
       units: item.units,
+      labUnits: item.labUnits ?? null,
       lecHours: item.lecHours,
       labHours: item.labHours,
       type: item.type,

@@ -16,14 +16,18 @@ function aiDraftSubjectsFor(section, termId) {
   );
 }
 
+// Lab hours go in the section's kind of lab, lecture hours in a lecture room
 function aiDraftRoomFits(room, subject, section) {
   if (room.cap < section.studentCount) return false;
-  if (subject.type === 'lab' || subject.labHours > 0) {
-    if (section.program === 'BSHM') return room.code.includes('Kitchen') || room.type === 'Special';
-    if (section.program === 'BSTM') return room.code.includes('Tourism') || room.type === 'Special';
-    return room.type === 'CompLab';
-  }
-  return room.type === 'Lecture';
+  const { lec, lab } = subjectPartMinutes(subject);
+  if (lab > 0 && isLabRoomFor(room, section.program)) return true;
+  return lec > 0 && room.type === 'Lecture';
+}
+
+function aiDraftPartHours(classes, cls, subject, section) {
+  const part = classPart(cls, subject, section.program);
+  return classes.filter(c => c.section === cls.section && c.subjectCode === cls.subjectCode && classPart(c, subject, section.program) === part)
+    .reduce((sum, c) => sum + aiDraftHours(c), 0);
 }
 
 function aiDraftHours(cls) {
@@ -63,13 +67,15 @@ function aiDraftRejectReason(raw, accepted, sections, termId) {
       if (other.section === raw.section) return 'Section is double-booked';
     }
   }
+  if (overlappingTermClash({ termId, day: raw.day, startTime: raw.start, endTime: raw.end, room: raw.room, instructor: raw.teacher })) return 'Room or teacher is booked in a term running at the same time';
 
   const hours = (end - start) / 60;
-  const subjectHours = accepted.filter(c => c.section === raw.section && c.subjectCode === raw.subject).reduce((sum, c) => sum + aiDraftHours(c), 0);
-  if (subjectHours + hours > subject.lecHours + subject.labHours) return 'More hours than the subject requires';
+  const part = classPart({ room: raw.room }, subject, section.program);
+  const partHours = aiDraftPartHours(accepted, { section: raw.section, subjectCode: raw.subject, room: raw.room }, subject, section);
+  if (partHours + hours > subjectPartMinutes(subject)[part] / 60) return `More ${part === 'lab' ? 'lab' : 'lecture'} hours than the subject requires`;
 
-  const teacherHours = accepted.filter(c => c.instructor === raw.teacher).reduce((sum, c) => sum + aiDraftHours(c), 0);
-  if (teacherHours + hours > (teacher.maxLoad || 24)) return 'Teacher would exceed their maximum load';
+  const addedUnits = (Number(subject.units) || 0) * hours * 60 / (subjectWeeklyMinutes(subject) || hours * 60);
+  if (facultyLoadUnits(raw.teacher, accepted) + concurrentLoadUnits(raw.teacher, termId) + addedUnits > facultyMaxUnits(teacher) + 0.001) return 'Teacher would exceed their maximum load';
 
   return null;
 }
@@ -78,7 +84,7 @@ function aiDraftBuildClass(raw, sections, termId, index) {
   const section = sections.find(s => s.code === raw.section);
   const subject = aiDraftSubjectsFor(section, termId).find(s => s.code === raw.subject);
   const hours = (timeToMinutes(raw.end) - timeToMinutes(raw.start)) / 60;
-  const totalHours = subject.lecHours + subject.labHours;
+  const totalHours = subjectWeeklyMinutes(subject) / 60;
   return {
     id: `AI-${index}`,
     aiPlaced: true,
@@ -111,11 +117,14 @@ function aiDraftWarnings(schedules, sections, termId) {
   const warnings = [];
   sections.forEach(section => {
     aiDraftSubjectsFor(section, termId).forEach(subject => {
-      const scheduled = schedules.filter(c => c.section === section.code && c.subjectCode === subject.code).reduce((sum, c) => sum + aiDraftHours(c), 0);
-      const required = subject.lecHours + subject.labHours;
-      if (scheduled > 0 && scheduled < required) {
-        warnings.push(`${section.code} ${subject.code}: ${scheduled} of ${required} required hours`);
-      }
+      subjectParts(subject).forEach(({ part, minutes }) => {
+        const scheduled = schedules.filter(c => c.section === section.code && c.subjectCode === subject.code && classPart(c, subject, section.program) === part)
+          .reduce((sum, c) => sum + aiDraftHours(c), 0);
+        const required = minutes / 60;
+        if (scheduled > 0 && scheduled < required) {
+          warnings.push(`${section.code} ${subjectPartLabel(subject, part)}: ${scheduled} of ${required} required hours`);
+        }
+      });
     });
   });
   schedules.forEach(cls => {
@@ -183,12 +192,12 @@ window.runAiDraft = async function() {
   const { activeTerm } = getActiveAcademicContext();
   const sections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id);
   if (sections.length === 0) {
-    aiDraftShowError('Create sections in Step 5 before generating a schedule.');
+    aiDraftShowError('Create sections in Step 4 before generating a schedule.');
     return;
   }
 
   const instructions = document.getElementById('aiDraftInstructions').value.trim();
-  const limits = Object.fromEntries(FACULTY.map(f => [f.name, f.maxLoad || 24]));
+  const limits = Object.fromEntries(FACULTY.map(f => [f.name, facultyMaxUnits(f)]));
   const batches = [];
   for (let i = 0; i < sections.length; i += AI_DRAFT_BATCH_SIZE) {
     batches.push(sections.slice(i, i + AI_DRAFT_BATCH_SIZE));
@@ -211,7 +220,7 @@ window.runAiDraft = async function() {
         section_codes: batches[i].map(s => s.code),
         limits,
         instructions,
-        booked: accepted.map(c => ({ day: c.day, start: c.startTime, end: c.endTime, room: c.room, teacher: c.instructor }))
+        booked: [...accepted, ...concurrentClasses(activeTerm.id)].map(c => ({ day: c.day, start: c.startTime, end: c.endTime, room: c.room, teacher: c.instructor }))
       });
       proposed += classes.length;
       classes.forEach(raw => {
@@ -233,12 +242,12 @@ window.runAiDraft = async function() {
     return;
   }
 
-  // A subject left with too few valid meetings goes back to the generator to be placed whole
+  // A lecture or lab part left with too few valid meetings goes back to the generator to be placed whole
   const complete = accepted.filter(cls => {
     const section = sections.find(s => s.code === cls.section);
     const subject = aiDraftSubjectsFor(section, activeTerm.id).find(s => s.code === cls.subjectCode);
-    const hours = accepted.filter(c => c.section === cls.section && c.subjectCode === cls.subjectCode).reduce((sum, c) => sum + aiDraftHours(c), 0);
-    return hours >= Math.min(subject.lecHours + subject.labHours, 3);
+    const part = classPart(cls, subject, section.program);
+    return aiDraftPartHours(accepted, cls, subject, section) >= Math.min(subjectPartMinutes(subject)[part] / 60, 3);
   });
   if (complete.length < accepted.length) {
     rejected['Too few valid meetings for the subject, so it was rescheduled whole'] = accepted.length - complete.length;
@@ -269,8 +278,8 @@ function aiDraftRenderPreview(r) {
 
   const listHtml = (title, items, color) => items.length === 0 ? '' : `
     <div style="margin-top:12px;">
-      <div style="font-weight:700; font-size:12.5px; color:${color}; margin-bottom:4px;">${escapeHtml(title)}</div>
-      <ul style="margin:0; padding-left:18px; font-size:12px; color:var(--text-secondary);">
+      <div style="font-weight:700; font-size:0.893rem; color:${color}; margin-bottom:4px;">${escapeHtml(title)}</div>
+      <ul style="margin:0; padding-left:18px; font-size:0.857rem; color:var(--text-secondary);">
         ${items.slice(0, 12).map(i => `<li>${escapeHtml(i)}</li>`).join('')}
         ${items.length > 12 ? `<li>and ${items.length - 12} more</li>` : ''}
       </ul>
@@ -278,8 +287,8 @@ function aiDraftRenderPreview(r) {
 
   const stat = (value, label) => `
     <div style="flex:1; min-width:90px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; padding:10px; text-align:center;">
-      <div style="font-size:20px; font-weight:800; color:var(--accent-primary);">${value}</div>
-      <div style="font-size:11px; color:var(--text-secondary);">${escapeHtml(label)}</div>
+      <div style="font-size:1.429rem; font-weight:800; color:var(--accent-primary);">${value}</div>
+      <div style="font-size:0.857rem; color:var(--text-secondary);">${escapeHtml(label)}</div>
     </div>`;
 
   const sectionTables = r.sections.map(section => {
@@ -295,8 +304,8 @@ function aiDraftRenderPreview(r) {
         <td>${c.aiPlaced ? 'AI' : 'Filled'}</td>
       </tr>`).join('');
     return `<details style="margin-top:8px;">
-      <summary style="cursor:pointer; font-weight:700; font-size:13px;">${escapeHtml(section.code)} (${escapeHtml(section.name)})</summary>
-      <div style="overflow-x:auto;"><table style="width:100%; font-size:12px; margin-top:6px;">
+      <summary style="cursor:pointer; font-weight:700; font-size:0.929rem;">${escapeHtml(section.code)} (${escapeHtml(section.name)})</summary>
+      <div style="overflow-x:auto;"><table style="width:100%; font-size:0.857rem; margin-top:6px;">
         <thead><tr><th style="text-align:left;">Day</th><th style="text-align:left;">Time</th><th style="text-align:left;">Subject</th><th style="text-align:left;">Room</th><th style="text-align:left;">Teacher</th><th style="text-align:left;">Source</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="6">No classes</td></tr>'}</tbody>
       </table></div>
@@ -313,9 +322,9 @@ function aiDraftRenderPreview(r) {
     ${listHtml('Problems with the AI draft (these classes were not used)', notes, '#92400E')}
     ${listHtml('Could not be scheduled', r.unassigned.map(u => `${u.section} ${u.code}: ${u.reason}`), '#991B1B')}
     ${listHtml('Please review', r.warnings, '#92400E')}
-    <div style="margin-top:14px; font-weight:700; font-size:13px;">Preview by section</div>
+    <div style="margin-top:14px; font-weight:700; font-size:0.929rem;">Preview by section</div>
     ${sectionTables}
-    <div style="margin-top:14px; font-size:12px; color:var(--text-secondary);">Nothing has been saved. Apply replaces this term's current schedule.</div>
+    <div style="margin-top:14px; font-size:0.857rem; color:var(--text-secondary);">Nothing has been saved. Apply replaces this term's current schedule.</div>
   `;
 }
 

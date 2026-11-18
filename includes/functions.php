@@ -13,7 +13,14 @@ set_exception_handler(function (Throwable $e): void {
 
 require_once __DIR__ . '/activity.php';
 
-const VALID_PROGRAMS = ['BSIT', 'BSCS', 'BSCpE', 'BSHM', 'BSTM', 'BSBA'];
+// STI's programs. College programs use Years 1-4 (HRS is a 2-year program); SHS strands use Grades 11-12.
+const TERTIARY_PROGRAMS = ['BSCS', 'BSIT', 'BSTM', 'HRS'];
+const SHS_STRANDS = ['HTCUA', 'HTTO', 'ASSH', 'B&E', 'ICT-SCPT'];
+const VALID_PROGRAMS = [...TERTIARY_PROGRAMS, ...SHS_STRANDS];
+// Programs shorter than their level's usual years
+const PROGRAM_YEARS = ['HRS' => [1, 2]];
+const SCHOOL_LEVELS = ['tertiary', 'shs'];
+const TEACHING_LEVELS = ['tertiary', 'shs', 'mixed'];
 const SCHOOL_DAY_START = '07:00:00';
 const SCHOOL_DAY_END = '20:30:00';
 const SHIFT_WINDOWS = [
@@ -65,6 +72,24 @@ function requireValidProgram($program): void {
     if (!in_array($program, VALID_PROGRAMS, true)) {
         rejectInput('Please choose a valid program.');
     }
+}
+
+/** Year 1-4 for college, Grade 11-12 for Senior High School. */
+function requireValidYearLevel($value): int {
+    $year = filter_var($value, FILTER_VALIDATE_INT);
+    if ($year === false || !in_array($year, [1, 2, 3, 4, 11, 12], true)) {
+        rejectInput('Year level must be Year 1 to 4, or Grade 11 or 12.');
+    }
+    return $year;
+}
+
+/** A term's own name, such as "1st Sem" or "3rd Term". */
+function requireValidTermName($name): string {
+    $name = preg_replace('/\s+/', ' ', trim((string)$name));
+    if ($name === '' || mb_strlen($name) > 30 || !preg_match('/^[\p{L}\p{N}][\p{L}\p{N} .\'\-]*$/u', $name)) {
+        rejectInput('Term name must be 1 to 30 letters, numbers, spaces, periods, apostrophes or hyphens.');
+    }
+    return $name;
 }
 
 function requireValidSchoolYear(string $code): void {
@@ -154,10 +179,6 @@ function requireCSRF(): void {
     }
 }
 
-function sanitize(string $str): string {
-    return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
-}
-
 function jsonResponse(array $data, int $code = 200): never {
     // A change that succeeded goes into the activity log
     if ($code < 400 && !empty($data['success'])) {
@@ -169,22 +190,65 @@ function jsonResponse(array $data, int $code = 200): never {
     exit;
 }
 
-function formatTime(string $time): string {
-    return date('g:i A', strtotime($time));
+/**
+ * [user_id][SUBJECT CODE] => true for what each teacher may teach: every catalog subject in an area (department)
+ * covered by one of their FCC certificates.
+ * $override tests a change before it is saved:
+ *   'userCerts' => [user_id => cert ids], 'certAreas' => [cert_id => areas, or null when deleted],
+ *   'catalogArea' => [code => area, or null when removed]
+ */
+function loadQualifications(PDO $db, array $override = []): array {
+    $map = [];
+    try {
+        $certAreas = [];
+        foreach ($db->query("SELECT cert_id, areas_json FROM fcc_certificates")->fetchAll() as $cert) {
+            $certAreas[(int)$cert['cert_id']] = json_decode((string)$cert['areas_json'], true) ?: [];
+        }
+        foreach ($override['certAreas'] ?? [] as $certId => $areas) {
+            if ($areas === null) unset($certAreas[(int)$certId]);
+            else $certAreas[(int)$certId] = $areas;
+        }
+        $userCerts = [];
+        foreach ($db->query("SELECT user_id, cert_id FROM faculty_certificates")->fetchAll() as $row) {
+            $userCerts[(int)$row['user_id']][] = (int)$row['cert_id'];
+        }
+        foreach ($override['userCerts'] ?? [] as $userId => $ids) {
+            $userCerts[(int)$userId] = array_map('intval', $ids);
+        }
+        $areaOfCode = [];
+        foreach ($db->query("SELECT UPPER(subject_code) AS code, department FROM subject_catalog")->fetchAll() as $subject) {
+            $areaOfCode[$subject['code']] = $subject['department'];
+        }
+        foreach ($override['catalogArea'] ?? [] as $code => $area) {
+            if ($area === null) unset($areaOfCode[strtoupper($code)]);
+            else $areaOfCode[strtoupper($code)] = $area;
+        }
+        $codesByArea = [];
+        foreach ($areaOfCode as $code => $area) {
+            $codesByArea[$area][] = $code;
+        }
+        foreach ($userCerts as $userId => $ids) {
+            foreach ($ids as $certId) {
+                foreach ($certAreas[$certId] ?? [] as $area) {
+                    foreach ($codesByArea[$area] ?? [] as $code) {
+                        $map[$userId][$code] = true;
+                    }
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        // Before the certificate tables exist, no one is qualified yet
+    }
+    return $map;
 }
 
-function getStatusBadgeClass(string $status): string {
-    switch (strtolower($status)) {
-        case 'vacant':
-        case 'approved':
-            return 'badge-success';
-        case 'occupied':
-        case 'declined':
-            return 'badge-danger';
-        case 'reserved':
-        case 'pending':
-            return 'badge-warning';
-        default:
-            return 'badge-info';
+/** 'shs' or 'tertiary', from the term itself. Terms saved before levels existed are college terms. */
+function termSchoolLevel(PDO $db, int $termId): string {
+    try {
+        $find = $db->prepare("SELECT level FROM school_terms WHERE term_id = ?");
+        $find->execute([$termId]);
+        return $find->fetchColumn() === 'shs' ? 'shs' : 'tertiary';
+    } catch (\Throwable $e) {
+        return 'tertiary';
     }
 }

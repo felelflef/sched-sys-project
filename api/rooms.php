@@ -102,6 +102,12 @@ if ($action === 'add') {
         jsonResponse(['success' => false, 'message' => 'This room still has scheduled classes. Move them to another room first.'], 409);
     }
 
+    // Sections that used this room as their home room go back to an automatic room
+    try {
+        $db->prepare("UPDATE academic_sections SET home_room = NULL WHERE home_room = (SELECT room_name_number FROM classrooms WHERE room_id = ?)")->execute([$room_id]);
+    } catch (\Throwable $e) {
+        // No home_room column yet
+    }
     $stmt = $db->prepare("DELETE FROM classrooms WHERE room_id = ?");
     $stmt->execute([$room_id]);
     jsonResponse(['success' => true, 'message' => 'Room removed successfully']);

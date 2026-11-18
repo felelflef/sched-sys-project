@@ -62,8 +62,8 @@ function viewerSheetDetails(selected, classes, activeTerm, termLabel) {
   if (viewerMode === 'section') {
     const sec = ACADEMIC_SECTIONS.find(s => s.code === selected && s.termId === activeTerm.id);
     return {
-      subtitle: sec ? `${sec.program} • Year ${sec.year} (${sec.name}) • ${termLabel}` : termLabel,
-      stats: [['Total Units', String(totalUnits)], ['# of Students', String(sec ? sec.studentCount : 0)], ['Shift', (sec && sec.shift) || 'AM']]
+      subtitle: sec ? `${sec.program} • ${yearLevelLabel(sec.year)} (${sec.name}) • ${sec.shift || 'AM'} shift • ${termLabel}` : termLabel,
+      stats: [['Total Units', String(totalUnits)], ['# of Students', String(sec ? sec.studentCount : 0)], ['Adviser', sectionAdviserName(sec) || '—']]
     };
   }
   if (viewerMode === 'room') {
@@ -76,7 +76,7 @@ function viewerSheetDetails(selected, classes, activeTerm, termLabel) {
   const fac = FACULTY.find(f => f.name === selected);
   return {
     subtitle: `Professor Schedule • ${termLabel}`,
-    stats: [['Teaching Load', `${totalUnits} Units`], ['Weekly Teaching', `${weeklyHours.toFixed(1)} hrs`], ['Department', (fac && fac.dept) || '—']]
+    stats: [['Teaching Load', `${formatUnits(facultyLoadUnits(selected, classes))} of ${fac ? `${facultyMinUnits(fac)}–${facultyMaxUnits(fac)}` : '—'} Units`], ['Weekly Teaching', `${weeklyHours.toFixed(1)} hrs`], ['Department', (fac && fac.dept) || '—']]
   };
 }
 
@@ -119,14 +119,11 @@ function renderScheduleViewer() {
   select.value = selected;
   select.disabled = options.length === 0;
 
-  const classes = termClasses.filter(c => {
-    if (viewerMode === 'section') return c.section === selected;
-    if (viewerMode === 'room') return c.room === selected;
-    return c.instructor === selected;
-  });
+  const classes = viewerClassesFor(selected, termClasses, activeTerm);
 
   const details = viewerSheetDetails(selected, classes, activeTerm, termLabel);
-  document.getElementById('viewerSheetSubtitle').textContent = details.subtitle;
+  const pairedShown = [...new Set(classes.filter(c => c.termId && c.termId !== activeTerm.id).map(c => c.termId))];
+  document.getElementById('viewerSheetSubtitle').textContent = details.subtitle + (pairedShown.length ? ` · also showing ${pairedShown.map(termWithLevel).join(', ')}` : '');
   document.getElementById('viewerSheetTitle').textContent = selected || `No ${VIEWER_LABELS[viewerMode]} Available`;
   details.stats.forEach(([label, value], index) => {
     document.getElementById(`viewerStatLabel${index + 1}`).textContent = label;
@@ -288,14 +285,21 @@ window.exportTermExcel = function() {
     sections.forEach(sec => {
       const secClasses = classes.filter(c => c.section === sec.code);
       addWorksheet(book, timetableWorksheet(secClasses, `${sec.code} (${sec.name})`,
-        `${sec.program} Year ${sec.year} · ${termContextLabel()} · ${totalSubjectUnits(secClasses)} units · ${sec.studentCount} students`), sec.code);
+        `${sec.program} ${yearLevelLabel(sec.year)} · ${termContextLabel()} · ${totalSubjectUnits(secClasses)} units · ${sec.studentCount} students`), sec.code);
     });
   }, classes, 'Master Schedule');
 };
 
+// A section belongs to one term. Teachers and rooms are shared by College and SHS, so their timetables
+// also show the other level's term that runs alongside this one.
+function viewerClassesFor(selected, termClasses, activeTerm) {
+  const shared = viewerMode === 'section' ? [] : MASTER_SCHEDULE_DATA.filter(c => c.termId && pairedTermIds(activeTerm.id).includes(c.termId));
+  return [...termClasses, ...shared].filter(c => viewerMode === 'section' ? c.section === selected : viewerMode === 'room' ? c.room === selected : c.instructor === selected);
+}
+
 function viewerSelectedClasses() {
-  const selected = viewerSelection[viewerMode];
-  return activeTermClasses().filter(c => viewerMode === 'section' ? c.section === selected : viewerMode === 'room' ? c.room === selected : c.instructor === selected);
+  const { activeTerm } = getActiveAcademicContext();
+  return viewerClassesFor(viewerSelection[viewerMode], activeTermClasses(), activeTerm);
 }
 
 window.exportViewerExcel = function() {

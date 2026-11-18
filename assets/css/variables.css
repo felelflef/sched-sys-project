@@ -8,7 +8,7 @@
   --sti-blue: #25447A;
   --accent-hover: #1A3057;
   --text-primary: #2C303A;
-  --text-secondary: #5C6375;
+  --text-secondary: #474E5E;
   --text-on-accent: #FFFFFF;
   --border-subtle: #E3E7EF;
   --shadow-float: 0 1px 3px rgba(28, 54, 100, 0.06);
@@ -31,7 +31,10 @@
 
 /* ─────────── RESET & BASE ─────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+/* Text size (user menu > Text size): Normal 16px, Large 18px, Extra large 20px. Every font size is in rem. */
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+html[data-text-size="large"] { font-size: 18px; }
+html[data-text-size="xlarge"] { font-size: 20px; }
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: var(--bg-primary);

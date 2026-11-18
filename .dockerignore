@@ -8,3 +8,5 @@ sql/
 .env.example
 Dockerfile
 .dockerignore
+# Command-line maintenance scripts (never served by the web server)
+tools/

@@ -99,6 +99,12 @@ function activityPerson(?PDO $db, $email): string {
     return $name !== '' ? "{$name} ({$email})" : (string)$email;
 }
 
+// "Year 2" for college, "Grade 11" for SHS
+function activityYearLevel($year): string {
+    $n = (int)$year;
+    return $n >= 11 ? "Grade {$n}" : "Year {$n}";
+}
+
 function activityCount(int $n, string $word): string {
     return $n . ' ' . $word . ($n === 1 ? '' : (str_ends_with($word, 's') ? 'es' : 's'));
 }
@@ -130,13 +136,19 @@ function describeActivity(?PDO $db, string $key, array $in): ?array {
 
         // Faculty, subjects and saved subject sets
         case 'schedules:save_faculty_qualifications':
-            return ['Resources', 'Updated the subjects ' . activityPerson($db, $text('email')) . ' can teach (' . activityCount(count((array)($in['subjects'] ?? [])), 'subject') . ')'];
+            return ['Resources', 'Updated the FCC certificates of ' . activityPerson($db, $text('email')) . ' (' . activityCount(count((array)($in['cert_ids'] ?? [])), 'certificate') . ')'];
         case 'schedules:save_faculty_availability':
-            return ['Resources', 'Updated the status, availability and max load of ' . activityPerson($db, $text('email')) . " ({$text('status')}, " . (int)($in['max_load'] ?? 0) . ' hrs max)'];
+            return ['Resources', 'Updated the status, availability and max load of ' . activityPerson($db, $text('email')) . " ({$text('status')}, " . (isset($in['min_load']) ? (int)$in['min_load'] . '–' : '') . (int)($in['max_load'] ?? 0) . ' units' . (!empty($in['seasoned']) ? ', seasoned' : '') . ')'];
         case 'schedules:save_catalog_subject':
             $code = strtoupper($text('subject_code'));
             $exists = activityLookup($db, "SELECT subject_code FROM subject_catalog WHERE subject_code = ?", [$code]) !== '';
             return ['Resources', ($exists ? 'Updated' : 'Added') . " subject {$code} – {$text('subject_title')} " . ($exists ? 'in' : 'to') . ' the Subject Catalog'];
+        case 'schedules:save_certificate':
+            return ['Resources', ((int)($in['cert_id'] ?? 0) > 0 ? 'Updated' : 'Created') . " the FCC certificate \"{$text('cert_name')}\" (" . implode(', ', array_map('strval', (array)($in['areas'] ?? []))) . ')'];
+        case 'schedules:delete_certificate':
+            $cert = activityLookup($db, "SELECT cert_name FROM fcc_certificates WHERE cert_id = ?", [(int)($in['cert_id'] ?? 0)]);
+            return ['Resources', 'Deleted the FCC certificate' . ($cert !== '' ? " \"{$cert}\"" : '')];
+
         case 'schedules:delete_catalog_subject': return ['Resources', 'Removed subject ' . strtoupper($text('subject_code')) . ' from the Subject Catalog'];
         case 'schedules:save_departments': return ['Resources', 'Updated the list of departments (' . activityCount(count((array)($in['departments'] ?? [])), 'department') . ')'];
         case 'schedules:save_subject_set':
@@ -157,15 +169,18 @@ function describeActivity(?PDO $db, string $key, array $in): ?array {
             $year = activityLookup($db, "SELECT year_code FROM school_years WHERE year_id = ?", [(int)($in['year_id'] ?? 0)]);
             return ['Setup', ((int)($in['term_id'] ?? 0) > 0 ? 'Updated' : 'Added') . " the term {$text('term_name')}" . ($year !== '' ? " for {$year}" : '')];
         case 'schedules:set_active_term': return ['Setup', 'Made ' . activityTerm($db, $in['term_id'] ?? 0) . ' the active term'];
+        case 'schedules:delete_term': return ['Setup', 'Deleted the term ' . activityTerm($db, $in['term_id'] ?? 0)];
         case 'schedules:save_term_subject':
-            $where = "{$text('program')} Year " . (int)($in['year_level'] ?? 1);
+            $where = "{$text('program')} " . activityYearLevel($in['year_level'] ?? 1);
             return ['Setup', (int)($in['subject_id'] ?? 0) > 0
                 ? "Updated subject {$text('subject_code')} – {$text('subject_name')} for {$where}"
                 : "Added subject {$text('subject_code')} – {$text('subject_name')} to " . activityTerm($db, $in['term_id'] ?? 0) . " for {$where}"];
         case 'schedules:toggle_term_subject':
         case 'schedules:delete_term_subject':
             $id = (int)($in['subject_id'] ?? 0);
-            $subject = activityLookup($db, "SELECT CONCAT(subject_code, ' for ', program, ' Year ', year_level) FROM term_subjects WHERE subject_id = ?", [$id]) ?: 'a subject';
+            $subjectLevel = activityLookup($db, "SELECT year_level FROM term_subjects WHERE subject_id = ?", [$id]);
+            $subject = activityLookup($db, "SELECT CONCAT(subject_code, ' for ', program) FROM term_subjects WHERE subject_id = ?", [$id]);
+            $subject = $subject !== '' ? "{$subject} " . activityYearLevel($subjectLevel) : 'a subject';
             $term = activityTerm($db, activityLookup($db, "SELECT term_id FROM term_subjects WHERE subject_id = ?", [$id]));
             if ($key === 'schedules:delete_term_subject') return ['Setup', "Removed {$subject} from {$term}"];
             $verb = !isset($in['is_included']) ? 'Changed whether' : (!empty($in['is_included']) ? 'Included' : 'Excluded');
@@ -175,15 +190,18 @@ function describeActivity(?PDO $db, string $key, array $in): ?array {
         case 'schedules:add_term_subjects': return ['Setup', 'Loaded saved subjects into ' . activityTerm($db, $in['term_id'] ?? 0)];
         case 'schedules:save_section':
             return ['Setup', (int)($in['section_id'] ?? 0) > 0
-                ? "Updated section {$text('section_code')} ({$text('program')} Year " . (int)($in['year_level'] ?? 1) . ', ' . (int)($in['student_count'] ?? 0) . ' students)'
+                ? "Updated section {$text('section_code')} ({$text('program')} " . activityYearLevel($in['year_level'] ?? 1) . ', ' . (int)($in['student_count'] ?? 0) . ' students' . ($text('home_room') !== '' ? ", home room {$text('home_room')}" : '') . ')'
                 : "Added section {$text('section_code')} to " . activityTerm($db, $in['term_id'] ?? 0)];
+        case 'schedules:save_section_plan':
+            $section = activityLookup($db, "SELECT section_code FROM academic_sections WHERE section_id = ?", [(int)($in['section_id'] ?? 0)]) ?: 'a section';
+            return ['Schedule', "Updated the room and instructors of section {$section}" . ($text('home_room') !== '' ? " (room {$text('home_room')})" : '')];
         case 'schedules:split_section':
             $section = activityLookup($db, "SELECT section_code FROM academic_sections WHERE section_id = ?", [(int)($in['section_id'] ?? 0)]) ?: 'a section';
             return ['Setup', "Split section {$section}, moving " . activityCount((int)($in['split_student_count'] ?? 0), 'student') . " to new section {$text('new_section_code')}"];
         case 'schedules:auto_generate_sections':
             $programs = implode(', ', array_map('strval', (array)($in['programs'] ?? [])));
-            $years = implode(', ', array_map('intval', (array)($in['years'] ?? [])));
-            return ['Setup', 'Created ' . activityCount((int)($in['sections_per_group'] ?? 0), 'section') . " each for {$programs} Year {$years} in " . activityTerm($db, $in['term_id'] ?? 0)];
+            $years = implode(', ', array_map('activityYearLevel', (array)($in['years'] ?? [])));
+            return ['Setup', 'Created ' . activityCount((int)($in['sections_per_group'] ?? 0), 'section') . " each for {$programs} {$years} in " . activityTerm($db, $in['term_id'] ?? 0)];
         case 'schedules:delete_section':
             $id = (int)($in['section_id'] ?? 0);
             $section = activityLookup($db, "SELECT section_code FROM academic_sections WHERE section_id = ?", [$id]) ?: 'a section';

@@ -31,22 +31,27 @@ CREATE TABLE IF NOT EXISTS users (
     employment_status VARCHAR(20) NOT NULL DEFAULT 'Full-time',
     available_days VARCHAR(30) NOT NULL DEFAULT '',
     available_shifts VARCHAR(30) NOT NULL DEFAULT '',
-    max_load INT NOT NULL DEFAULT 24,
+    max_load INT NOT NULL DEFAULT 30,
+    min_load INT DEFAULT NULL,
+    teaching_level VARCHAR(10) NOT NULL DEFAULT 'tertiary',
+    seasoned TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS school_years (
     year_id INT AUTO_INCREMENT PRIMARY KEY,
-    year_code VARCHAR(50) NOT NULL UNIQUE,
+    year_code VARCHAR(50) NOT NULL,
     is_active TINYINT(1) DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_year_code (year_code)
 );
 
 CREATE TABLE IF NOT EXISTS school_terms (
     schedule_version INT NOT NULL DEFAULT 0,
     term_id INT AUTO_INCREMENT PRIMARY KEY,
     year_id INT NOT NULL,
-    term_name ENUM('1st Sem', '2nd Sem', 'Summer') NOT NULL,
+    term_name VARCHAR(30) NOT NULL,
+    level VARCHAR(10) NOT NULL DEFAULT 'tertiary',
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     status ENUM('draft', 'active', 'closed') DEFAULT 'draft',
@@ -60,6 +65,7 @@ CREATE TABLE IF NOT EXISTS term_subjects (
     subject_code VARCHAR(20) NOT NULL,
     subject_name VARCHAR(100) NOT NULL,
     units INT NOT NULL DEFAULT 3,
+    lab_units TINYINT DEFAULT NULL,
     lecture_hours DECIMAL(4,1) NOT NULL DEFAULT 3.0,
     lab_hours DECIMAL(4,1) NOT NULL DEFAULT 0.0,
     subject_type ENUM('lecture', 'lab', 'pe', 'special') DEFAULT 'lecture',
@@ -80,6 +86,8 @@ CREATE TABLE IF NOT EXISTS academic_sections (
     student_count INT NOT NULL DEFAULT 35,
     adviser VARCHAR(100) DEFAULT NULL,
     shift VARCHAR(20) DEFAULT 'AM',
+    home_room VARCHAR(50) DEFAULT NULL,
+    subject_teachers TEXT DEFAULT NULL,
     FOREIGN KEY (term_id) REFERENCES school_terms(term_id) ON DELETE CASCADE
 );
 
@@ -128,6 +136,7 @@ CREATE TABLE IF NOT EXISTS subject_catalog (
     department VARCHAR(100) NOT NULL,
     it_only TINYINT(1) DEFAULT 0,
     units INT NOT NULL DEFAULT 3,
+    level VARCHAR(10) NOT NULL DEFAULT 'both',
     catalog_id INT NOT NULL AUTO_INCREMENT UNIQUE
 );
 
@@ -150,12 +159,28 @@ CREATE TABLE IF NOT EXISTS subject_sets (
     items_json MEDIUMTEXT NOT NULL
 );
 
+-- FCC certificates: each covers one or more subject areas (departments)
+CREATE TABLE IF NOT EXISTS fcc_certificates (
+    cert_id INT AUTO_INCREMENT PRIMARY KEY,
+    cert_name VARCHAR(60) NOT NULL UNIQUE,
+    areas_json TEXT NOT NULL
+);
+
 -- The subjects each teacher is allowed to teach
 CREATE TABLE IF NOT EXISTS faculty_qualifications (
     user_id INT NOT NULL,
     subject_code VARCHAR(20) NOT NULL,
     PRIMARY KEY (user_id, subject_code),
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- The FCC certificates each teacher holds
+CREATE TABLE IF NOT EXISTS faculty_certificates (
+    user_id INT NOT NULL,
+    cert_id INT NOT NULL,
+    PRIMARY KEY (user_id, cert_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (cert_id) REFERENCES fcc_certificates(cert_id) ON DELETE CASCADE
 );
 
 -- Seed Data: Classrooms
@@ -206,30 +231,27 @@ INSERT INTO school_terms (term_id, year_id, term_name, start_date, end_date, sta
 
 -- Seed Data: Academic Sections
 INSERT INTO academic_sections (section_id, term_id, section_code, section_name, program, year_level, student_count, adviser) VALUES
-(1, 1, 'IT701M',  'BSIT 1A',  'BSIT',  1, 38, 'Prof. IT Instructor'),
-(2, 1, 'IT702M',  'BSIT 1B',  'BSIT',  1, 36, 'Prof. Faculty Member'),
-(3, 1, 'IT801M',  'BSIT 2A',  'BSIT',  2, 35, 'Prof. Program Head'),
-(4, 1, 'IT802M',  'BSIT 2B',  'BSIT',  2, 34, 'Prof. Faculty Member'),
-(5, 1, 'CS701M',  'BSCS 1A',  'BSCS',  1, 32, 'Prof. Program Head'),
-(6, 1, 'CPE701M', 'BSCpE 1A', 'BSCpE', 1, 30, 'Engr. Faculty Member'),
-(7, 1, 'HM701M',  'BSHM 1A',  'BSHM',  1, 40, 'Chef Faculty Member'),
-(8, 1, 'TM701M',  'BSTM 1A',  'BSTM',  1, 34, 'Prof. IT Instructor'),
-(9, 1, 'BA701M',  'BSBA 1A',  'BSBA',  1, 35, 'Prof. IT Instructor');
-
--- Seed Data: Term Subjects
+(1, 1, 'IT101M',  'BSIT 1A',  'BSIT',  1, 38, NULL),
+(2, 1, 'IT102M',  'BSIT 1B',  'BSIT',  1, 36, NULL),
+(3, 1, 'IT201M',  'BSIT 2A',  'BSIT',  2, 35, NULL),
+(4, 1, 'CS101M',  'BSCS 1A',  'BSCS',  1, 32, NULL),
+(5, 1, 'TM101M',  'BSTM 1A',  'BSTM',  1, 34, NULL),
+(6, 1, 'HRS101M', 'HRS 1A',   'HRS',   1, 35, NULL);
 INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES
-(1, 'ITE 101', 'Introduction to Computing', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
-(1, 'CC 103',  'Computer Programming 1', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
-(1, 'GE 107',  'Ethics', 3, 3.0, 0.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
-(1, 'GE 201',  'Purposive Communication', 3, 3.0, 0.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
-(1, 'PE 102',  'Physical Fitness', 2, 2.0, 0.0, 'pe', 'BSIT', 1, '2024 Revised', 1),
-(1, 'NSTP 1',  'National Service Training Program', 3, 3.0, 0.0, 'special', 'BSIT', 1, '2024 Revised', 1),
-(1, 'ITE 301', 'Data Structures & Algorithms', 3, 2.0, 3.0, 'lecture', 'BSIT', 2, '2024 Revised', 1),
-(1, 'IM 101',  'Database Management Systems', 3, 2.0, 3.0, 'lecture', 'BSIT', 2, '2024 Revised', 1),
-(1, 'CS 201',  'Discrete Mathematics', 3, 3.0, 0.0, 'lecture', 'BSCS', 1, '2024 Revised', 1),
-(1, 'HM 201',  'Food & Beverage Service', 3, 1.0, 4.0, 'special', 'BSHM', 1, '2024 Revised', 1),
-(1, 'TM 301',  'Tourism Planning', 3, 3.0, 0.0, 'lecture', 'BSTM', 1, '2024 Revised', 1),
-(1, 'BA 101',  'Principles of Management', 3, 3.0, 0.0, 'lecture', 'BSBA', 1, '2024 Revised', 1);
+(1, 'COMP 101', 'Introduction to Computing', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
+(1, 'COMP 102', 'Computer Programming 1', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
+(1, 'GE 1', 'Understanding the Self', 3, 3.0, 0.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
+(1, 'GE 5', 'Purposive Communication', 3, 3.0, 0.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
+(1, 'PATHFIT 1', 'Movement Competency Training', 2, 2.0, 0.0, 'pe', 'BSIT', 1, '2024 Revised', 1),
+(1, 'NSTP 1', 'National Service Training Program 1', 3, 3.0, 0.0, 'special', 'BSIT', 1, '2024 Revised', 1),
+(1, 'COMP 104', 'Data Structures and Algorithms', 3, 2.0, 3.0, 'lecture', 'BSIT', 2, '2024 Revised', 1),
+(1, 'IT 103', 'Networking 1', 3, 2.0, 3.0, 'lecture', 'BSIT', 2, '2024 Revised', 1),
+(1, 'COMP 101', 'Introduction to Computing', 3, 2.0, 3.0, 'lecture', 'BSCS', 1, '2024 Revised', 1),
+(1, 'CS 101', 'Discrete Structures 1', 3, 3.0, 0.0, 'lecture', 'BSCS', 1, '2024 Revised', 1),
+(1, 'THC 101', 'Macro Perspective of Tourism and Hospitality', 3, 3.0, 0.0, 'lecture', 'BSTM', 1, '2024 Revised', 1),
+(1, 'THC 104', 'Philippine Culture and Tourism Geography', 3, 3.0, 0.0, 'lecture', 'BSTM', 1, '2024 Revised', 1),
+(1, 'HRS 101', 'Cookery', 3, 1.0, 6.0, 'lab', 'HRS', 1, '2024 Revised', 1),
+(1, 'HRS 102', 'Food and Beverage Services', 3, 2.0, 3.0, 'lab', 'HRS', 1, '2024 Revised', 1);
 
 -- Seed Data: Schedules
 INSERT INTO schedules (room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time) VALUES

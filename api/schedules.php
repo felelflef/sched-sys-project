@@ -16,6 +16,16 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
     $validDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     $availability = loadAvailability($db);
     $rows = [];
+    // Which levels each teacher may teach, and each term's level
+    $teachingLevels = [];
+    try {
+        foreach ($db->query("SELECT user_id, teaching_level FROM users")->fetchAll() as $row) {
+            $teachingLevels[(int)$row['user_id']] = $row['teaching_level'] ?: 'tertiary';
+        }
+    } catch (\Throwable $e) {
+        // Before the column exists, every teacher counts as college
+    }
+    $termLevels = [];
 
     foreach ($items as $item) {
         $roomName = (string)($item['room'] ?? '');
@@ -62,7 +72,7 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
         requireFieldLengths(['Subject code' => [$subCode, 20], 'Section code' => [$secName, 20], 'Subject category' => [$subCat, 50]]);
 
         if ($qualifications !== null && empty($qualifications[$facultyId][strtoupper($subCode)])) {
-            jsonResponse(['success' => false, 'message' => "{$instructor} does not have {$subCode} in their main qualifications. No changes were made."], 400);
+            jsonResponse(['success' => false, 'message' => "{$instructor} has no FCC certificate covering {$subCode}'s subject area. No changes were made."], 400);
         }
 
         if (isset($availability[$facultyId]) && !isWithinAvailability($availability[$facultyId], $day, $start, $end)) {
@@ -70,6 +80,14 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
         }
 
         $rowTermId = $termId ?: (int)($item['termId'] ?? 0);
+        if ($rowTermId) {
+            $termLevels[$rowTermId] ??= termSchoolLevel($db, $rowTermId);
+            $teaches = $teachingLevels[$facultyId] ?? 'tertiary';
+            if ($teaches !== 'mixed' && $teaches !== $termLevels[$rowTermId]) {
+                $levelName = $termLevels[$rowTermId] === 'shs' ? 'Senior High School' : 'college';
+                jsonResponse(['success' => false, 'message' => "{$instructor} isn't set to teach {$levelName} classes, so they can't teach {$subCode} for {$secName}. Change their teaching level in Faculty Profiles. No changes were made."], 400);
+            }
+        }
         $rows[] = [$rowTermId ?: null, $roomId, $facultyId, $subCode, $subCat, $secName, $day, $start, $end, empty($item['aiPlaced']) ? 0 : 1];
     }
     return $rows;
@@ -106,22 +124,91 @@ function requireNoNewClashesOrOverloads(PDO $db, array $rows, int $termId): void
         jsonResponse(['success' => false, 'message' => "Two classes would overlap on {$a[6]} at {$time} ({$a[3]} for {$a[5]} and {$b[3]} for {$b[5]}) in the same room, teacher or section. No changes were made."], 409);
     }
 
-    $minutes = function (array $list): array {
+    // Terms whose dates overlap this one run at the same time (such as College 1st Sem and SHS 1st Term):
+    // a teacher or room can't be in a class of each at the same hour. Clashes saved before are tolerated.
+    $concurrent = [];
+    try {
+        $findTerms = $db->prepare("SELECT o.term_id, o.term_name, o.level FROM school_terms t JOIN school_terms o ON o.term_id <> t.term_id AND o.start_date <= t.end_date AND o.end_date >= t.start_date WHERE t.term_id = ?");
+        $findTerms->execute([$termId]);
+        foreach ($findTerms->fetchAll() as $other) $concurrent[(int)$other['term_id']] = $other;
+    } catch (\Throwable $e) {
+        // Before terms have dates and levels, each term stands alone
+    }
+    $otherRows = [];
+    if ($concurrent) {
+        $findOther = $db->prepare("SELECT term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time FROM schedules WHERE term_id IN (" . implode(',', array_fill(0, count($concurrent), '?')) . ")");
+        $findOther->execute(array_keys($concurrent));
+        $otherRows = array_map(fn($r) => [(int)$r['term_id'], (int)$r['room_id'], (int)$r['faculty_id'], $r['subject_code'], $r['subject_category'], $r['section_name'], $r['day_of_week'], $r['start_time'], $r['end_time']], $findOther->fetchAll());
+    }
+    $crossClashes = function (array $list) use ($otherRows, $sig): array {
+        $found = [];
+        foreach ($list as $a) {
+            foreach ($otherRows as $b) {
+                if ($a[6] === $b[6] && $a[7] < $b[8] && $a[8] > $b[7] && ((int)$a[1] === (int)$b[1] || (int)$a[2] === (int)$b[2])) {
+                    $found[$sig($a) . '#' . $sig($b)] = [$a, $b];
+                }
+            }
+        }
+        return $found;
+    };
+    $newCross = array_diff_key($crossClashes($rows), $crossClashes($oldRows));
+    if ($newCross) {
+        [$a, $b] = reset($newCross);
+        $other = $concurrent[$b[0]];
+        $levelName = ($other['level'] ?? '') === 'shs' ? 'SHS' : 'College';
+        $what = (int)$a[2] === (int)$b[2] ? 'teacher' : 'room';
+        jsonResponse(['success' => false, 'message' => "The {$what} of {$a[3]} for {$a[5]} is already booked on {$a[6]} at " . substr($b[7], 0, 5) . " for {$b[3]} ({$b[5]}) in {$other['term_name']} ({$levelName}), which runs at the same time. No changes were made."], 409);
+    }
+
+    // Loads are in units: each class carries its share of the subject's units (all of a subject's weekly hours
+    // add up to its units). A class whose subject isn't found counts 1 unit per hour.
+    $subjectUnits = [];
+    try {
+        $termIds = array_merge([$termId], array_keys($concurrent));
+        $find = $db->prepare("SELECT a.term_id, UPPER(a.section_code) AS sec, UPPER(t.subject_code) AS code, t.units, t.lecture_hours, t.lab_hours
+            FROM academic_sections a JOIN term_subjects t ON t.term_id = a.term_id AND t.program = a.program AND t.year_level = a.year_level
+            WHERE a.term_id IN (" . implode(',', array_fill(0, count($termIds), '?')) . ")");
+        $find->execute($termIds);
+        foreach ($find->fetchAll() as $s) {
+            $weeklyHours = (float)$s['lecture_hours'] + (float)$s['lab_hours'];
+            $subjectUnits[(int)$s['term_id'] . '|' . $s['sec'] . '|' . $s['code']] = [(float)$s['units'], ($weeklyHours > 0 ? $weeklyHours : (float)$s['units']) * 60];
+        }
+    } catch (\Throwable $e) {
+        // Without curriculum data every class counts 1 unit per hour
+    }
+    $units = function (array $list) use ($subjectUnits, $termId): array {
         $load = [];
         foreach ($list as $r) {
-            $load[(int)$r[2]] = ($load[(int)$r[2]] ?? 0) + (strtotime($r[8]) - strtotime($r[7])) / 60;
+            $minutes = (strtotime($r[8]) - strtotime($r[7])) / 60;
+            [$subjectTotal, $subjectMinutes] = $subjectUnits[($r[0] ?: $termId) . '|' . strtoupper($r[5]) . '|' . strtoupper($r[3])] ?? [null, null];
+            $share = $subjectTotal !== null && $subjectMinutes > 0 ? $subjectTotal * $minutes / $subjectMinutes : $minutes / 60;
+            $load[(int)$r[2]] = ($load[(int)$r[2]] ?? 0) + $share;
         }
         return $load;
     };
-    $newLoad = $minutes($rows);
-    $oldLoad = $minutes($oldRows);
+    $newLoad = $units($rows);
+    $oldLoad = $units($oldRows);
+    // Units in overlapping terms add up: the busiest overlapping term of each level counts
+    $otherLoad = [];
+    $busiest = [];
+    foreach ($concurrent as $otherId => $other) {
+        $level = ($other['level'] ?? '') === 'shs' ? 'shs' : 'tertiary';
+        foreach ($units(array_filter($otherRows, fn($r) => $r[0] === $otherId)) as $facultyId => $u) {
+            $busiest[$level][$facultyId] = max($busiest[$level][$facultyId] ?? 0, $u);
+        }
+    }
+    foreach ($busiest as $loads) {
+        foreach ($loads as $facultyId => $u) $otherLoad[$facultyId] = ($otherLoad[$facultyId] ?? 0) + $u;
+    }
     $teachers = $db->query("SELECT user_id, CONCAT(first_name, ' ', last_name) AS name, max_load FROM users")->fetchAll();
     foreach ($teachers as $t) {
         $id = (int)$t['user_id'];
-        $limit = ((int)$t['max_load'] ?: 24) * 60;
-        if (($newLoad[$id] ?? 0) > $limit && ($newLoad[$id] ?? 0) > ($oldLoad[$id] ?? 0)) {
-            $hours = round($newLoad[$id] / 60, 1);
-            jsonResponse(['success' => false, 'message' => "{$t['name']} would teach {$hours} hrs a week, over their " . ($limit / 60) . "-hr max load. No changes were made."], 409);
+        $limit = (int)$t['max_load'] ?: 30;
+        $total = ($newLoad[$id] ?? 0) + ($otherLoad[$id] ?? 0);
+        if ($total > $limit + 0.001 && ($newLoad[$id] ?? 0) > ($oldLoad[$id] ?? 0) + 0.001) {
+            $loadUnits = round($total, 1);
+            $counting = ($otherLoad[$id] ?? 0) > 0 ? ' a week, counting their classes in overlapping terms' : '';
+            jsonResponse(['success' => false, 'message' => "{$t['name']} would teach {$loadUnits} units{$counting}, over their {$limit}-unit max load. No changes were made."], 409);
         }
     }
 }
@@ -130,13 +217,44 @@ function isStatePublished(PDO $db): bool {
     return (bool)$db->query("SELECT COUNT(*) FROM app_settings WHERE setting_key = 'state_published'")->fetchColumn();
 }
 
-/** Returns allowed subjects as [user_id][SUBJECT CODE] => true. */
-function loadQualifications(PDO $db): array {
-    $map = [];
-    foreach ($db->query("SELECT user_id, subject_code FROM faculty_qualifications")->fetchAll() as $row) {
-        $map[(int)$row['user_id']][strtoupper($row['subject_code'])] = true;
+/** The active term and the terms running alongside it (their dates overlap), such as College 1st Sem and SHS 1st Term. */
+const CURRENT_TERMS_SQL = "(t.is_active = 1 OR EXISTS (SELECT 1 FROM school_terms a WHERE a.is_active = 1 AND t.start_date <= a.end_date AND t.end_date >= a.start_date))";
+
+/** Current classes (active term and terms running alongside it) whose teacher would no longer be qualified after the change. */
+function classesLosingQualification(PDO $db, array $override): array {
+    $before = loadQualifications($db);
+    $after = loadQualifications($db, $override);
+    $rows = $db->query("SELECT s.schedule_id, s.term_id, s.faculty_id, UPPER(s.subject_code) AS code FROM schedules s JOIN school_terms t ON s.term_id = t.term_id WHERE " . CURRENT_TERMS_SQL)->fetchAll();
+    return array_values(array_filter($rows, fn($r) => !empty($before[(int)$r['faculty_id']][$r['code']]) && empty($after[(int)$r['faculty_id']][$r['code']])));
+}
+
+function lostClassCodes(array $rows): string {
+    return implode(', ', array_unique(array_column($rows, 'code')));
+}
+
+/** Takes the given classes off the schedule, inside the caller's transaction. */
+function removeScheduleRows(PDO $db, array $rows): void {
+    if (!$rows) return;
+    $ids = array_map(fn($r) => (int)$r['schedule_id'], $rows);
+    $db->prepare("DELETE FROM schedules WHERE schedule_id IN (" . implode(',', array_fill(0, count($ids), '?')) . ")")->execute($ids);
+    // Every term that lost a class reloads; rows without a term fall back to the active term
+    $termIds = array_unique(array_filter(array_map(fn($r) => (int)($r['term_id'] ?? 0), $rows)));
+    if (!$termIds) $termIds = $db->query("SELECT term_id FROM school_terms WHERE is_active = 1")->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($termIds as $changedTermId) {
+        bumpScheduleVersion($db, (int)$changedTermId);
     }
-    return $map;
+}
+
+/** A certificate name and its areas, checked against the department list. */
+function cleanCertificate(PDO $db, array $input): array {
+    $name = preg_replace('/\s+/', ' ', trim((string)($input['cert_name'] ?? '')));
+    if ($name === '') rejectInput('Please name the certificate.');
+    requireFieldLengths(['Certificate name' => [$name, 60]]);
+    requireValidText('Certificate name', $name);
+    $areas = array_values(array_unique(array_filter(array_map(fn($a) => trim((string)$a), (array)($input['areas'] ?? [])))));
+    if (!$areas) rejectInput('Choose at least one subject area for the certificate.');
+    foreach ($areas as $area) requireKnownDepartment($db, $area);
+    return [$name, $areas];
 }
 
 /** Returns [user_id] => days and shifts, only for part-time teachers who have availability set. */
@@ -178,16 +296,6 @@ function requireAdminRole(): void {
     }
 }
 
-function insertQualifications(PDO $db, int $userId, array $subjects): void {
-    $ins = $db->prepare("INSERT IGNORE INTO faculty_qualifications (user_id, subject_code) VALUES (?, ?)");
-    foreach ($subjects as $code) {
-        $code = strtoupper(trim((string)$code));
-        if ($code !== '') {
-            $ins->execute([$userId, $code]);
-        }
-    }
-}
-
 /** Checks one subject of a saved set or a set being loaded, and returns it in a fixed shape. */
 function cleanSubjectItem($item): array {
     $item = is_array($item) ? $item : [];
@@ -204,13 +312,34 @@ function cleanSubjectItem($item): array {
     return [
         'code' => $code,
         'name' => $name,
-        'units' => requireIntInRange('Units', $item['units'] ?? 3, 1, 6),
+        'units' => $units = requireIntInRange('Units', $item['units'] ?? 3, 1, 6),
+        'labUnits' => isset($item['labUnits']) && $item['labUnits'] !== '' ? min(requireIntInRange('Lab units', $item['labUnits'], 0, 6), $units) : null,
         'lecHours' => requireValidHours('Lecture hours', $item['lecHours'] ?? 0),
         'labHours' => requireValidHours('Lab hours', $item['labHours'] ?? 0),
         'type' => in_array($item['type'] ?? '', ['lecture', 'lab', 'pe', 'special'], true) ? $item['type'] : 'lecture',
         'program' => $program,
-        'year' => requireIntInRange('Year level', $item['year'] ?? 1, 1, 4)
+        'year' => requireValidYearLevel($item['year'] ?? 1)
     ];
+}
+
+/** A section or subject must use the programs and year levels of its term's level. */
+function requireProgramFitsTerm(PDO $db, int $termId, string $program, int $year): void {
+    $isShs = termSchoolLevel($db, $termId) === 'shs';
+    $programs = $isShs ? SHS_STRANDS : TERTIARY_PROGRAMS;
+    $years = $isShs ? [11, 12] : [1, 2, 3, 4];
+    if (!in_array($program, $programs, true) || !in_array($year, $years, true)) {
+        rejectInput($isShs
+            ? 'This is a Senior High School term, so choose a strand (' . implode(', ', SHS_STRANDS) . ') and Grade 11 or 12.'
+            : 'This is a college term, so choose a college program (' . implode(', ', TERTIARY_PROGRAMS) . ') and Year 1 to 4.');
+    }
+    if (isset(PROGRAM_YEARS[$program]) && !in_array($year, PROGRAM_YEARS[$program], true)) {
+        rejectInput("{$program} is a " . count(PROGRAM_YEARS[$program]) . '-year program, so choose Year 1 to ' . max(PROGRAM_YEARS[$program]) . '.');
+    }
+}
+
+/** A section code prefix: BSIT -> IT, HRS -> HRS, B&E -> BE (codes allow only letters, numbers, spaces and hyphens). */
+function sectionCodePrefix(string $program): string {
+    return str_starts_with($program, 'BS') ? substr($program, 2) : preg_replace('/[^A-Za-z0-9\-]/', '', $program);
 }
 
 function requireTermExists(PDO $db, int $termId): void {
@@ -273,14 +402,16 @@ try {
     $db->exec("
         CREATE TABLE IF NOT EXISTS school_years (
             year_id INT AUTO_INCREMENT PRIMARY KEY,
-            year_code VARCHAR(50) NOT NULL UNIQUE,
+            year_code VARCHAR(50) NOT NULL,
             is_active TINYINT(1) DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_year_code (year_code)
         );
         CREATE TABLE IF NOT EXISTS school_terms (
             term_id INT AUTO_INCREMENT PRIMARY KEY,
             year_id INT NOT NULL,
-            term_name ENUM('1st Sem', '2nd Sem', 'Summer') NOT NULL,
+            term_name VARCHAR(30) NOT NULL,
+            level VARCHAR(10) NOT NULL DEFAULT 'tertiary',
             start_date DATE NOT NULL,
             end_date DATE NOT NULL,
             status ENUM('draft', 'active', 'closed') DEFAULT 'draft',
@@ -330,34 +461,433 @@ try {
             (2, 1, '2nd Sem', '2027-01-11', '2027-05-28', 'draft', 0),
             (3, 1, 'Summer',  '2027-06-07', '2027-07-23', 'draft', 0);
             INSERT INTO academic_sections (section_id, term_id, section_code, section_name, program, year_level, student_count, adviser) VALUES
-            (1, 1, 'IT701M',  'BSIT 1A',  'BSIT',  1, 38, 'Prof. IT Instructor'),
-            (2, 1, 'IT702M',  'BSIT 1B',  'BSIT',  1, 36, 'Prof. Faculty Member'),
-            (3, 1, 'IT801M',  'BSIT 2A',  'BSIT',  2, 35, 'Prof. Program Head'),
-            (4, 1, 'IT802M',  'BSIT 2B',  'BSIT',  2, 34, 'Prof. Faculty Member'),
-            (5, 1, 'CS701M',  'BSCS 1A',  'BSCS',  1, 32, 'Prof. Program Head'),
-            (6, 1, 'CPE701M', 'BSCpE 1A', 'BSCpE', 1, 30, 'Engr. Faculty Member'),
-            (7, 1, 'HM701M',  'BSHM 1A',  'BSHM',  1, 40, 'Chef Faculty Member'),
-            (8, 1, 'TM701M',  'BSTM 1A',  'BSTM',  1, 34, 'Prof. IT Instructor'),
-            (9, 1, 'BA701M',  'BSBA 1A',  'BSBA',  1, 35, 'Prof. IT Instructor');
+            (1, 1, 'IT101M',  'BSIT 1A',  'BSIT',  1, 38, NULL),
+            (2, 1, 'IT102M',  'BSIT 1B',  'BSIT',  1, 36, NULL),
+            (3, 1, 'IT201M',  'BSIT 2A',  'BSIT',  2, 35, NULL),
+            (4, 1, 'CS101M',  'BSCS 1A',  'BSCS',  1, 32, NULL),
+            (5, 1, 'TM101M',  'BSTM 1A',  'BSTM',  1, 34, NULL),
+            (6, 1, 'HRS101M', 'HRS 1A',   'HRS',   1, 35, NULL);
             INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES
-            (1, 'ITE 101', 'Introduction to Computing', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
-            (1, 'CC 103',  'Computer Programming 1', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
-            (1, 'GE 107',  'Ethics', 3, 3.0, 0.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
-            (1, 'GE 201',  'Purposive Communication', 3, 3.0, 0.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
-            (1, 'PE 102',  'Physical Fitness', 2, 2.0, 0.0, 'pe', 'BSIT', 1, '2024 Revised', 1),
-            (1, 'NSTP 1',  'National Service Training Program', 3, 3.0, 0.0, 'special', 'BSIT', 1, '2024 Revised', 1),
-            (1, 'ITE 301', 'Data Structures & Algorithms', 3, 2.0, 3.0, 'lecture', 'BSIT', 2, '2024 Revised', 1),
-            (1, 'IM 101',  'Database Management Systems', 3, 2.0, 3.0, 'lecture', 'BSIT', 2, '2024 Revised', 1),
-            (1, 'CS 201',  'Discrete Mathematics', 3, 3.0, 0.0, 'lecture', 'BSCS', 1, '2024 Revised', 1),
-            (1, 'HM 201',  'Food & Beverage Service', 3, 1.0, 4.0, 'special', 'BSHM', 1, '2024 Revised', 1),
-            (1, 'TM 301',  'Tourism Planning', 3, 3.0, 0.0, 'lecture', 'BSTM', 1, '2024 Revised', 1),
-            (1, 'BA 101',  'Principles of Management', 3, 3.0, 0.0, 'lecture', 'BSBA', 1, '2024 Revised', 1);
+            (1, 'COMP 101', 'Introduction to Computing', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
+            (1, 'COMP 102', 'Computer Programming 1', 3, 2.0, 3.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
+            (1, 'GE 1', 'Understanding the Self', 3, 3.0, 0.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
+            (1, 'GE 5', 'Purposive Communication', 3, 3.0, 0.0, 'lecture', 'BSIT', 1, '2024 Revised', 1),
+            (1, 'PATHFIT 1', 'Movement Competency Training', 2, 2.0, 0.0, 'pe', 'BSIT', 1, '2024 Revised', 1),
+            (1, 'NSTP 1', 'National Service Training Program 1', 3, 3.0, 0.0, 'special', 'BSIT', 1, '2024 Revised', 1),
+            (1, 'COMP 104', 'Data Structures and Algorithms', 3, 2.0, 3.0, 'lecture', 'BSIT', 2, '2024 Revised', 1),
+            (1, 'IT 103', 'Networking 1', 3, 2.0, 3.0, 'lecture', 'BSIT', 2, '2024 Revised', 1),
+            (1, 'COMP 101', 'Introduction to Computing', 3, 2.0, 3.0, 'lecture', 'BSCS', 1, '2024 Revised', 1),
+            (1, 'CS 101', 'Discrete Structures 1', 3, 3.0, 0.0, 'lecture', 'BSCS', 1, '2024 Revised', 1),
+            (1, 'THC 101', 'Macro Perspective of Tourism and Hospitality', 3, 3.0, 0.0, 'lecture', 'BSTM', 1, '2024 Revised', 1),
+            (1, 'THC 104', 'Philippine Culture and Tourism Geography', 3, 3.0, 0.0, 'lecture', 'BSTM', 1, '2024 Revised', 1),
+            (1, 'HRS 101', 'Cookery', 3, 1.0, 6.0, 'lab', 'HRS', 1, '2024 Revised', 1),
+            (1, 'HRS 102', 'Food and Beverage Services', 3, 2.0, 3.0, 'lab', 'HRS', 1, '2024 Revised', 1);
         ");
     }
 
     $db->exec("CREATE TABLE IF NOT EXISTS schedule_snapshots (term_id INT PRIMARY KEY, saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, schedule_json MEDIUMTEXT NOT NULL)");
     if (!$db->query("SHOW COLUMNS FROM school_terms LIKE 'schedule_version'")->fetch()) {
         $db->exec("ALTER TABLE school_terms ADD COLUMN schedule_version INT NOT NULL DEFAULT 0");
+    }
+    // FCC certificates: each covers one or more subject areas (departments), and teachers can hold several
+    $db->exec("CREATE TABLE IF NOT EXISTS fcc_certificates (cert_id INT AUTO_INCREMENT PRIMARY KEY, cert_name VARCHAR(60) NOT NULL UNIQUE, areas_json TEXT NOT NULL)");
+    $db->exec("CREATE TABLE IF NOT EXISTS faculty_certificates (user_id INT NOT NULL, cert_id INT NOT NULL, PRIMARY KEY (user_id, cert_id), FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE, FOREIGN KEY (cert_id) REFERENCES fcc_certificates(cert_id) ON DELETE CASCADE)");
+    // Tourism is a subject area of its own
+    $db->exec("INSERT IGNORE INTO departments (department_name) VALUES ('Tourism')");
+    // Start with one certificate per subject area, which the admin can rename, widen or delete
+    if ((int)$db->query("SELECT COUNT(*) FROM fcc_certificates")->fetchColumn() === 0) {
+        $seedCert = $db->prepare("INSERT IGNORE INTO fcc_certificates (cert_name, areas_json) VALUES (?, ?)");
+        foreach ($db->query("SELECT department_name FROM departments ORDER BY department_name")->fetchAll(PDO::FETCH_COLUMN) as $dept) {
+            $seedCert->execute([mb_substr("FCC - {$dept}", 0, 60), json_encode([$dept])]);
+        }
+    }
+    // Single-subject Main Qualifications are replaced by FCC certificates. Once, each teacher gets the certificate for
+    // every area their subjects belong to, creating "FCC - {area}" when no single-area certificate exists. A subject
+    // missing from the catalog joins it under the teacher's department first. The old list is kept, unused.
+    if (!$db->query("SELECT COUNT(*) FROM app_settings WHERE setting_key = 'quals_to_certificates'")->fetchColumn()) {
+        $db->exec("INSERT IGNORE INTO subject_catalog (subject_code, subject_title, department, it_only, units)
+            SELECT q.code, COALESCE(MAX(t.subject_name), q.code), MIN(d.department_name), MIN(d.department_name) = 'IT / CS', COALESCE(MAX(t.units), 3)
+            FROM (SELECT DISTINCT q.user_id, UPPER(q.subject_code) AS code FROM faculty_qualifications q) q
+            JOIN users u ON u.user_id = q.user_id
+            JOIN departments d ON d.department_name = u.subject_role
+            LEFT JOIN term_subjects t ON UPPER(t.subject_code) = q.code
+            WHERE NOT EXISTS (SELECT 1 FROM subject_catalog c WHERE UPPER(c.subject_code) = q.code)
+            GROUP BY q.code");
+        $certForArea = [];
+        foreach ($db->query("SELECT cert_id, cert_name, areas_json FROM fcc_certificates ORDER BY cert_id")->fetchAll() as $cert) {
+            $areas = json_decode((string)$cert['areas_json'], true) ?: [];
+            if (count($areas) === 1 && !isset($certForArea[$areas[0]])) $certForArea[$areas[0]] = (int)$cert['cert_id'];
+        }
+        $newCert = $db->prepare("INSERT INTO fcc_certificates (cert_name, areas_json) VALUES (?, ?)");
+        $giveCert = $db->prepare("INSERT IGNORE INTO faculty_certificates (user_id, cert_id) VALUES (?, ?)");
+        foreach ($db->query("SELECT DISTINCT q.user_id, c.department FROM faculty_qualifications q JOIN subject_catalog c ON UPPER(c.subject_code) = UPPER(q.subject_code)")->fetchAll() as $row) {
+            $area = $row['department'];
+            if (!isset($certForArea[$area])) {
+                // A certificate named like that but covering other areas keeps its name; this one says which area it covers
+                $name = mb_substr("FCC - {$area}", 0, 60);
+                $taken = $db->prepare("SELECT COUNT(*) FROM fcc_certificates WHERE cert_name = ?");
+                $taken->execute([$name]);
+                if ((int)$taken->fetchColumn()) $name = mb_substr("FCC - {$area} only", 0, 60);
+                $newCert->execute([$name, json_encode([$area])]);
+                $certForArea[$area] = (int)$db->lastInsertId();
+            }
+            $giveCert->execute([(int)$row['user_id'], $certForArea[$area]]);
+        }
+        $db->exec("INSERT INTO app_settings (setting_key, setting_value) VALUES ('quals_to_certificates', '1')");
+    }
+    // Programs and subject areas follow STI's current offerings. Once: old areas are renamed in the catalog,
+    // certificates and teacher departments; PE and NSTP subjects get their own area; every area gets an
+    // "FCC - {area}" certificate; and the standard subjects are added to the catalog. Nothing is deleted.
+    if (!$db->query("SELECT COUNT(*) FROM app_settings WHERE setting_key = 'areas_2026'")->fetchColumn()) {
+        $areas = ['IT / Computing', 'Tourism', 'Hospitality & Culinary', 'Business & Entrepreneurship', 'Arts & Social Sciences', 'General Education', 'PE & NSTP'];
+        $renames = ['IT / CS' => 'IT / Computing', 'IT' => 'IT / Computing', 'Engineering' => 'IT / Computing', 'Hospitality' => 'Hospitality & Culinary', 'Business Admin' => 'Business & Entrepreneurship'];
+        $addDept = $db->prepare("INSERT IGNORE INTO departments (department_name) VALUES (?)");
+        foreach ($areas as $area) $addDept->execute([$area]);
+        foreach ($renames as $old => $new) {
+            $db->prepare("UPDATE subject_catalog SET department = ? WHERE department = ?")->execute([$new, $old]);
+            $db->prepare("UPDATE users SET subject_role = ? WHERE subject_role = ?")->execute([$new, $old]);
+            $db->prepare("DELETE FROM departments WHERE department_name = ?")->execute([$old]);
+        }
+        $db->exec("UPDATE subject_catalog SET department = 'PE & NSTP' WHERE department = 'General Education'
+            AND (UPPER(subject_code) LIKE 'PE %' OR UPPER(subject_code) LIKE 'PE%' OR UPPER(subject_code) LIKE 'NSTP%' OR UPPER(subject_code) LIKE 'PATHFIT%')");
+        // Certificates take the new area names; "FCC - IT / CS" becomes "FCC - IT / Computing" when that name is free
+        $nameTaken = $db->prepare("SELECT COUNT(*) FROM fcc_certificates WHERE cert_name = ? AND cert_id <> ?");
+        $updCert = $db->prepare("UPDATE fcc_certificates SET cert_name = ?, areas_json = ? WHERE cert_id = ?");
+        foreach ($db->query("SELECT cert_id, cert_name, areas_json FROM fcc_certificates ORDER BY cert_id")->fetchAll() as $cert) {
+            $certAreas = array_values(array_unique(array_map(fn($a) => $renames[$a] ?? $a, json_decode((string)$cert['areas_json'], true) ?: [])));
+            $name = $cert['cert_name'];
+            if (preg_match('/^FCC - (.+)$/', $name, $m) && isset($renames[$m[1]])) {
+                $candidate = mb_substr('FCC - ' . $renames[$m[1]], 0, 60);
+                $nameTaken->execute([$candidate, (int)$cert['cert_id']]);
+                if (!(int)$nameTaken->fetchColumn()) $name = $candidate;
+            }
+            $updCert->execute([$name, json_encode($certAreas), (int)$cert['cert_id']]);
+        }
+        // Two certificates now covering the same single area become one; holders keep their coverage
+        $singles = [];
+        foreach ($db->query("SELECT cert_id, cert_name, areas_json FROM fcc_certificates ORDER BY cert_id")->fetchAll() as $cert) {
+            $certAreas = json_decode((string)$cert['areas_json'], true) ?: [];
+            if (count($certAreas) === 1) $singles[$certAreas[0]][] = $cert;
+        }
+        $moveHolders = $db->prepare("INSERT IGNORE INTO faculty_certificates (user_id, cert_id) SELECT user_id, ? FROM faculty_certificates WHERE cert_id = ?");
+        $dropCert = $db->prepare("DELETE FROM fcc_certificates WHERE cert_id = ?");
+        $certForArea = [];
+        foreach ($singles as $area => $list) {
+            usort($list, fn($a, $b) => (($b['cert_name'] === "FCC - {$area}") <=> ($a['cert_name'] === "FCC - {$area}")) ?: ((int)$a['cert_id'] <=> (int)$b['cert_id']));
+            $keep = (int)array_shift($list)['cert_id'];
+            foreach ($list as $dup) {
+                $moveHolders->execute([$keep, (int)$dup['cert_id']]);
+                $dropCert->execute([(int)$dup['cert_id']]);
+            }
+            $certForArea[$area] = $keep;
+        }
+        $newCert = $db->prepare("INSERT INTO fcc_certificates (cert_name, areas_json) VALUES (?, ?)");
+        foreach ($areas as $area) {
+            if (isset($certForArea[$area])) continue;
+            $name = mb_substr("FCC - {$area}", 0, 60);
+            $nameTaken->execute([$name, 0]);
+            if ((int)$nameTaken->fetchColumn()) $name = mb_substr("FCC - {$area} only", 0, 60);
+            $newCert->execute([$name, json_encode([$area])]);
+            $certForArea[$area] = (int)$db->lastInsertId();
+        }
+        // PE and NSTP moved out of General Education, so General Education holders also get the PE & NSTP certificate
+        $giveCert = $db->prepare("INSERT IGNORE INTO faculty_certificates (user_id, cert_id) VALUES (?, ?)");
+        foreach ($db->query("SELECT fc.user_id, c.areas_json FROM faculty_certificates fc JOIN fcc_certificates c ON c.cert_id = fc.cert_id")->fetchAll() as $held) {
+            if (in_array('General Education', json_decode((string)$held['areas_json'], true) ?: [], true)) {
+                $giveCert->execute([(int)$held['user_id'], $certForArea['PE & NSTP']]);
+            }
+        }
+        // The standard subjects for STI's programs; a code already in the catalog is left as it is
+        $addSubject = $db->prepare("INSERT IGNORE INTO subject_catalog (subject_code, subject_title, department, it_only, units) VALUES (?, ?, ?, 0, ?)");
+        foreach ([
+            ['GE 1', 'Understanding the Self', 'General Education', 3],
+            ['GE 2', 'Readings in Philippine History', 'General Education', 3],
+            ['GE 3', 'The Contemporary World', 'General Education', 3],
+            ['GE 4', 'Mathematics in the Modern World', 'General Education', 3],
+            ['GE 5', 'Purposive Communication', 'General Education', 3],
+            ['GE 6', 'Art Appreciation', 'General Education', 3],
+            ['GE 7', 'Science, Technology and Society', 'General Education', 3],
+            ['GE 8', 'Ethics', 'General Education', 3],
+            ['GE 9', 'Life and Works of Rizal', 'General Education', 3],
+            ['PATHFIT 1', 'Movement Competency Training', 'PE & NSTP', 2],
+            ['PATHFIT 2', 'Exercise-based Fitness Activities', 'PE & NSTP', 2],
+            ['PATHFIT 3', 'Sports and Dance', 'PE & NSTP', 2],
+            ['PATHFIT 4', 'Outdoor and Adventure Activities', 'PE & NSTP', 2],
+            ['NSTP 1', 'National Service Training Program 1', 'PE & NSTP', 3],
+            ['NSTP 2', 'National Service Training Program 2', 'PE & NSTP', 3],
+            ['COMP 101', 'Introduction to Computing', 'IT / Computing', 3],
+            ['COMP 102', 'Computer Programming 1', 'IT / Computing', 3],
+            ['COMP 103', 'Computer Programming 2', 'IT / Computing', 3],
+            ['COMP 104', 'Data Structures and Algorithms', 'IT / Computing', 3],
+            ['COMP 105', 'Information Management', 'IT / Computing', 3],
+            ['COMP 106', 'Applications Development and Emerging Technologies', 'IT / Computing', 3],
+            ['IT 102', 'Human Computer Interaction', 'IT / Computing', 3],
+            ['IT 103', 'Networking 1', 'IT / Computing', 3],
+            ['IT 104', 'Networking 2', 'IT / Computing', 3],
+            ['IT 105', 'Web Systems and Technologies', 'IT / Computing', 3],
+            ['IT 106', 'Integrative Programming and Technologies', 'IT / Computing', 3],
+            ['IT 107', 'Information Assurance and Security', 'IT / Computing', 3],
+            ['IT 108', 'Systems Integration and Architecture', 'IT / Computing', 3],
+            ['IT 109', 'Systems Administration and Maintenance', 'IT / Computing', 3],
+            ['IT 110', 'Mobile Application Development', 'IT / Computing', 3],
+            ['IT 111', 'Cloud Computing', 'IT / Computing', 3],
+            ['IT 112', 'Capstone Project 1', 'IT / Computing', 3],
+            ['IT 113', 'Capstone Project 2', 'IT / Computing', 3],
+            ['CS 101', 'Discrete Structures 1', 'IT / Computing', 3],
+            ['CS 102', 'Discrete Structures 2', 'IT / Computing', 3],
+            ['CS 103', 'Object-Oriented Programming', 'IT / Computing', 3],
+            ['CS 104', 'Algorithms and Complexity', 'IT / Computing', 3],
+            ['CS 105', 'Automata Theory and Formal Languages', 'IT / Computing', 3],
+            ['CS 106', 'Programming Languages', 'IT / Computing', 3],
+            ['CS 107', 'Software Engineering 1', 'IT / Computing', 3],
+            ['CS 108', 'Software Engineering 2', 'IT / Computing', 3],
+            ['CS 109', 'Operating Systems', 'IT / Computing', 3],
+            ['CS 110', 'Architecture and Organization', 'IT / Computing', 3],
+            ['CS 111', 'Networks and Communications', 'IT / Computing', 3],
+            ['CS 112', 'Machine Learning', 'IT / Computing', 3],
+            ['CS 113', 'Data Science and Analytics', 'IT / Computing', 3],
+            ['CS 114', 'Thesis 1', 'IT / Computing', 3],
+            ['CS 115', 'Thesis 2', 'IT / Computing', 3],
+            ['SCPT 101', 'Computer Systems Servicing', 'IT / Computing', 3],
+            ['SCPT 102', 'Computer Programming (SHS) 1', 'IT / Computing', 3],
+            ['SCPT 103', 'Computer Programming (SHS) 2', 'IT / Computing', 3],
+            ['SCPT 104', 'Web Development', 'IT / Computing', 3],
+            ['THC 101', 'Macro Perspective of Tourism and Hospitality', 'Tourism', 3],
+            ['THC 102', 'Risk Management as Applied to Safety, Security and Sanitation', 'Tourism', 3],
+            ['THC 103', 'Quality Service Management in Tourism and Hospitality', 'Tourism', 3],
+            ['THC 104', 'Philippine Culture and Tourism Geography', 'Tourism', 3],
+            ['THC 105', 'Micro Perspective of Tourism and Hospitality', 'Tourism', 3],
+            ['THC 106', 'Tourism and Hospitality Marketing', 'Tourism', 3],
+            ['THC 107', 'Legal Aspects in Tourism and Hospitality', 'Tourism', 3],
+            ['THC 108', 'Multicultural Diversity in the Workplace', 'Tourism', 3],
+            ['THC 109', 'Entrepreneurship in Tourism and Hospitality', 'Tourism', 3],
+            ['TPC 101', 'Tour and Travel Management', 'Tourism', 3],
+            ['TPC 102', 'Sustainable Tourism', 'Tourism', 3],
+            ['TPC 103', 'Global Culture and Tourism Geography', 'Tourism', 3],
+            ['TPC 104', 'Transportation Management', 'Tourism', 3],
+            ['TPC 105', 'Tourism Policy Planning and Development', 'Tourism', 3],
+            ['TPC 106', 'Applied Business Tools and Technologies (GDS)', 'Tourism', 3],
+            ['TPC 107', 'Introduction to MICE', 'Tourism', 3],
+            ['TPC 108', 'Airline Management and Operations', 'Tourism', 3],
+            ['TPC 109', 'Research in Tourism', 'Tourism', 3],
+            ['HTTO 101', 'Travel and Tour Services', 'Tourism', 3],
+            ['HTTO 102', 'Local Guiding Services', 'Tourism', 3],
+            ['HTTO 103', 'Front Office Services (SHS)', 'Tourism', 3],
+            ['HTTO 104', 'Events Management', 'Tourism', 3],
+            ['HRS 101', 'Cookery', 'Hospitality & Culinary', 3],
+            ['HRS 102', 'Food and Beverage Services', 'Hospitality & Culinary', 3],
+            ['HRS 103', 'Bread and Pastry Production', 'Hospitality & Culinary', 3],
+            ['HRS 104', 'Housekeeping', 'Hospitality & Culinary', 3],
+            ['HRS 105', 'Front Office Services', 'Hospitality & Culinary', 3],
+            ['HRS 106', 'Customer Communication Services', 'Hospitality & Culinary', 3],
+            ['HTCUA 101', 'Kitchen Safety and Sanitation', 'Hospitality & Culinary', 3],
+            ['HTCUA 102', 'Culinary Cookery', 'Hospitality & Culinary', 3],
+            ['HTCUA 103', 'Baking and Pastry', 'Hospitality & Culinary', 3],
+            ['HTCUA 104', 'Food and Beverage Service (SHS)', 'Hospitality & Culinary', 3],
+            ['BE 101', 'Fundamentals of Accountancy, Business and Management 1', 'Business & Entrepreneurship', 3],
+            ['BE 102', 'Fundamentals of Accountancy, Business and Management 2', 'Business & Entrepreneurship', 3],
+            ['BE 103', 'Business Finance', 'Business & Entrepreneurship', 3],
+            ['BE 104', 'Principles of Marketing', 'Business & Entrepreneurship', 3],
+            ['BE 105', 'Applied Economics', 'Business & Entrepreneurship', 3],
+            ['BE 106', 'Business Ethics and Social Responsibility', 'Business & Entrepreneurship', 3],
+            ['BE 107', 'Entrepreneurship', 'Business & Entrepreneurship', 3],
+            ['ASSH 101', 'Creative Writing', 'Arts & Social Sciences', 3],
+            ['ASSH 102', 'Malikhaing Pagsulat', 'Arts & Social Sciences', 3],
+            ['ASSH 103', 'Introduction to the Philosophy of the Human Person', 'Arts & Social Sciences', 3],
+            ['ASSH 104', 'Disciplines and Ideas in the Social Sciences', 'Arts & Social Sciences', 3],
+            ['ASSH 105', 'Philippine Politics and Governance', 'Arts & Social Sciences', 3],
+            ['ASSH 106', 'Community Engagement, Solidarity and Citizenship', 'Arts & Social Sciences', 3],
+            ['ASSH 107', 'Trends, Networks and Critical Thinking', 'Arts & Social Sciences', 3],
+            ['SHS 101', 'Effective Communication', 'General Education', 3],
+            ['SHS 102', 'General Mathematics', 'General Education', 3],
+            ['SHS 103', 'General Science', 'General Education', 3],
+            ['SHS 104', 'Life and Career Skills', 'General Education', 3],
+            ['SHS 105', 'Pag-aaral ng Kasaysayan at Lipunang Pilipino', 'General Education', 3],
+            ['SHS 106', 'Physical Education and Health', 'PE & NSTP', 2]
+        ] as [$code, $title, $area, $units]) {
+            $addSubject->execute([$code, $title, $area, $units]);
+        }
+        $db->exec("INSERT INTO app_settings (setting_key, setting_value) VALUES ('areas_2026', '1')");
+    }
+    // Catalog subjects are for College, SHS or both. Once: the column is added (everything starts as both)
+    // and the standard subjects get their usual level.
+    if (!$db->query("SHOW COLUMNS FROM subject_catalog LIKE 'level'")->fetch()) {
+        $db->exec("ALTER TABLE subject_catalog ADD COLUMN level VARCHAR(10) NOT NULL DEFAULT 'both'");
+    }
+    if (!$db->query("SELECT COUNT(*) FROM app_settings WHERE setting_key = 'catalog_levels'")->fetchColumn()) {
+        $setLevel = $db->prepare("UPDATE subject_catalog SET level = ? WHERE subject_code = ? AND level = 'both'");
+        foreach ([
+            'GE 1' => 'tertiary',
+            'GE 2' => 'tertiary',
+            'GE 3' => 'tertiary',
+            'GE 4' => 'tertiary',
+            'GE 5' => 'tertiary',
+            'GE 6' => 'tertiary',
+            'GE 7' => 'tertiary',
+            'GE 8' => 'tertiary',
+            'GE 9' => 'tertiary',
+            'PATHFIT 1' => 'tertiary',
+            'PATHFIT 2' => 'tertiary',
+            'PATHFIT 3' => 'tertiary',
+            'PATHFIT 4' => 'tertiary',
+            'NSTP 1' => 'tertiary',
+            'NSTP 2' => 'tertiary',
+            'COMP 101' => 'tertiary',
+            'COMP 102' => 'tertiary',
+            'COMP 103' => 'tertiary',
+            'COMP 104' => 'tertiary',
+            'COMP 105' => 'tertiary',
+            'COMP 106' => 'tertiary',
+            'IT 102' => 'tertiary',
+            'IT 103' => 'tertiary',
+            'IT 104' => 'tertiary',
+            'IT 105' => 'tertiary',
+            'IT 106' => 'tertiary',
+            'IT 107' => 'tertiary',
+            'IT 108' => 'tertiary',
+            'IT 109' => 'tertiary',
+            'IT 110' => 'tertiary',
+            'IT 111' => 'tertiary',
+            'IT 112' => 'tertiary',
+            'IT 113' => 'tertiary',
+            'CS 101' => 'tertiary',
+            'CS 102' => 'tertiary',
+            'CS 103' => 'tertiary',
+            'CS 104' => 'tertiary',
+            'CS 105' => 'tertiary',
+            'CS 106' => 'tertiary',
+            'CS 107' => 'tertiary',
+            'CS 108' => 'tertiary',
+            'CS 109' => 'tertiary',
+            'CS 110' => 'tertiary',
+            'CS 111' => 'tertiary',
+            'CS 112' => 'tertiary',
+            'CS 113' => 'tertiary',
+            'CS 114' => 'tertiary',
+            'CS 115' => 'tertiary',
+            'SCPT 101' => 'shs',
+            'SCPT 102' => 'shs',
+            'SCPT 103' => 'shs',
+            'SCPT 104' => 'shs',
+            'THC 101' => 'tertiary',
+            'THC 102' => 'tertiary',
+            'THC 103' => 'tertiary',
+            'THC 104' => 'tertiary',
+            'THC 105' => 'tertiary',
+            'THC 106' => 'tertiary',
+            'THC 107' => 'tertiary',
+            'THC 108' => 'tertiary',
+            'THC 109' => 'tertiary',
+            'TPC 101' => 'tertiary',
+            'TPC 102' => 'tertiary',
+            'TPC 103' => 'tertiary',
+            'TPC 104' => 'tertiary',
+            'TPC 105' => 'tertiary',
+            'TPC 106' => 'tertiary',
+            'TPC 107' => 'tertiary',
+            'TPC 108' => 'tertiary',
+            'TPC 109' => 'tertiary',
+            'HTTO 101' => 'shs',
+            'HTTO 102' => 'shs',
+            'HTTO 103' => 'shs',
+            'HTTO 104' => 'shs',
+            'HRS 101' => 'tertiary',
+            'HRS 102' => 'tertiary',
+            'HRS 103' => 'tertiary',
+            'HRS 104' => 'tertiary',
+            'HRS 105' => 'tertiary',
+            'HRS 106' => 'tertiary',
+            'HTCUA 101' => 'shs',
+            'HTCUA 102' => 'shs',
+            'HTCUA 103' => 'shs',
+            'HTCUA 104' => 'shs',
+            'BE 101' => 'shs',
+            'BE 102' => 'shs',
+            'BE 103' => 'shs',
+            'BE 104' => 'shs',
+            'BE 105' => 'shs',
+            'BE 106' => 'shs',
+            'BE 107' => 'shs',
+            'ASSH 101' => 'shs',
+            'ASSH 102' => 'shs',
+            'ASSH 103' => 'shs',
+            'ASSH 104' => 'shs',
+            'ASSH 105' => 'shs',
+            'ASSH 106' => 'shs',
+            'ASSH 107' => 'shs',
+            'SHS 101' => 'shs',
+            'SHS 102' => 'shs',
+            'SHS 103' => 'shs',
+            'SHS 104' => 'shs',
+            'SHS 105' => 'shs',
+            'SHS 106' => 'shs'
+        ] as $code => $level) {
+            $setLevel->execute([$level, $code]);
+        }
+        $db->exec("INSERT INTO app_settings (setting_key, setting_value) VALUES ('catalog_levels', '1')");
+    }
+    // How many of a subject's units are lab units; NULL for subjects saved before the split
+    if (!$db->query("SHOW COLUMNS FROM term_subjects LIKE 'lab_units'")->fetch()) {
+        $db->exec("ALTER TABLE term_subjects ADD COLUMN lab_units TINYINT DEFAULT NULL AFTER units");
+    }
+    // A section's preferred room, which the generator tries first for its classes
+    if (!$db->query("SHOW COLUMNS FROM academic_sections LIKE 'home_room'")->fetch()) {
+        $db->exec("ALTER TABLE academic_sections ADD COLUMN home_room VARCHAR(50) DEFAULT NULL");
+    }
+    // Rooms & Instructors: the instructor chosen for each of a section's subjects, as {"SUBJECT CODE": "email"}
+    if (!$db->query("SHOW COLUMNS FROM academic_sections LIKE 'subject_teachers'")->fetch()) {
+        $db->exec("ALTER TABLE academic_sections ADD COLUMN subject_teachers TEXT DEFAULT NULL");
+    }
+    // Each term is college (tertiary) or Senior High School, so one school year holds both kinds of terms.
+    // Terms take the level their school year used to have.
+    if (!$db->query("SHOW COLUMNS FROM school_terms LIKE 'level'")->fetch()) {
+        $db->exec("ALTER TABLE school_terms ADD COLUMN level VARCHAR(10) NOT NULL DEFAULT 'tertiary' AFTER term_name");
+        if ($db->query("SHOW COLUMNS FROM school_years LIKE 'level'")->fetch()) {
+            $db->exec("UPDATE school_terms t JOIN school_years y ON y.year_id = t.year_id SET t.level = y.level");
+        }
+    }
+    // A year code that existed once for college and once for SHS becomes one year: the terms move to the
+    // older record, which stays active if either was, and the emptied copy is removed
+    foreach ($db->query("SELECT year_code, MIN(year_id) AS keep_id, MAX(is_active) AS active FROM school_years GROUP BY year_code HAVING COUNT(*) > 1")->fetchAll() as $dup) {
+        $db->prepare("UPDATE school_terms t JOIN school_years y ON y.year_id = t.year_id SET t.year_id = ? WHERE y.year_code = ? AND y.year_id <> ?")
+            ->execute([(int)$dup['keep_id'], $dup['year_code'], (int)$dup['keep_id']]);
+        $db->prepare("UPDATE school_years SET is_active = ? WHERE year_id = ?")->execute([(int)$dup['active'], (int)$dup['keep_id']]);
+        $db->prepare("DELETE FROM school_years WHERE year_code = ? AND year_id <> ?")->execute([$dup['year_code'], (int)$dup['keep_id']]);
+    }
+    if ($db->query("SHOW INDEX FROM school_years WHERE Key_name = 'uniq_year_level'")->fetch()) {
+        $db->exec("ALTER TABLE school_years DROP INDEX uniq_year_level");
+    }
+    if (!$db->query("SHOW INDEX FROM school_years WHERE Key_name IN ('uniq_year_code', 'year_code')")->fetch()) {
+        $db->exec("ALTER TABLE school_years ADD UNIQUE KEY uniq_year_code (year_code)");
+    }
+    // Years made before terms had levels only have one level's terms. Once, each year missing a level gets
+    // that level's standard terms (SHS 1st, 2nd, 3rd Term and Summer; College 1st Sem, 2nd Sem and Summer). It is recorded as
+    // done, so terms deleted later on purpose don't come back.
+    if (!$db->query("SELECT COUNT(*) FROM app_settings WHERE setting_key = 'term_levels_filled'")->fetchColumn()) {
+        $standardTerms = [
+            'shs' => [['1st Term', '0-08-16', '0-11-14'], ['2nd Term', '0-11-23', '1-02-26'], ['3rd Term', '1-03-08', '1-05-28'], ['Summer', '1-06-07', '1-07-23']],
+            'tertiary' => [['1st Sem', '0-08-16', '0-12-17'], ['2nd Sem', '1-01-10', '1-05-26'], ['Summer', '1-06-07', '1-07-23']],
+        ];
+        $hasLevel = $db->prepare("SELECT COUNT(*) FROM school_terms WHERE year_id = ? AND level = ?");
+        $addTerm = $db->prepare("INSERT INTO school_terms (year_id, term_name, level, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, 'draft', 0)");
+        // A date like "1-02-26" means 26 February of the year's second calendar year
+        $dateIn = fn(int $startYear, string $spec) => ($startYear + (int)$spec[0]) . substr($spec, 1);
+        foreach ($db->query("SELECT year_id, year_code FROM school_years")->fetchAll() as $year) {
+            $startYear = preg_match('/(20\d{2})/', $year['year_code'], $m) ? (int)$m[1] : (int)date('Y');
+            foreach ($standardTerms as $level => $list) {
+                $hasLevel->execute([(int)$year['year_id'], $level]);
+                if ((int)$hasLevel->fetchColumn() > 0) continue;
+                foreach ($list as [$name, $start, $end]) {
+                    $addTerm->execute([(int)$year['year_id'], $name, $level, $dateIn($startYear, $start), $dateIn($startYear, $end)]);
+                }
+            }
+        }
+        $db->exec("INSERT INTO app_settings (setting_key, setting_value) VALUES ('term_levels_filled', '1')");
+    }
+    // Terms are named freely, such as "3rd Term", instead of a fixed list
+    $termNameColumn = $db->query("SHOW COLUMNS FROM school_terms LIKE 'term_name'")->fetch();
+    if ($termNameColumn && stripos($termNameColumn['Type'], 'enum') === 0) {
+        $db->exec("ALTER TABLE school_terms MODIFY COLUMN term_name VARCHAR(30) NOT NULL");
     }
     if (!$db->query("SHOW COLUMNS FROM subject_catalog LIKE 'catalog_id'")->fetch()) {
         $db->exec("ALTER TABLE subject_catalog ADD COLUMN catalog_id INT NOT NULL AUTO_INCREMENT UNIQUE");
@@ -401,7 +931,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $subjects = $db->query("SELECT * FROM term_subjects ORDER BY year_level ASC, subject_code ASC")->fetchAll();
             $sections = $db->query("SELECT * FROM academic_sections ORDER BY year_level ASC, section_code ASC")->fetchAll();
             $rooms = $db->query("SELECT room_id, room_name_number, room_type, capacity, floor_level, current_status FROM classrooms ORDER BY floor_level, room_name_number")->fetchAll();
-            $faculty = $db->query("SELECT user_id, first_name, last_name, email, role, subject_role, employment_status, available_days, available_shifts, max_load FROM users WHERE role IN ('faculty', 'program-head')")->fetchAll();
+            $faculty = $db->query("SELECT user_id, first_name, last_name, email, role, subject_role, employment_status, available_days, available_shifts, max_load, min_load, teaching_level, seasoned FROM users WHERE role IN ('faculty', 'program-head')")->fetchAll();
             $schedules = $db->query("
                 SELECT s.*, c.room_name_number, CONCAT(u.first_name, ' ', u.last_name) AS faculty_name
                 FROM schedules s
@@ -412,13 +942,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $initialized = isStatePublished($db);
             $catalog = $db->query("SELECT * FROM subject_catalog ORDER BY subject_code")->fetchAll();
             $departments = $db->query("SELECT department_name FROM departments ORDER BY department_name")->fetchAll(PDO::FETCH_COLUMN);
-            $qualifications = $db->query("
-                SELECT u.email, q.subject_code
-                FROM faculty_qualifications q
-                JOIN users u ON q.user_id = u.user_id
-                ORDER BY q.subject_code
-            ")->fetchAll();
+
             $snapshots = $db->query("SELECT term_id, saved_at FROM schedule_snapshots")->fetchAll();
+            try {
+                $certificates = $db->query("SELECT cert_id, cert_name, areas_json FROM fcc_certificates ORDER BY cert_name")->fetchAll();
+                $facultyCertificates = $db->query("SELECT u.email, fc.cert_id FROM faculty_certificates fc JOIN users u ON u.user_id = fc.user_id")->fetchAll();
+            } catch (Exception $e) {
+                $certificates = [];
+                $facultyCertificates = [];
+            }
             try {
                 $subjectSets = $db->query("SELECT set_id, set_name, items_json FROM subject_sets ORDER BY set_name")->fetchAll();
             } catch (Exception $e) {
@@ -438,9 +970,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     'schedules' => $schedules,
                     'catalog' => $catalog,
                     'departments' => $departments,
-                    'qualifications' => $qualifications,
                     'snapshots' => $snapshots,
-                    'subjectSets' => $subjectSets
+                    'subjectSets' => $subjectSets,
+                    'certificates' => $certificates,
+                    'facultyCertificates' => $facultyCertificates
                 ]
             ]);
         } catch (Exception $e) {
@@ -470,7 +1003,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $items = is_array($input['schedules'] ?? null) ? $input['schedules'] : [];
         $catalog = is_array($input['catalog'] ?? null) ? $input['catalog'] : [];
         $departments = is_array($input['departments'] ?? null) ? $input['departments'] : [];
-        $qualifications = is_array($input['qualifications'] ?? null) ? $input['qualifications'] : [];
+        $certificates = is_array($input['certificates'] ?? null) ? $input['certificates'] : [];
         $subjectSets = [];
         foreach (is_array($input['subject_sets'] ?? null) ? $input['subject_sets'] : [] as $set) {
             $setName = trim((string)($set['name'] ?? ''));
@@ -488,7 +1021,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         $db->beginTransaction();
         try {
-            foreach (['schedules', 'academic_sections', 'term_subjects', 'school_terms', 'school_years', 'faculty_qualifications', 'subject_catalog', 'departments'] as $table) {
+            foreach (['schedules', 'academic_sections', 'term_subjects', 'school_terms', 'school_years', 'subject_catalog', 'departments'] as $table) {
                 $db->exec("DELETE FROM {$table}");
             }
 
@@ -497,41 +1030,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 $insDept->execute([$d]);
             }
 
-            $insCatalog = $db->prepare("INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units) VALUES (?, ?, ?, ?, ?)");
+            $insCatalog = $db->prepare("INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units, level) VALUES (?, ?, ?, ?, ?, ?)");
             foreach ($catalog as $c) {
-                $insCatalog->execute([strtoupper(trim($c['code'])), $c['title'], $c['dept'], !empty($c['itOnly']) ? 1 : 0, (int)($c['units'] ?? 3)]);
+                $insCatalog->execute([strtoupper(trim($c['code'])), $c['title'], $c['dept'], !empty($c['itOnly']) ? 1 : 0, (int)($c['units'] ?? 3), in_array($c['level'] ?? '', ['tertiary', 'shs', 'both'], true) ? $c['level'] : 'both']);
             }
 
-            $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ?");
-            foreach ($qualifications as $q) {
-                $findUser->execute([$q['email'] ?? '']);
-                $userId = (int)$findUser->fetchColumn();
-                if ($userId) {
-                    insertQualifications($db, $userId, is_array($q['subjects'] ?? null) ? $q['subjects'] : []);
-                }
-            }
 
             $insYear = $db->prepare("INSERT INTO school_years (year_id, year_code, is_active) VALUES (?, ?, ?)");
             foreach ($years as $y) {
                 $insYear->execute([(int)$y['id'], $y['yearCode'], !empty($y['isActive']) ? 1 : 0]);
             }
 
-            $insTerm = $db->prepare("INSERT INTO school_terms (term_id, year_id, term_name, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $insTerm = $db->prepare("INSERT INTO school_terms (term_id, year_id, term_name, level, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
             foreach ($terms as $t) {
-                $insTerm->execute([(int)$t['id'], (int)$t['yearId'], $t['termName'], $t['startDate'], $t['endDate'], $t['status'] ?? 'draft', !empty($t['isActive']) ? 1 : 0]);
+                $insTerm->execute([(int)$t['id'], (int)$t['yearId'], $t['termName'], ($t['level'] ?? '') === 'shs' ? 'shs' : 'tertiary', $t['startDate'], $t['endDate'], $t['status'] ?? 'draft', !empty($t['isActive']) ? 1 : 0]);
             }
 
-            $insSubject = $db->prepare("INSERT INTO term_subjects (subject_id, term_id, subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $insSubject = $db->prepare("INSERT INTO term_subjects (subject_id, term_id, subject_code, subject_name, units, lab_units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             foreach ($subjects as $s) {
-                $insSubject->execute([(int)$s['id'], (int)$s['termId'], $s['code'], $s['name'], (int)($s['units'] ?? 3), (float)($s['lecHours'] ?? 3), (float)($s['labHours'] ?? 0), $s['type'] ?? 'lecture', $s['program'] ?? 'BSIT', (int)($s['year'] ?? 1), $s['curriculum'] ?? '2024 Revised', ($s['isIncluded'] ?? true) ? 1 : 0]);
+                $insSubject->execute([(int)$s['id'], (int)$s['termId'], $s['code'], $s['name'], (int)($s['units'] ?? 3), isset($s['labUnits']) && $s['labUnits'] !== '' ? min(max((int)$s['labUnits'], 0), (int)($s['units'] ?? 3)) : null, (float)($s['lecHours'] ?? 3), (float)($s['labHours'] ?? 0), $s['type'] ?? 'lecture', $s['program'] ?? 'BSIT', (int)($s['year'] ?? 1), $s['curriculum'] ?? '2024 Revised', ($s['isIncluded'] ?? true) ? 1 : 0]);
             }
 
-            $insSection = $db->prepare("INSERT INTO academic_sections (section_id, term_id, section_code, section_name, program, year_level, student_count, adviser, shift) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $insSection = $db->prepare("INSERT INTO academic_sections (section_id, term_id, section_code, section_name, program, year_level, student_count, adviser, shift, home_room, subject_teachers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             foreach ($sections as $s) {
-                $insSection->execute([(int)$s['id'], (int)$s['termId'], $s['code'], $s['name'], $s['program'], (int)$s['year'], (int)$s['studentCount'], null, $s['shift'] ?? 'AM']);
+                $insSection->execute([(int)$s['id'], (int)$s['termId'], $s['code'], $s['name'], $s['program'], (int)$s['year'], (int)$s['studentCount'], mb_substr(trim((string)($s['adviser'] ?? '')), 0, 100) ?: null, $s['shift'] ?? 'AM', mb_substr(trim((string)($s['homeRoom'] ?? '')), 0, 50) ?: null, !empty($s['subjectTeachers']) && is_array($s['subjectTeachers']) ? json_encode($s['subjectTeachers']) : null]);
             }
 
             insertScheduleRows($db, $rows);
+            if ($certificates) {
+                $db->exec("DELETE FROM faculty_certificates");
+                $db->exec("DELETE FROM fcc_certificates");
+            }
+            $insCert = $db->prepare("INSERT INTO fcc_certificates (cert_id, cert_name, areas_json) VALUES (?, ?, ?)");
+            $insHolder = $db->prepare("INSERT IGNORE INTO faculty_certificates (user_id, cert_id) SELECT user_id, ? FROM users WHERE email = ?");
+            $seenCertNames = [];
+            foreach ($certificates as $cert) {
+                $certName = trim((string)($cert['name'] ?? ''));
+                if ($certName === '' || mb_strlen($certName) > 60 || isset($seenCertNames[strtolower($certName)])) continue;
+                $seenCertNames[strtolower($certName)] = true;
+                $insCert->execute([(int)($cert['id'] ?? 0) ?: null, $certName, json_encode(array_values(array_map('strval', (array)($cert['areas'] ?? []))))]);
+                $newCertId = (int)($cert['id'] ?? 0) ?: (int)$db->lastInsertId();
+                foreach ((array)($cert['holders'] ?? []) as $email) {
+                    $insHolder->execute([$newCertId, (string)$email]);
+                }
+            }
             $insSet = $db->prepare("INSERT INTO subject_sets (set_name, items_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE items_json = VALUES(items_json)");
             foreach ($subjectSets as $setName => $setItems) {
                 $insSet->execute([$setName, json_encode($setItems)]);
@@ -547,9 +1089,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
 
     // ─── 0b. QUALIFICATIONS, SUBJECT CATALOG, DEPARTMENTS ───
+    // A teacher's FCC certificates, which decide every subject they may teach
     if ($action === 'save_faculty_qualifications') {
         requireAdminRole();
-        $subjects = is_array($input['subjects'] ?? null) ? $input['subjects'] : [];
 
         $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ? AND role IN ('faculty', 'program-head')");
         $findUser->execute([trim($input['email'] ?? '')]);
@@ -558,37 +1100,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'That teacher has no user account in the database.'], 404);
         }
 
-        $known = $db->query("SELECT UPPER(subject_code) FROM subject_catalog UNION SELECT UPPER(subject_code) FROM term_subjects")->fetchAll(PDO::FETCH_COLUMN);
-        foreach ($subjects as $code) {
-            $code = strtoupper(trim((string)$code));
-            if ($code !== '' && !in_array($code, $known, true)) {
-                jsonResponse(['success' => false, 'message' => "{$code} is not in the subject catalog or curriculum. No changes were made."], 400);
-            }
+        $knownCerts = array_map('intval', $db->query("SELECT cert_id FROM fcc_certificates")->fetchAll(PDO::FETCH_COLUMN));
+        $certIds = array_values(array_unique(array_map('intval', is_array($input['cert_ids'] ?? null) ? $input['cert_ids'] : [])));
+        if (array_diff($certIds, $knownCerts)) {
+            jsonResponse(['success' => false, 'message' => 'One of those FCC certificates no longer exists. Please reload and try again.'], 400);
         }
 
-        // A subject can't be taken away while this teacher still teaches it this term
-        $kept = array_map(fn($code) => strtoupper(trim((string)$code)), $subjects);
-        $inUse = $db->prepare("SELECT DISTINCT UPPER(s.subject_code) FROM schedules s JOIN school_terms t ON s.term_id = t.term_id JOIN faculty_qualifications q ON q.user_id = s.faculty_id AND UPPER(q.subject_code) = UPPER(s.subject_code) WHERE s.faculty_id = ? AND t.is_active = 1");
-        $inUse->execute([$userId]);
-        $blocked = array_diff($inUse->fetchAll(PDO::FETCH_COLUMN), $kept);
+        // A certificate can't be taken away while this teacher still teaches a subject only it covers this term
+        $blocked = classesLosingQualification($db, ['userCerts' => [$userId => $certIds]]);
         if ($blocked && empty($input['remove_classes'])) {
-            jsonResponse(['success' => false, 'message' => 'This teacher still has ' . implode(', ', $blocked) . ' classes this term. Reassign them first. No changes were made.'], 409);
+            jsonResponse(['success' => false, 'message' => 'This teacher still has ' . lostClassCodes($blocked) . ' classes this term. Reassign them first. No changes were made.'], 409);
         }
 
         $db->beginTransaction();
         // The user confirmed removing those classes too, so they never stay with an unqualified teacher
-        if ($blocked) {
-            $marks = implode(',', array_fill(0, count($blocked), '?'));
-            $db->prepare("DELETE s FROM schedules s JOIN school_terms t ON s.term_id = t.term_id WHERE s.faculty_id = ? AND t.is_active = 1 AND UPPER(s.subject_code) IN ($marks)")
-                ->execute(array_merge([$userId], array_values($blocked)));
-            foreach ($db->query("SELECT term_id FROM school_terms WHERE is_active = 1")->fetchAll(PDO::FETCH_COLUMN) as $activeTermId) {
-                bumpScheduleVersion($db, (int)$activeTermId);
-            }
+        removeScheduleRows($db, $blocked);
+        $db->prepare("DELETE FROM faculty_certificates WHERE user_id = ?")->execute([$userId]);
+        $insertCert = $db->prepare("INSERT INTO faculty_certificates (user_id, cert_id) VALUES (?, ?)");
+        foreach ($certIds as $certId) {
+            $insertCert->execute([$userId, $certId]);
         }
-        $db->prepare("DELETE FROM faculty_qualifications WHERE user_id = ?")->execute([$userId]);
-        insertQualifications($db, $userId, $subjects);
         $db->commit();
-        jsonResponse(['success' => true, 'message' => 'Qualifications saved']);
+        jsonResponse(['success' => true, 'message' => 'FCC certificates saved']);
+    }
+
+    // ─── FCC CERTIFICATES ───
+    if ($action === 'save_certificate') {
+        requireAdminRole();
+        $certId = (int)($input['cert_id'] ?? 0);
+        [$name, $areas] = cleanCertificate($db, $input);
+        $dupe = $db->prepare("SELECT COUNT(*) FROM fcc_certificates WHERE cert_name = ? AND cert_id <> ?");
+        $dupe->execute([$name, $certId]);
+        if ((int)$dupe->fetchColumn()) {
+            jsonResponse(['success' => false, 'message' => 'Another certificate already has that name.'], 409);
+        }
+        // Narrowing a certificate's areas can't leave its holders teaching subjects it no longer covers
+        $blocked = $certId > 0 ? classesLosingQualification($db, ['certAreas' => [$certId => $areas]]) : [];
+        if ($blocked && empty($input['remove_classes'])) {
+            jsonResponse(['success' => false, 'message' => 'Teachers holding this certificate still have ' . lostClassCodes($blocked) . ' classes this term that it would no longer cover. No changes were made.'], 409);
+        }
+        $db->beginTransaction();
+        removeScheduleRows($db, $blocked);
+        if ($certId > 0) {
+            $db->prepare("UPDATE fcc_certificates SET cert_name = ?, areas_json = ? WHERE cert_id = ?")->execute([$name, json_encode($areas), $certId]);
+        } else {
+            $db->prepare("INSERT INTO fcc_certificates (cert_name, areas_json) VALUES (?, ?)")->execute([$name, json_encode($areas)]);
+            $certId = (int)$db->lastInsertId();
+        }
+        $db->commit();
+        jsonResponse(['success' => true, 'message' => 'Certificate saved', 'cert_id' => $certId]);
+    }
+
+    if ($action === 'delete_certificate') {
+        requireAdminRole();
+        $certId = (int)($input['cert_id'] ?? 0);
+        $blocked = classesLosingQualification($db, ['certAreas' => [$certId => null]]);
+        if ($blocked && empty($input['remove_classes'])) {
+            jsonResponse(['success' => false, 'message' => 'Teachers still rely on this certificate for ' . lostClassCodes($blocked) . ' classes this term. No changes were made.'], 409);
+        }
+        $db->beginTransaction();
+        removeScheduleRows($db, $blocked);
+        $db->prepare("DELETE FROM faculty_certificates WHERE cert_id = ?")->execute([$certId]);
+        $db->prepare("DELETE FROM fcc_certificates WHERE cert_id = ?")->execute([$certId]);
+        $db->commit();
+        jsonResponse(['success' => true, 'message' => 'Certificate deleted']);
     }
 
     if ($action === 'save_faculty_availability') {
@@ -619,9 +1194,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'That teacher has no user account in the database.'], 404);
         }
 
-        // Availability can't be narrowed past classes already on the active term's schedule
+        // Availability can't be narrowed past classes in the active term or a term running alongside it
         if ($days) {
-            $classes = $db->prepare("SELECT s.subject_code, s.day_of_week, s.start_time, s.end_time FROM schedules s JOIN school_terms t ON s.term_id = t.term_id WHERE s.faculty_id = ? AND t.is_active = 1");
+            $classes = $db->prepare("SELECT s.subject_code, s.day_of_week, s.start_time, s.end_time FROM schedules s JOIN school_terms t ON s.term_id = t.term_id WHERE s.faculty_id = ? AND " . CURRENT_TERMS_SQL);
             $classes->execute([$userId]);
             foreach ($classes->fetchAll() as $class) {
                 if (!isWithinAvailability(['days' => $days, 'shifts' => $shifts], $class['day_of_week'], $class['start_time'], $class['end_time'])) {
@@ -630,9 +1205,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             }
         }
 
-        $maxLoad = requireIntInRange('Max load', $input['max_load'] ?? 24, 6, 30);
-        $db->prepare("UPDATE users SET employment_status = ?, available_days = ?, available_shifts = ?, max_load = ? WHERE user_id = ?")
-            ->execute([$status, implode(',', $days), implode(',', $shifts), $maxLoad, $userId]);
+        // Loads are in units
+        $maxLoad = requireIntInRange('Maximum load', $input['max_load'] ?? 30, 3, 40);
+        $minLoad = isset($input['min_load']) && $input['min_load'] !== '' ? requireIntInRange('Minimum load', $input['min_load'], 0, 40) : null;
+        if ($minLoad !== null && $minLoad > $maxLoad) {
+            rejectInput("The minimum load ({$minLoad} units) can't be more than the maximum ({$maxLoad} units).");
+        }
+        $teachingLevel = in_array($input['teaching_level'] ?? '', TEACHING_LEVELS, true) ? $input['teaching_level'] : 'tertiary';
+        $seasoned = !empty($input['seasoned']) ? 1 : 0;
+        $db->prepare("UPDATE users SET employment_status = ?, available_days = ?, available_shifts = ?, max_load = ?, min_load = ?, teaching_level = ?, seasoned = ? WHERE user_id = ?")
+            ->execute([$status, implode(',', $days), implode(',', $shifts), $maxLoad, $minLoad, $teachingLevel, $seasoned, $userId]);
         jsonResponse(['success' => true, 'message' => 'Availability saved']);
     }
 
@@ -649,21 +1231,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         requireValidText('Subject title', $title);
         requireKnownDepartment($db, $department);
         requireIntInRange('Units', $input['units'] ?? 3, 1, 6);
+        $lost = classesLosingQualification($db, ['catalogArea' => [$code => $department]]);
+        if ($lost) {
+            jsonResponse(['success' => false, 'message' => "Moving {$code} to {$department} would leave teachers who are certified for its current area unqualified for its classes. Reassign those classes first. No changes were made."], 409);
+        }
+        // College, SHS or both; a page that doesn't send it keeps the subject's current level
+        $level = in_array($input['level'] ?? '', ['tertiary', 'shs', 'both'], true) ? $input['level'] : null;
         $stmt = $db->prepare("
-            INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units) VALUES (?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE subject_title = VALUES(subject_title), department = VALUES(department), it_only = VALUES(it_only), units = VALUES(units)
+            INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units, level) VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE subject_title = VALUES(subject_title), department = VALUES(department), it_only = VALUES(it_only), units = VALUES(units),
+                level = IF(? IS NULL, level, VALUES(level))
         ");
-        $stmt->execute([$code, $title, $department, !empty($input['it_only']) ? 1 : 0, (int)($input['units'] ?? 3)]);
+        $stmt->execute([$code, $title, $department, !empty($input['it_only']) ? 1 : 0, (int)($input['units'] ?? 3), $level ?? 'both', $level]);
         jsonResponse(['success' => true, 'message' => 'Subject saved']);
     }
 
     if ($action === 'delete_catalog_subject') {
         requireAdminRole();
         $code = strtoupper(trim($input['subject_code'] ?? ''));
+        if (classesLosingQualification($db, ['catalogArea' => [$code => null]])) {
+            jsonResponse(['success' => false, 'message' => "Some {$code} classes are taught through an FCC certificate, which only covers catalog subjects. Reassign them before removing {$code}. No changes were made."], 409);
+        }
         $db->beginTransaction();
         $db->prepare("DELETE FROM subject_catalog WHERE subject_code = ?")->execute([$code]);
-        // A subject still in a curriculum stays teachable, so its qualifications are kept
-        $db->prepare("DELETE FROM faculty_qualifications WHERE subject_code = ? AND NOT EXISTS (SELECT 1 FROM term_subjects WHERE UPPER(subject_code) = ?)")->execute([$code, $code]);
         $db->commit();
         jsonResponse(['success' => true, 'message' => 'Subject removed']);
     }
@@ -688,10 +1278,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $moveSubjects = $db->prepare("UPDATE subject_catalog SET department = ? WHERE department = ?");
         $moveUsers = $db->prepare("UPDATE users SET subject_role = ? WHERE subject_role = ?");
         $remove = $db->prepare("DELETE FROM departments WHERE department_name = ?");
-        foreach (array_diff($existing, $names) as $removed) {
+        $removedDepartments = array_diff($existing, $names);
+        foreach ($removedDepartments as $removed) {
             $moveSubjects->execute([$names[0], $removed]);
             $moveUsers->execute([$names[0], $removed]);
             $remove->execute([$removed]);
+        }
+        // Certificates follow their subjects to the department they moved to
+        if ($removedDepartments) {
+            try {
+                $updateCert = $db->prepare("UPDATE fcc_certificates SET areas_json = ? WHERE cert_id = ?");
+                foreach ($db->query("SELECT cert_id, areas_json FROM fcc_certificates")->fetchAll() as $cert) {
+                    $areas = json_decode((string)$cert['areas_json'], true) ?: [];
+                    $moved = array_values(array_unique(array_map(fn($a) => in_array($a, $removedDepartments, true) ? $names[0] : $a, $areas)));
+                    if ($moved !== $areas) $updateCert->execute([json_encode($moved), (int)$cert['cert_id']]);
+                }
+            } catch (\Throwable $e) {
+                // No certificate table yet
+            }
         }
         $add = $db->prepare("INSERT IGNORE INTO departments (department_name) VALUES (?)");
         foreach ($names as $name) {
@@ -753,14 +1357,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             jsonResponse(['success' => false, 'message' => 'Choose from 1 to 300 subjects to load.'], 400);
         }
         $clean = array_map('cleanSubjectItem', $items);
+        foreach ($clean as $s) {
+            requireProgramFitsTerm($db, $termId, $s['program'], $s['year']);
+        }
         $exists = $db->prepare("SELECT COUNT(*) FROM term_subjects WHERE term_id = ? AND UPPER(subject_code) = UPPER(?) AND program = ? AND year_level = ?");
-        $ins = $db->prepare("INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '2024 Revised', 1)");
+        $ins = $db->prepare("INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lab_units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '2024 Revised', 1)");
         $added = 0;
         $db->beginTransaction();
         foreach ($clean as $s) {
             $exists->execute([$termId, $s['code'], $s['program'], $s['year']]);
             if ((int)$exists->fetchColumn()) continue;
-            $ins->execute([$termId, $s['code'], $s['name'], $s['units'], $s['lecHours'], $s['labHours'], $s['type'], $s['program'], $s['year']]);
+            $ins->execute([$termId, $s['code'], $s['name'], $s['units'], $s['labUnits'], $s['lecHours'], $s['labHours'], $s['type'], $s['program'], $s['year']]);
             $added++;
         }
         $db->commit();
@@ -782,18 +1389,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         requireFieldLengths(['School year code' => [$year_code, 50]]);
         requireValidSchoolYear($year_code);
-        foreach ($terms as $t) {
-            if (!in_array($t['termName'] ?? '', ['1st Sem', '2nd Sem', 'Summer'], true)
-                || !isValidDate($t['startDate'] ?? null) || !isValidDate($t['endDate'] ?? null)
-                || $t['endDate'] <= $t['startDate']) {
-                jsonResponse(['success' => false, 'message' => 'Each term needs a valid name, and an end date after its start date.'], 400);
+        // Each term is College or SHS; a name is used once per level
+        $seenTermNames = [];
+        foreach ($terms as $i => $t) {
+            $terms[$i]['termName'] = requireValidTermName($t['termName'] ?? '');
+            $terms[$i]['level'] = ($t['level'] ?? '') === 'shs' ? 'shs' : 'tertiary';
+            if (!isValidDate($t['startDate'] ?? null) || !isValidDate($t['endDate'] ?? null) || $t['endDate'] <= $t['startDate']) {
+                jsonResponse(['success' => false, 'message' => 'Each term needs an end date after its start date.'], 400);
             }
+            $key = $terms[$i]['level'] . '|' . mb_strtolower($terms[$i]['termName']);
+            if (isset($seenTermNames[$key])) {
+                jsonResponse(['success' => false, 'message' => "Two terms are named {$terms[$i]['termName']}. Each term needs its own name."], 400);
+            }
+            $seenTermNames[$key] = true;
         }
 
         $dupYear = $db->prepare("SELECT year_id FROM school_years WHERE year_code = ? AND year_id != ?");
         $dupYear->execute([$year_code, $year_id]);
         if ($dupYear->fetch()) {
-            jsonResponse(['success' => false, 'message' => "School year {$year_code} already exists."], 409);
+            jsonResponse(['success' => false, 'message' => "{$year_code} already exists."], 409);
         }
 
         $db->beginTransaction();
@@ -805,9 +1419,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if ($year_id > 0) {
             $stmt = $db->prepare("UPDATE school_years SET year_code = ?, is_active = ? WHERE year_id = ?");
             $stmt->execute([$year_code, $is_active, $year_id]);
-            $updTerm = $db->prepare("UPDATE school_terms SET start_date = ?, end_date = ?, is_active = ? WHERE year_id = ? AND term_name = ?");
+            $updTerm = $db->prepare("UPDATE school_terms SET start_date = ?, end_date = ?, is_active = ? WHERE year_id = ? AND term_name = ? AND level = ?");
             foreach ($terms as $t) {
-                $updTerm->execute([$t['startDate'], $t['endDate'], !empty($t['isActive']) ? 1 : 0, $year_id, $t['termName']]);
+                $updTerm->execute([$t['startDate'], $t['endDate'], !empty($t['isActive']) ? 1 : 0, $year_id, $t['termName'], $t['level']]);
             }
             $db->commit();
             jsonResponse(['success' => true, 'message' => 'School year updated successfully']);
@@ -815,9 +1429,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $stmt = $db->prepare("INSERT INTO school_years (year_code, is_active) VALUES (?, ?)");
             $stmt->execute([$year_code, $is_active]);
             $newId = (int)$db->lastInsertId();
-            $insTerm = $db->prepare("INSERT INTO school_terms (year_id, term_name, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, ?)");
+            $insTerm = $db->prepare("INSERT INTO school_terms (year_id, term_name, level, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)");
             foreach ($terms as $t) {
-                $insTerm->execute([$newId, $t['termName'], $t['startDate'], $t['endDate'], $t['status'] ?? 'draft', !empty($t['isActive']) ? 1 : 0]);
+                $insTerm->execute([$newId, $t['termName'], $t['level'], $t['startDate'], $t['endDate'], $t['status'] ?? 'draft', !empty($t['isActive']) ? 1 : 0]);
             }
             $db->commit();
             jsonResponse(['success' => true, 'message' => 'School year created successfully', 'year_id' => $newId]);
@@ -834,7 +1448,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $stmt->execute([$year_id]);
         // The year's first term becomes the working term, matching the frontend
         $db->exec("UPDATE school_terms SET is_active = 0");
-        $stmt = $db->prepare("UPDATE school_terms SET is_active = 1 WHERE year_id = ? ORDER BY FIELD(term_name, '1st Sem', '2nd Sem', 'Summer') LIMIT 1");
+        $stmt = $db->prepare("UPDATE school_terms SET is_active = 1 WHERE year_id = ? ORDER BY start_date, term_id LIMIT 1");
         $stmt->execute([$year_id]);
         $db->commit();
         jsonResponse(['success' => true, 'message' => 'Active school year updated']);
@@ -856,9 +1470,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $end_date = $input['end_date'] ?? date('Y-m-d', strtotime('+4 months'));
         $status = in_array($input['status'] ?? '', ['draft', 'active', 'closed']) ? $input['status'] : 'draft';
         $is_active = !empty($input['is_active']) ? 1 : 0;
+        $level = ($input['level'] ?? '') === 'shs' ? 'shs' : 'tertiary';
+        $levelName = $level === 'shs' ? 'Senior High School' : 'College';
 
-        if (!in_array($term_name, ['1st Sem', '2nd Sem', 'Summer'], true)) {
-            jsonResponse(['success' => false, 'message' => 'Term name must be 1st Sem, 2nd Sem or Summer.'], 400);
+        $term_name = requireValidTermName($term_name);
+        // An edit stays in the term's own year, and keeps its level unless sent
+        if ($term_id > 0) {
+            $own = $db->prepare("SELECT year_id, level FROM school_terms WHERE term_id = ?");
+            $own->execute([$term_id]);
+            $ownRow = $own->fetch();
+            $year_id = $ownRow ? (int)$ownRow['year_id'] : $year_id;
+            if (!isset($input['level'])) {
+                $level = ($ownRow['level'] ?? '') === 'shs' ? 'shs' : 'tertiary';
+                $levelName = $level === 'shs' ? 'Senior High School' : 'College';
+            }
+            // Sections and subjects follow their term's level, so a term that has them keeps it
+            if ($ownRow && ($ownRow['level'] ?: 'tertiary') !== $level) {
+                $used = $db->prepare("SELECT (SELECT COUNT(*) FROM academic_sections WHERE term_id = ?) + (SELECT COUNT(*) FROM term_subjects WHERE term_id = ?)");
+                $used->execute([$term_id, $term_id]);
+                if ((int)$used->fetchColumn() > 0) {
+                    jsonResponse(['success' => false, 'message' => 'This term already has sections or subjects, so its level can\'t be changed. No changes were made.'], 409);
+                }
+            }
+        }
+        $sameName = $db->prepare("SELECT COUNT(*) FROM school_terms WHERE year_id = ? AND level = ? AND LOWER(term_name) = LOWER(?) AND term_id != ?");
+        $sameName->execute([$year_id, $level, $term_name, $term_id]);
+        if ((int)$sameName->fetchColumn() > 0) {
+            jsonResponse(['success' => false, 'message' => "This school year already has a {$levelName} term named {$term_name}."], 409);
         }
         if (!isValidDate($start_date) || !isValidDate($end_date)) {
             jsonResponse(['success' => false, 'message' => 'Please enter valid term dates.'], 400);
@@ -878,18 +1516,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if ($term_id > 0) {
             // Status and date edits don't send is_active, so only change it when provided.
             if (array_key_exists('is_active', $input)) {
-                $stmt = $db->prepare("UPDATE school_terms SET term_name=?, start_date=?, end_date=?, status=?, is_active=? WHERE term_id=?");
-                $stmt->execute([$term_name, $start_date, $end_date, $status, $is_active, $term_id]);
+                $stmt = $db->prepare("UPDATE school_terms SET term_name=?, level=?, start_date=?, end_date=?, status=?, is_active=? WHERE term_id=?");
+                $stmt->execute([$term_name, $level, $start_date, $end_date, $status, $is_active, $term_id]);
             } else {
-                $stmt = $db->prepare("UPDATE school_terms SET term_name=?, start_date=?, end_date=?, status=? WHERE term_id=?");
-                $stmt->execute([$term_name, $start_date, $end_date, $status, $term_id]);
+                $stmt = $db->prepare("UPDATE school_terms SET term_name=?, level=?, start_date=?, end_date=?, status=? WHERE term_id=?");
+                $stmt->execute([$term_name, $level, $start_date, $end_date, $status, $term_id]);
             }
             jsonResponse(['success' => true, 'message' => 'Term updated successfully']);
         } else {
-            $stmt = $db->prepare("INSERT INTO school_terms (year_id, term_name, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$year_id, $term_name, $start_date, $end_date, $status, $is_active]);
+            $stmt = $db->prepare("INSERT INTO school_terms (year_id, term_name, level, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$year_id, $term_name, $level, $start_date, $end_date, $status, $is_active]);
             jsonResponse(['success' => true, 'message' => 'Term created successfully', 'term_id' => $db->lastInsertId()]);
         }
+    }
+
+    // A term can be deleted while it has no sections or classes; its subjects go with it
+    if ($action === 'delete_term') {
+        $term_id = (int)($input['term_id'] ?? 0);
+        $find = $db->prepare("SELECT year_id, is_active FROM school_terms WHERE term_id = ?");
+        $find->execute([$term_id]);
+        $term = $find->fetch();
+        if (!$term) {
+            jsonResponse(['success' => false, 'message' => 'That term no longer exists. Please reload and try again.'], 404);
+        }
+        if ((int)$term['is_active'] === 1) {
+            jsonResponse(['success' => false, 'message' => 'This is the active term. Switch to another term before deleting it. No changes were made.'], 409);
+        }
+        $siblings = $db->prepare("SELECT COUNT(*) FROM school_terms WHERE year_id = ?");
+        $siblings->execute([(int)$term['year_id']]);
+        if ((int)$siblings->fetchColumn() <= 1) {
+            jsonResponse(['success' => false, 'message' => 'A school year needs at least one term. No changes were made.'], 409);
+        }
+        $inUse = $db->prepare("SELECT (SELECT COUNT(*) FROM academic_sections WHERE term_id = ?) + (SELECT COUNT(*) FROM schedules WHERE term_id = ?)");
+        $inUse->execute([$term_id, $term_id]);
+        if ((int)$inUse->fetchColumn() > 0) {
+            jsonResponse(['success' => false, 'message' => 'This term still has sections or scheduled classes. Remove them first. No changes were made.'], 409);
+        }
+        $db->beginTransaction();
+        $db->prepare("DELETE FROM term_subjects WHERE term_id = ?")->execute([$term_id]);
+        $db->prepare("DELETE FROM schedule_snapshots WHERE term_id = ?")->execute([$term_id]);
+        $db->prepare("DELETE FROM school_terms WHERE term_id = ?")->execute([$term_id]);
+        $db->commit();
+        jsonResponse(['success' => true, 'message' => 'Term deleted']);
     }
 
     if ($action === 'set_active_term') {
@@ -915,6 +1583,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $subject_code = trim($input['subject_code'] ?? '');
         $subject_name = trim($input['subject_name'] ?? '');
         $units = (int)($input['units'] ?? 3);
+        $lab_units = isset($input['lab_units']) && $input['lab_units'] !== '' ? (int)$input['lab_units'] : null;
         $lecture_hours = (float)($input['lecture_hours'] ?? 3.0);
         $lab_hours = (float)($input['lab_hours'] ?? 0.0);
         $subject_type = in_array($input['subject_type'] ?? '', ['lecture', 'lab', 'pe', 'special']) ? $input['subject_type'] : 'lecture';
@@ -932,20 +1601,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         requireValidText('Curriculum', $curriculum);
         requireValidProgram($program);
         requireIntInRange('Units', $units, 1, 6);
-        requireIntInRange('Year level', $year_level, 1, 4);
+        requireValidYearLevel($year_level);
         requireValidHours('Lecture hours', $lecture_hours);
         requireValidHours('Lab hours', $lab_hours);
+        if ($lab_units !== null) {
+            requireIntInRange('Lab units', $lab_units, 0, $units);
+            if ($lab_units > 0 && $lab_hours <= 0) rejectInput('This subject has lab units, so give it some lab hours a week.');
+            if ($lab_units === 0 && $lab_hours > 0) rejectInput('This subject has lab hours but no lab units. Set its lab units, or clear the lab hours.');
+            if ($lab_units < $units && $lecture_hours <= 0) rejectInput('This subject has lecture units, so give it some lecture hours a week.');
+        }
         if ($subject_id <= 0) {
             requireTermExists($db, $term_id);
+        } else {
+            $subjectTerm = $db->prepare("SELECT term_id FROM term_subjects WHERE subject_id = ?");
+            $subjectTerm->execute([$subject_id]);
+            $term_id = (int)$subjectTerm->fetchColumn() ?: $term_id;
         }
+        requireProgramFitsTerm($db, $term_id, $program, $year_level);
 
         if ($subject_id > 0) {
-            $stmt = $db->prepare("UPDATE term_subjects SET subject_code=?, subject_name=?, units=?, lecture_hours=?, lab_hours=?, subject_type=?, program=?, year_level=?, curriculum=?, is_included=? WHERE subject_id=?");
-            $stmt->execute([$subject_code, $subject_name, $units, $lecture_hours, $lab_hours, $subject_type, $program, $year_level, $curriculum, $is_included, $subject_id]);
+            $stmt = $db->prepare("UPDATE term_subjects SET subject_code=?, subject_name=?, units=?, lab_units=?, lecture_hours=?, lab_hours=?, subject_type=?, program=?, year_level=?, curriculum=?, is_included=? WHERE subject_id=?");
+            $stmt->execute([$subject_code, $subject_name, $units, $lab_units, $lecture_hours, $lab_hours, $subject_type, $program, $year_level, $curriculum, $is_included, $subject_id]);
             jsonResponse(['success' => true, 'message' => 'Subject updated']);
         } else {
-            $stmt = $db->prepare("INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$term_id, $subject_code, $subject_name, $units, $lecture_hours, $lab_hours, $subject_type, $program, $year_level, $curriculum, $is_included]);
+            $stmt = $db->prepare("INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lab_units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$term_id, $subject_code, $subject_name, $units, $lab_units, $lecture_hours, $lab_hours, $subject_type, $program, $year_level, $curriculum, $is_included]);
             jsonResponse(['success' => true, 'message' => 'Subject added', 'subject_id' => $db->lastInsertId()]);
         }
     }
@@ -983,6 +1663,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
 
     // ─── 4. SECTION BUILDER ACTIONS ───
+    // Rooms & Instructors: a section's room and the instructor chosen for each of its subjects (blank = automatic)
+    if ($action === 'save_section_plan') {
+        requireAdminRole();
+        $find = $db->prepare("SELECT section_id, term_id, section_code, student_count FROM academic_sections WHERE section_id = ?");
+        $find->execute([(int)($input['section_id'] ?? 0)]);
+        $section = $find->fetch();
+        if (!$section) {
+            jsonResponse(['success' => false, 'message' => 'That section no longer exists. Please reload and try again.'], 404);
+        }
+        $homeRoom = trim((string)($input['home_room'] ?? ''));
+        if ($homeRoom !== '') {
+            $roomSeats = $db->prepare("SELECT capacity FROM classrooms WHERE room_name_number = ?");
+            $roomSeats->execute([$homeRoom]);
+            $seats = $roomSeats->fetchColumn();
+            if ($seats === false) {
+                jsonResponse(['success' => false, 'message' => "Room {$homeRoom} no longer exists. Please pick another room."], 400);
+            }
+            if ((int)$seats < (int)$section['student_count']) {
+                jsonResponse(['success' => false, 'message' => "{$homeRoom} seats {$seats}, but {$section['section_code']} has {$section['student_count']} students. Pick a bigger room."], 400);
+            }
+        }
+        $level = termSchoolLevel($db, (int)$section['term_id']);
+        $qualifications = loadQualifications($db);
+        $findTeacher = $db->prepare("SELECT user_id, CONCAT(first_name, ' ', last_name) AS name, teaching_level FROM users WHERE email = ? AND role IN ('faculty', 'program-head') LIMIT 1");
+        $plan = [];
+        foreach ((array)($input['subject_teachers'] ?? []) as $code => $email) {
+            $code = strtoupper(trim((string)$code));
+            $email = trim((string)$email);
+            if ($code === '' || $email === '') continue;
+            requireFieldLengths(['Subject code' => [$code, 20], 'Instructor email' => [$email, 100]]);
+            $findTeacher->execute([$email]);
+            $teacher = $findTeacher->fetch();
+            if (!$teacher) {
+                jsonResponse(['success' => false, 'message' => "The instructor chosen for {$code} no longer has a faculty account. Please choose another."], 400);
+            }
+            if (empty($qualifications[(int)$teacher['user_id']][$code])) {
+                jsonResponse(['success' => false, 'message' => "{$teacher['name']} has no FCC certificate covering {$code}'s subject area, so they can't be chosen for it."], 400);
+            }
+            $teaches = $teacher['teaching_level'] ?: 'tertiary';
+            if ($teaches !== 'mixed' && $teaches !== $level) {
+                jsonResponse(['success' => false, 'message' => "{$teacher['name']} isn't set to teach " . ($level === 'shs' ? 'Senior High School' : 'college') . ' classes, so they can\'t be chosen for this section.'], 400);
+            }
+            $plan[$code] = $email;
+        }
+        $db->prepare("UPDATE academic_sections SET home_room = ?, subject_teachers = ? WHERE section_id = ?")
+            ->execute([$homeRoom !== '' ? $homeRoom : null, $plan ? json_encode($plan) : null, (int)$section['section_id']]);
+        jsonResponse(['success' => true, 'message' => 'Rooms and instructors saved']);
+    }
+
     if ($action === 'save_section') {
         $section_id = (int)($input['section_id'] ?? 0);
         $term_id = (int)($input['term_id'] ?? 1);
@@ -1002,17 +1731,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         requireValidText('Section name', $section_name);
         requireValidProgram($program);
         requireIntInRange('Student count', $student_count, 1, 60);
-        requireIntInRange('Year level', $year_level, 1, 4);
+        requireValidYearLevel($year_level);
         if ($section_id <= 0) {
             requireTermExists($db, $term_id);
+        } else {
+            // An edit stays in the section's own term
+            $sectionTerm = $db->prepare("SELECT term_id FROM academic_sections WHERE section_id = ?");
+            $sectionTerm->execute([$section_id]);
+            $term_id = (int)$sectionTerm->fetchColumn() ?: $term_id;
         }
+        requireProgramFitsTerm($db, $term_id, $program, $year_level);
 
-        // An edit stays in the section's own term
-        if ($section_id > 0) {
-            $findTerm = $db->prepare("SELECT term_id FROM academic_sections WHERE section_id = ?");
-            $findTerm->execute([$section_id]);
-            $term_id = (int)$findTerm->fetchColumn();
+        // The home room must exist and seat the whole section
+        $homeRoom = trim((string)($input['home_room'] ?? ''));
+        if ($homeRoom !== '') {
+            $roomSeats = $db->prepare("SELECT capacity FROM classrooms WHERE room_name_number = ?");
+            $roomSeats->execute([$homeRoom]);
+            $seats = $roomSeats->fetchColumn();
+            if ($seats === false) {
+                jsonResponse(['success' => false, 'message' => "Room {$homeRoom} no longer exists. Please pick another home room."], 400);
+            }
+            if ((int)$seats < $student_count) {
+                jsonResponse(['success' => false, 'message' => "{$homeRoom} seats {$seats}, but this section has {$student_count} students. Pick a bigger home room."], 400);
+            }
         }
+        $homeRoom = $homeRoom !== '' ? $homeRoom : null;
+
+        // The adviser is a teacher's account email, and they must be set to teach this term's level
+        $adviser = trim((string)($input['adviser'] ?? ''));
+        if ($adviser !== '') {
+            $findAdviser = $db->prepare("SELECT CONCAT(first_name, ' ', last_name) AS name, teaching_level FROM users WHERE email = ? AND role IN ('faculty', 'program-head') LIMIT 1");
+            $findAdviser->execute([$adviser]);
+            $adviserRow = $findAdviser->fetch();
+            if (!$adviserRow) {
+                jsonResponse(['success' => false, 'message' => 'That adviser no longer has a faculty account. Please pick another adviser.'], 400);
+            }
+            $sectionLevel = termSchoolLevel($db, $term_id);
+            $adviserLevel = $adviserRow['teaching_level'] ?: 'tertiary';
+            if ($adviserLevel !== 'mixed' && $adviserLevel !== $sectionLevel) {
+                $levelName = $sectionLevel === 'shs' ? 'Senior High School' : 'college';
+                jsonResponse(['success' => false, 'message' => "{$adviserRow['name']} isn't set to teach {$levelName} classes, so they can't advise this section. Change their teaching level in Faculty Profiles or pick another adviser."], 400);
+            }
+        }
+        $adviser = $adviser !== '' ? $adviser : null;
+
         $dupSection = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ? AND section_id != ?");
         $dupSection->execute([$section_code, $term_id, $section_id]);
         if ($dupSection->fetch()) {
@@ -1025,8 +1787,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $previousCode = (string)$findCode->fetchColumn();
 
             $db->beginTransaction();
-            $stmt = $db->prepare("UPDATE academic_sections SET section_code=?, section_name=?, program=?, year_level=?, student_count=?, adviser=NULL, shift=? WHERE section_id=?");
-            $stmt->execute([$section_code, $section_name, $program, $year_level, $student_count, $shift, $section_id]);
+            $stmt = $db->prepare("UPDATE academic_sections SET section_code=?, section_name=?, program=?, year_level=?, student_count=?, adviser=?, shift=?, home_room=? WHERE section_id=?");
+            $stmt->execute([$section_code, $section_name, $program, $year_level, $student_count, $adviser, $shift, $homeRoom, $section_id]);
             // Classes are matched by section code, so they follow a rename
             if ($previousCode !== '' && $previousCode !== $section_code) {
                 $db->prepare("UPDATE schedules SET section_name = ? WHERE section_name = ? AND term_id = ?")->execute([$section_code, $previousCode, $term_id]);
@@ -1035,8 +1797,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $db->commit();
             jsonResponse(['success' => true, 'message' => 'Section updated']);
         } else {
-            $stmt = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, shift) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$term_id, $section_code, $section_name, $program, $year_level, $student_count, $shift]);
+            $stmt = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, adviser, shift, home_room) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$term_id, $section_code, $section_name, $program, $year_level, $student_count, $adviser, $shift, $homeRoom]);
             jsonResponse(['success' => true, 'message' => 'Section created', 'section_id' => $db->lastInsertId()]);
         }
     }
@@ -1092,20 +1854,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         foreach ($programs as $prog) {
             requireValidProgram($prog);
         }
-        foreach ($years as $yr) {
-            requireIntInRange('Year level', $yr, 1, 4);
-        }
         requireTermExists($db, $term_id);
+        // A program shorter than its level (such as 2-year HRS) gets sections only for its own years
+        $offers = fn($prog, $yr) => !isset(PROGRAM_YEARS[$prog]) || in_array((int)$yr, PROGRAM_YEARS[$prog], true);
+        foreach ($programs as $prog) {
+            foreach ($years as $yr) {
+                if (!$offers($prog, $yr)) continue;
+                requireProgramFitsTerm($db, $term_id, (string)$prog, requireValidYearLevel($yr));
+            }
+        }
 
         $letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
         $created = 0;
 
         foreach ($programs as $prog) {
             foreach ($years as $yr) {
+                if (!$offers($prog, $yr)) continue;
                 for ($i = 0; $i < $sec_count; $i++) {
                     $letter = $letters[$i] ?? (string)($i + 1);
-                    $prefix = substr($prog, 2) ?: $prog;
-                    $code = "{$prefix}{$yr}0" . ($i + 1) . "M";
+                    // SHS sections read like HTTO11-A; college sections keep the IT101M pattern
+                    $prefix = sectionCodePrefix((string)$prog);
+                    if ((int)$yr >= 11) {
+                        $code = "{$prefix}{$yr}-{$letter}";
+                    } else {
+                        $code = "{$prefix}{$yr}0" . ($i + 1) . "M";
+                    }
                     $name = "{$prog} {$yr}{$letter}";
 
                     $check = $db->prepare("SELECT section_id FROM academic_sections WHERE section_code = ? AND term_id = ?");

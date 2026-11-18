@@ -3,6 +3,8 @@
    ═══════════════════════════════════════════════════ */
 
 document.addEventListener('DOMContentLoaded', () => {
+  fillSavedYearsMissingLevelTerms();
+  applySchoolLevelOptions();
   renderDeptFilterOptions();
   renderSubjectDeptFilterOptions();
   renderSubjectDatalist();
