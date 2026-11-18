@@ -250,18 +250,3 @@ function askConfirm(message, { title = 'Please confirm', confirmLabel = 'Confirm
 }
 window.askConfirm = askConfirm;
 
-// Text size (user menu): Normal, Large or Extra large, kept in this browser
-function markTextSize() {
-  const size = document.documentElement.getAttribute('data-text-size') || 'normal';
-  document.querySelectorAll('.text-size-options button').forEach(b => {
-    b.classList.toggle('active', b.dataset.size === size);
-    b.setAttribute('aria-pressed', b.dataset.size === size ? 'true' : 'false');
-  });
-}
-window.setTextSize = function(size) {
-  if (size === 'large' || size === 'xlarge') document.documentElement.setAttribute('data-text-size', size);
-  else document.documentElement.removeAttribute('data-text-size');
-  try { localStorage.setItem('sti_text_size', size); } catch (e) {}
-  markTextSize();
-};
-document.addEventListener('DOMContentLoaded', markTextSize);
