@@ -590,3 +590,7 @@ th[data-sorted="desc"]::after { content: ' \25BC'; font-size: 0.857rem; }
 @media (max-width: 760px) {
   .modal-grid { grid-template-columns: 1fr; }
 }
+
+/* Shown while the server can't be reached: the screen shows the last saved copy and changes can't be saved */
+.server-status-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 3000; background: #FEF3C7; color: #78350F; border-bottom: 2px solid #F59E0B; padding: 10px 16px; font-size: 1rem; font-weight: 700; text-align: center; }
+.server-status-banner[hidden] { display: none; }

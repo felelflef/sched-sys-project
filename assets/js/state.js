@@ -648,5 +648,15 @@ function saveStateToStorage() {
   }
 }
 
+// The browser's copy of the school's data (timetables, sections, teachers and their emails). It only speeds up
+// opening the app; the database is the real copy. It is removed on sign-out, so a shared computer keeps none of it.
+const CACHED_SCHOOL_DATA_KEYS = ['sti_rooms', 'sti_subject_catalog', 'sti_departments', 'sti_fcc_certificates', 'sti_subject_sets',
+  'sti_school_years', 'sti_school_terms', 'sti_curriculum_subjects', 'sti_academic_sections', 'sti_faculty_data', 'sti_master_schedule_data'];
+function clearCachedSchoolData() {
+  // Opened from disk, the browser copy is the only copy, so it stays
+  if (typeof IS_STANDALONE !== 'undefined' && IS_STANDALONE) return;
+  try { CACHED_SCHOOL_DATA_KEYS.forEach(key => localStorage.removeItem(key)); } catch (e) {}
+}
+
 // Initial state load
 loadStateFromStorage();

@@ -53,12 +53,15 @@ window.fetch = async function(input, init = {}) {
   try {
     res = await nativeFetch(input, { ...init, headers });
   } catch (e) {
-    // Screens update before saving, so say plainly that the change isn't on the server
+    // Screens update before saving, so the change is taken back off the screen and the user is told plainly
     if (!init.quietFailure) {
+      const screenRestored = typeof handleSaveUnreachable === 'function' && handleSaveUnreachable();
       const now = Date.now();
       if (now - lastApiFailureNoticeAt >= 5000) {
         lastApiFailureNoticeAt = now;
-        alert("Couldn't reach the server, so that change wasn't saved. It only exists in this browser. Check your connection and try again.");
+        alert(screenRestored
+          ? "Couldn't reach the server, so that change wasn't saved. The screen is back to the last saved data. Check your connection and try again."
+          : "Couldn't reach the server, so that change wasn't saved. The saved data will reload as soon as the connection is back. Check your connection and try again.");
       }
       if (e && typeof e === 'object') e.reported = true;
     }
@@ -199,7 +202,8 @@ async function checkSessionStillValid() {
       }
     }
   } catch (e) {
-    // Ignore temporary network timeouts
+    // No answer at all: show that the server can't be reached (it keeps retrying until it can)
+    if (typeof markServerReachable === 'function') markServerReachable(false);
   }
 }
 
@@ -219,6 +223,7 @@ function handleSessionTerminated(noticeText) {
     localStorage.removeItem('sti_session_token');
     localStorage.removeItem('sti_active_page');
   } catch (e) {}
+  clearCachedSchoolData();
 
   const menu = document.getElementById('userDropdownMenu');
   if (menu) menu.style.display = 'none';
@@ -488,6 +493,7 @@ window.logoutUser = function() {
     localStorage.removeItem('sti_session_token');
     localStorage.removeItem('sti_active_page');
   } catch (e) {}
+  clearCachedSchoolData();
 
   const menu = document.getElementById('userDropdownMenu');
   if (menu) menu.style.display = 'none';
