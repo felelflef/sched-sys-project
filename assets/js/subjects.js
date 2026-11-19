@@ -125,7 +125,6 @@ function renderSubjectCertLink() {
         return `<strong>${escapeHtml(c.name)}</strong> · ${holders} teacher${holders === 1 ? '' : 's'} hold${holders === 1 ? 's' : ''} it`;
       }).join('; ')}</span>`;
 }
-window.renderSubjectCertLink = renderSubjectCertLink;
 
 // Moving a catalog subject to another area must not strand classes taught through a certificate for its old area
 function areaChangeProblem(code, newArea) {

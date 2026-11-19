@@ -96,6 +96,3 @@ function queueActivitySearch() {
   clearTimeout(activitySearchTimer);
   activitySearchTimer = setTimeout(() => loadActivityLog(true), 300);
 }
-
-window.loadActivityLog = loadActivityLog;
-window.queueActivitySearch = queueActivitySearch;

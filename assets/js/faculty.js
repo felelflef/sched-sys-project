@@ -102,7 +102,6 @@ function renderFacultyCards() {
   });
 }
 
-
 // Asks before removing qualifications a professor still teaches this term. If the user agrees,
 // those classes come off the schedule with the qualification, so Quick Generate can reassign them.
 // Returns null if cancelled, otherwise whether classes were removed.
@@ -153,7 +152,6 @@ function applyLoadDefaults(prefix, status) {
   const range = defaultLoadUnits(status);
   setLoadInputs(prefix, range.min, range.max);
 }
-window.applyLoadDefaults = applyLoadDefaults;
 function readLoadInputs(prefix) {
   const minRaw = document.getElementById(`${prefix}MinLoad`).value;
   const maxRaw = document.getElementById(`${prefix}MaxLoad`).value;
@@ -190,7 +188,6 @@ function classesLosingQualification(change) {
     return !isFacultyQualified(after, c.subjectCode, certs);
   });
 }
-
 
 function renderCertificatePicker(containerId, selected = []) {
   const box = document.getElementById(containerId);
@@ -233,7 +230,6 @@ function resetCertForm() {
   document.getElementById('certCancelEditBtn').style.display = 'none';
   renderCertAreaPicker();
 }
-window.resetCertForm = resetCertForm;
 
 function renderCertList() {
   const box = document.getElementById('certListContainer');
@@ -541,7 +537,6 @@ window.openChangeFacultyDeptModal = function(identifier) {
   document.getElementById('changeFacultyDeptTargetEmail').value = fac.email;
   const nameInput = document.getElementById('changeFacultyNameInput');
   if (nameInput) nameInput.value = fac.name;
-
 
   const emailDisplay = document.getElementById('changeFacultyDeptEmailDisplay');
   if (emailDisplay) emailDisplay.textContent = `${fac.email} · Current Dept: ${fac.dept}`;
@@ -939,4 +934,3 @@ window.confirmDeleteFacultyProfile = function() {
   renderFacultyCards();
   renderGrid();
 };
-

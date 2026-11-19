@@ -206,11 +206,7 @@ function handleAiPromptSubmit(e) {
   runAiAnalysis('custom_query', query);
 }
 
-
 // Bind handlers to global window object
-window.runAiAnalysis = runAiAnalysis;
-window.copyAiResponse = copyAiResponse;
-window.handleAiPromptSubmit = handleAiPromptSubmit;
 
 document.addEventListener('DOMContentLoaded', () => {
   // Earlier versions could keep a Gemini key in the browser; the server's key is used now

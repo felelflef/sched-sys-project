@@ -164,33 +164,43 @@ function restoreUserSession() {
   }
 }
 
+// The session is checked every 30 seconds while the tab is in view, and right away when the user comes back to it.
+// Saves are refused straight away if the session ended or the account signed in elsewhere, so nothing waits on this.
+const SESSION_CHECK_MS = 30000;
 function startSessionHeartbeat() {
   stopSessionHeartbeat();
-  sessionHeartbeatTimer = setInterval(async () => {
-    if (!CURRENT_USER) {
-      stopSessionHeartbeat();
-      return;
-    }
-    try {
-      const res = await fetch('api/auth.php?check=1', {
-        headers: { 'Accept': 'application/json' }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.csrf_token) csrfToken = data.csrf_token;
-        if (data.logged_in === false) {
-          handleSessionTerminated(data.message || 'Your session has expired. Please log in again.');
-        }
-      } else if (res.status === 401) {
-        const data = await res.json().catch(() => ({}));
-        if (data.code === 'SESSION_SUPERSEDED') {
-          handleSessionTerminated(data.message || 'Your account was logged into from another device (e.g. phone). You have been logged out.');
-        }
+  sessionHeartbeatTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') checkSessionStillValid();
+  }, SESSION_CHECK_MS);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && sessionHeartbeatTimer) checkSessionStillValid();
+});
+
+async function checkSessionStillValid() {
+  if (!CURRENT_USER) {
+    stopSessionHeartbeat();
+    return;
+  }
+  try {
+    const res = await fetch('api/auth.php?check=1', {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.csrf_token) csrfToken = data.csrf_token;
+      if (data.logged_in === false) {
+        handleSessionTerminated(data.message || 'Your session has expired. Please log in again.');
       }
-    } catch (e) {
-      // Ignore temporary network timeouts
+    } else if (res.status === 401) {
+      const data = await res.json().catch(() => ({}));
+      if (data.code === 'SESSION_SUPERSEDED') {
+        handleSessionTerminated(data.message || 'Your account was logged into from another device (e.g. phone). You have been logged out.');
+      }
     }
-  }, 3500);
+  } catch (e) {
+    // Ignore temporary network timeouts
+  }
 }
 
 function stopSessionHeartbeat() {

@@ -344,7 +344,3 @@ function deleteCatalogSubject(code) {
 function saveDepartmentsToServer() {
   postScheduleAction({ action: 'save_departments', departments: DEPARTMENTS });
 }
-
-window.loadServerState = loadServerState;
-window.queueScheduleSave = queueScheduleSave;
-window.handleApiWriteSaved = handleApiWriteSaved;
