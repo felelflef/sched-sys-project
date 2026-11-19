@@ -88,7 +88,7 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
                 jsonResponse(['success' => false, 'message' => "{$instructor} isn't set to teach {$levelName} classes, so they can't teach {$subCode} for {$secName}. Change their teaching level in Faculty Profiles. No changes were made."], 400);
             }
         }
-        $rows[] = [$rowTermId ?: null, $roomId, $facultyId, $subCode, $subCat, $secName, $day, $start, $end, empty($item['aiPlaced']) ? 0 : 1];
+        $rows[] = [$rowTermId ?: null, $roomId, $facultyId, $subCode, $subCat, $secName, $day, $start, $end, empty($item['aiPlaced']) ? 0 : 1, empty($item['locked']) ? 0 : 1];
     }
     return $rows;
 }
@@ -378,11 +378,11 @@ function bumpScheduleVersion(PDO $db, int $termId): void {
 
 function insertScheduleRows(PDO $db, array $rows): void {
     $ins = $db->prepare("
-        INSERT INTO schedules (term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time, ai_generated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO schedules (term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time, ai_generated, is_locked)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     foreach ($rows as $row) {
-        $ins->execute($row);
+        $ins->execute(array_pad(array_slice($row, 0, 11), 11, 0));
     }
 }
 
@@ -2001,7 +2001,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             if (!$valid) {
                 jsonResponse(['success' => false, 'message' => "The earlier schedule can't be restored because {$r['section_name']} {$r['subject_code']} no longer meets the current rooms, qualifications or availability."], 409);
             }
-            $rows[] = [$term_id, (int)$r['room_id'], $facultyId, $r['subject_code'], $r['subject_category'], $r['section_name'], $r['day_of_week'], $r['start_time'], $r['end_time'], (int)$r['ai_generated']];
+            $rows[] = [$term_id, (int)$r['room_id'], $facultyId, $r['subject_code'], $r['subject_category'], $r['section_name'], $r['day_of_week'], $r['start_time'], $r['end_time'], (int)$r['ai_generated'], (int)($r['is_locked'] ?? 0)];
         }
 
         $db->beginTransaction();

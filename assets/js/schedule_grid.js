@@ -521,7 +521,7 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
               title="${escapeHtml(item.subjectCode)}: ${escapeHtml(item.subjectTitle || '')} (${formatTime12(item.startTime)} – ${formatTime12(item.endTime)})">
             <div class="class-cell-inner">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
-                <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}${otherTermBadge(item)}</span>
+                <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}${item.locked ? ' <span class="class-lock-badge" title="Locked: Generate keeps this class where it is">Locked</span>' : ''}${otherTermBadge(item)}</span>
                 ${readOnly ? '' : `<button class="cell-quick-edit-btn" onclick="event.stopPropagation(); openEditClassScheduleModal('${item.id}')" title="Edit subject or time" aria-label="Edit ${escapeHtml(item.subjectCode)}">Edit</button>`}
               </div>
               <span class="class-subj-title">${escapeHtml(item.subjectCode)}${classPartTag(item)}</span>
@@ -573,6 +573,19 @@ function renderTimetableHours(filteredClasses, dayIdPrefix, totalId) {
 }
 
 /* ─── Class Details Modal ─── */
+// A locked class stays put when the timetable is generated again; everything else is placed around it
+window.toggleClassLock = function(classId) {
+  const item = MASTER_SCHEDULE_DATA.find(c => c.id === classId);
+  if (!item || !canEditSchedule()) return;
+  item.locked = !item.locked;
+  saveStateToStorage();
+  renderGrid();
+  queueScheduleSave();
+  // The saved timetable comes back with new class IDs, so the details window closes rather than go stale
+  closeClassDetailModal();
+  alert(item.locked ? `${item.subjectCode} for ${item.section} is locked. Generate will keep it at ${item.day} ${formatTime12(item.startTime)}.` : `${item.subjectCode} for ${item.section} is unlocked.`);
+};
+
 function showClassDetails(classId) {
   const item = MASTER_SCHEDULE_DATA.find(c => c.id === classId);
   if (!item) return;
@@ -591,7 +604,9 @@ function showClassDetails(classId) {
         <button class="btn btn-outline" style="color:var(--danger); border-color:#FCA5A5; font-size:0.857rem; padding:6px 12px;" onclick="deleteClassSchedule('${escapeHtml(item.id)}')">
           🗑️ Remove
         </button>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+          <button class="btn btn-outline" style="font-size:0.857rem; padding:6px 14px;" onclick="toggleClassLock('${escapeHtml(item.id)}')"
+            title="${item.locked ? 'Let Generate move this class again' : 'Generate keeps a locked class at this day, time, room and teacher'}">${item.locked ? 'Unlock' : 'Lock'}</button>
           <button class="btn btn-secondary" style="font-size:0.857rem; padding:6px 14px;" onclick="closeClassDetailModal()">Close</button>
           <button class="btn btn-primary" style="font-size:0.857rem; padding:6px 16px; font-weight:700;" onclick="openEditClassScheduleModal('${escapeHtml(item.id)}')">
             ✏️ Edit Schedule

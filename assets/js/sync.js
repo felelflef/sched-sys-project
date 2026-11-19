@@ -42,7 +42,8 @@ function mapServerClass(row, sections, subjects) {
     day: row.day_of_week,
     startTime: String(row.start_time).slice(0, 5),
     endTime: String(row.end_time).slice(0, 5),
-    aiPlaced: Number(row.ai_generated) === 1
+    aiPlaced: Number(row.ai_generated) === 1,
+    locked: Number(row.is_locked) === 1
   };
 }
 
@@ -146,6 +147,7 @@ function applyServerState(data) {
   saveStateToStorage();
   refreshAllSchedulingViews();
   updateUndoButton();
+  refreshEditUndoBaseline();
   renderRoomTable();
   renderDeptFilterOptions();
   renderSubjectDeptFilterOptions();
@@ -327,6 +329,7 @@ function saveTermSchedule(action, termId, schedules, extra = {}) {
     if (res.ok) {
       const body = await res.clone().json();
       if (term && body.schedule_version !== undefined) term.scheduleVersion = body.schedule_version;
+      if (term && term.id === editUndoTermId && body.schedule_version !== undefined) editUndoKnownVersion = body.schedule_version;
     } else if (res.status === 409) {
       await loadServerState();
     }
@@ -336,16 +339,71 @@ function saveTermSchedule(action, termId, schedules, extra = {}) {
   return result;
 }
 
+// Undo for hand edits (add, move, edit, delete, lock). Each saved change remembers the timetable as it was just
+// before, up to the last 10. If someone else changes the same term, the list is cleared, so Undo can never
+// remove their work.
+const EDIT_UNDO_LIMIT = 10;
+let editUndoStack = [];
+let editUndoBaseline = null;     // this term's classes as last saved or loaded
+let editUndoTermId = null;
+let editUndoKnownVersion = null; // the term's schedule version after our own last save
+let undoInProgress = false;
+const copyClasses = list => list.map(c => ({ ...c }));
+
+function clearEditUndo() {
+  editUndoStack = [];
+  editUndoBaseline = copyClasses(activeTermClasses());
+  updateUndoEditButton();
+}
+// After data loads: start over for a new term, or when the version moved because of someone else's save
+function refreshEditUndoBaseline() {
+  const { activeTerm } = getActiveAcademicContext();
+  if (!activeTerm) return;
+  if (editUndoTermId !== activeTerm.id || (editUndoKnownVersion !== null && activeTerm.scheduleVersion !== editUndoKnownVersion)) editUndoStack = [];
+  editUndoTermId = activeTerm.id;
+  editUndoKnownVersion = activeTerm.scheduleVersion ?? null;
+  editUndoBaseline = copyClasses(activeTermClasses());
+  updateUndoEditButton();
+}
+function updateUndoEditButton() {
+  const btn = document.getElementById('btnUndoEdit');
+  if (!btn) return;
+  btn.disabled = editUndoStack.length === 0 || !canEditSchedule();
+  btn.textContent = editUndoStack.length ? `Undo Last Change (${editUndoStack.length})` : 'Undo Last Change';
+}
+window.undoLastEdit = function() {
+  if (!editUndoStack.length || !canEditSchedule()) return;
+  const { activeTerm } = getActiveAcademicContext();
+  const previous = editUndoStack.pop();
+  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(copyClasses(previous));
+  editUndoBaseline = copyClasses(previous);
+  undoInProgress = true;
+  saveStateToStorage();
+  renderGrid();
+  updateScheduleStats();
+  queueScheduleSave();
+  updateUndoEditButton();
+  alert('Your last change was undone.');
+};
+
 // Saves the active term's timetable after a manual change
 function queueScheduleSave() {
   if (IS_STANDALONE) return;
+  // Remember the timetable as it was before this change, unless this save is itself an Undo
+  if (!undoInProgress && editUndoBaseline) {
+    editUndoStack.push(editUndoBaseline);
+    if (editUndoStack.length > EDIT_UNDO_LIMIT) editUndoStack.shift();
+  }
+  undoInProgress = false;
+  editUndoBaseline = copyClasses(activeTermClasses());
+  updateUndoEditButton();
   clearTimeout(scheduleSaveTimer);
   scheduleSaveTimer = setTimeout(async () => {
     const { activeTerm } = getActiveAcademicContext();
     try {
       await saveTermSchedule('bulk_save_schedules', activeTerm.id, MASTER_SCHEDULE_DATA.filter(c => !c.termId || c.termId === activeTerm.id));
     } catch (e) {
-      if (!e || !e.reported) alert('Could not reach the server, so this schedule change exists only in this browser.');
+      if (!e || !e.reported) alert("Couldn't reach the server, so this schedule change wasn't saved. Check your connection and try again.");
     }
     scheduleSaveTimer = null;
   }, 600);

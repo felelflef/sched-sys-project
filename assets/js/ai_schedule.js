@@ -338,7 +338,9 @@ window.applyAiDraft = async function() {
     if (!res.ok) return; // The save helper has already shown the server's message
     closeAiDraftModal();
     await loadServerState();
+    clearEditUndo();   // a whole new timetable; Undo Last Generate covers going back from here
     alert(`AI schedule applied: ${schedules.length} classes saved.`);
+    if (typeof renderGenerateSummary === 'function') renderGenerateSummary();
   } catch (e) {
     aiDraftShowError('Could not reach the server. Your current schedule was not changed.');
   } finally {

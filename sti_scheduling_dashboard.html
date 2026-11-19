@@ -691,6 +691,7 @@
                   </div>
                 </div>
 
+                <button class="btn btn-outline" id="btnUndoEdit" onclick="undoLastEdit()" disabled style="font-size:0.857rem; padding:6px 14px;">Undo Last Change</button>
                 <button class="btn btn-outline" id="btnUndoGenerate" onclick="undoLastGenerate()" style="display:none; font-size:0.857rem; padding:6px 14px;">Undo Last Generate</button>
                 <button class="btn btn-outline" id="btnGenerateAi" onclick="openAiDraftModal()" style="font-size:0.857rem; padding:6px 14px;">Generate with AI</button>
                 <button class="btn btn-primary" id="btnGenerate" onclick="openConfirmRegenerateModal()" style="font-size:0.857rem; padding:6px 14px;">
@@ -2190,7 +2191,7 @@
       </div>
       <div style="padding:22px; font-size:0.929rem; color:var(--text-primary); line-height:1.6;">
         <p>This action will auto-assign day, time, room, and teacher per section, honoring room type, capacity, faculty qualification, and zero overlap constraints.</p>
-        <p style="margin-top:10px; font-weight:700; color:#B45309;">&#9888; Please note: This will overwrite any existing baseline schedules for this semester.</p>
+        <p style="margin-top:10px; font-weight:700; color:#B45309;">&#9888; Please note: This replaces this term's timetable. Classes you have locked stay where they are.</p>
       </div>
       <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
         <button class="btn btn-outline" onclick="closeConfirmRegenerateModal()">Cancel</button>

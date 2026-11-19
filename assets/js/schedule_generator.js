@@ -27,7 +27,10 @@ async function executeGenerateBaseline() {
     return;
   }
   const { activeSy, activeTerm } = getActiveAcademicContext();
-  const newSchedules = generateSmartBaselineSchedules();
+  // Locked classes stay exactly where they are; the rest of the term is placed around them
+  const lockedClasses = activeTermClasses().filter(c => c.locked);
+  const newSchedules = generateSmartBaselineSchedules({ seed: lockedClasses });
+  clearEditUndo();
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(newSchedules);
   renderGrid();
 
@@ -325,7 +328,11 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
 
   workItems.forEach(({ sec, subj, subjIdx, part, partMinutes }) => {
     {
-      if (seed.some(c => c.section === sec.code && c.subjectCode === subj.code && classPart(c, subj, sec.program) === part)) return;
+      // Classes already kept (locked, or placed by an AI draft) count toward this part; only the rest is placed
+      const keptMinutes = seed.filter(c => c.section === sec.code && c.subjectCode === subj.code && classPart(c, subj, sec.program) === part)
+        .reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
+      if (keptMinutes >= partMinutes) return;
+      partMinutes -= keptMinutes;
       let placed = false;
       const partLabel = subjectPartLabel(subj, part);
 
