@@ -513,14 +513,6 @@ select:focus, input:focus {
   line-height: 1.25;
   word-break: break-word;
 }
-.class-subj-name {
-  font-size: 0.857rem;
-  font-weight: 600;
-  opacity: 0.95;
-  line-height: 1.25;
-  margin-top: 1px;
-  word-break: break-word;
-}
 .cell-quick-edit-btn {
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid rgba(0, 0, 0, 0.12);
@@ -541,11 +533,6 @@ select:focus, input:focus {
   font-weight: 600;
   opacity: 0.9;
   word-break: break-word;
-}
-.class-units-line {
-  font-size: 0.857rem;
-  font-weight: 700;
-  opacity: 0.85;
 }
 .class-conflict-badge {
   display: inline-flex;

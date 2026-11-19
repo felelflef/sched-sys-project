@@ -248,5 +248,3 @@ function askConfirm(message, { title = 'Please confirm', confirmLabel = 'Confirm
     overlay.querySelector(danger ? '[data-answer="no"]' : '[data-answer="yes"]').focus();
   });
 }
-window.askConfirm = askConfirm;
-

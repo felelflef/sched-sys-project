@@ -72,5 +72,3 @@ function renderScheduleReports() {
     </div>
   `;
 }
-
-window.renderScheduleReports = renderScheduleReports;

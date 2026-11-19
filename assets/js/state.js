@@ -171,7 +171,6 @@ function subjectArea(subjectCode) {
   return subj ? subj.dept : '';
 }
 
-
 function facultyCertificates(fac, certs = FCC_CERTIFICATES) {
   const held = fac?.certificates || [];
   return certs.filter(c => held.includes(c.id));

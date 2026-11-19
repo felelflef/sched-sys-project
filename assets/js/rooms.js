@@ -225,4 +225,3 @@ window.confirmDeleteRoom = function() {
   renderScheduleViewer();
   renderGrid();
 };
-

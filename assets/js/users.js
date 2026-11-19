@@ -538,4 +538,3 @@ window.confirmDeleteUser = function() {
   renderFacultyCards();
   renderGrid();
 };
-
