@@ -185,15 +185,55 @@ function applyServerFaculty(data) {
   FACULTY.splice(0, FACULTY.length, ...FACULTY.filter(f => f.email && onServer.has(f.email.toLowerCase())));
 }
 
+// Whether the server answers. When it doesn't, a banner says the screen shows the last saved copy and that changes
+// can't be saved; the app retries every 15 seconds and reloads the saved data once the server is back.
+let serverReachable = true;
+let serverRetryTimer = null;
+// The last data loaded from the server, and how many saves succeeded since, so a change that couldn't be saved
+// can be taken off the screen without hiding changes that were saved
+let lastSavedServerData = null;
+let savesSinceServerLoad = 0;
+
+function markServerReachable(reachable) {
+  if (IS_STANDALONE || reachable === serverReachable) return;
+  serverReachable = reachable;
+  let bar = document.getElementById('serverStatusBanner');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'serverStatusBanner';
+    bar.className = 'server-status-banner';
+    bar.setAttribute('role', 'alert');
+    bar.textContent = "Can't reach the server. You're seeing the last saved copy, and changes can't be saved until the connection is back. Retrying…";
+    document.body.prepend(bar);
+  }
+  bar.hidden = reachable;
+  clearInterval(serverRetryTimer);
+  serverRetryTimer = reachable ? null : setInterval(() => { if (CURRENT_USER) loadServerState(); }, 15000);
+}
+
+// A save that never reached the server: put the screen back to the saved data when that's safe, and say so
+function handleSaveUnreachable() {
+  markServerReachable(false);
+  if (lastSavedServerData && savesSinceServerLoad === 0) {
+    applyServerState(lastSavedServerData);
+    return true;
+  }
+  return false;
+}
+
 async function loadServerState() {
   if (IS_STANDALONE || !CURRENT_USER) return;
   try {
     const res = await fetch('api/schedules.php?action=get_lifecycle', { headers: { 'Accept': 'application/json' } });
+    if (res.status >= 500) markServerReachable(false);
     if (!res.ok) return;
     const body = await res.json();
     if (!body.success || !body.data) return;
+    markServerReachable(true);
 
     if (body.data.initialized) {
+      lastSavedServerData = body.data;
+      savesSinceServerLoad = 0;
       applyServerState(body.data);
     } else if (canManageData() && !publishOffered) {
       publishOffered = true;
@@ -202,6 +242,7 @@ async function loadServerState() {
     }
   } catch (e) {
     console.warn('Could not load shared data:', e);
+    markServerReachable(false);
   }
 }
 
@@ -255,6 +296,8 @@ function queueServerReload() {
 }
 
 function handleApiWriteSaved(url, body) {
+  savesSinceServerLoad++;
+  markServerReachable(true);
   let action = '';
   try { action = JSON.parse(body).action || ''; } catch (e) {}
   if (RELOAD_AFTER_ACTIONS.has(action) || /rooms\.php/.test(url)) queueServerReload();
@@ -314,7 +357,7 @@ function postScheduleAction(body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
-  }).catch(e => { if (!e || !e.reported) alert('Could not reach the server, so this change exists only in this browser.'); });
+  }).catch(e => { if (!e || !e.reported) alert("Couldn't reach the server, so this change wasn't saved. Check your connection and try again."); });
 }
 
 function saveFacultyQualifications(fac, removeClasses = false) {
