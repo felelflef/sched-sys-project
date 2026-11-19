@@ -841,3 +841,13 @@ select:focus, input:focus {
 
 /* A locked class: Generate keeps it where it is */
 .class-lock-badge { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 4px; background: #1E293B; color: #fff; font-size: 0.75rem; font-weight: 700; vertical-align: middle; }
+
+/* Step 2: the school's current term, and making a term current for everyone */
+.term-box-school { font-size: 0.85rem; font-weight: 700; color: #047857; margin-top: 4px; }
+.term-box-make-current { margin-top: 6px; font-size: 0.85rem; padding: 4px 10px; min-height: 2.25rem; }
+
+/* Step 7: Section / Room / Professor */
+.grid-mode-switch { display: inline-flex; gap: 4px; margin-right: 8px; flex-wrap: wrap; }
+.grid-mode-switch .btn { min-height: 2.25rem; padding: 4px 12px; font-size: 0.9rem; }
+.grid-pickers { display: contents; }
+.grid-pickers[hidden] { display: none; }

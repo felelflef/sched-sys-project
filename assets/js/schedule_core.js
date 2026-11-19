@@ -7,7 +7,7 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // Global repositories and runtime trackers
 let MASTER_SCHEDULE_DATA = [];
-let currentSelectedSection = 'IT701M';
+let currentSelectedSection = '';
 
 /* ─── Helpers: Time Parsing & Formatting ─── */
 function timeToMinutes(timeStr) {
@@ -85,7 +85,29 @@ const INPUT_RULES = {
 
 let isScheduleInitialized = false;
 
+// Each person picks the term they work on, kept in their browser, so a College registrar and an SHS coordinator
+// can each work on their own term. The school's current term (set for everyone in Step 2) is the default, and
+// the server keeps using it for its own checks. Everything that says "active term" in the app means this one.
+let viewingTermId = (() => { try { return Number(localStorage.getItem('sti_viewing_term')) || null; } catch (e) { return null; } })();
+function setViewingTerm(termId) {
+  viewingTermId = termId || null;
+  try {
+    if (viewingTermId) localStorage.setItem('sti_viewing_term', String(viewingTermId));
+    else localStorage.removeItem('sti_viewing_term');
+  } catch (e) {}
+  if (typeof refreshAllSchedulingViews === 'function') refreshAllSchedulingViews();
+}
+window.setViewingTerm = setViewingTerm;
+
 function getActiveAcademicContext() {
+  const viewed = viewingTermId && typeof SCHOOL_TERMS !== 'undefined' ? SCHOOL_TERMS.find(t => t.id === viewingTermId) : null;
+  const viewedYear = viewed && typeof SCHOOL_YEARS !== 'undefined' ? SCHOOL_YEARS.find(y => y.id === viewed.yearId) : null;
+  if (viewed && viewedYear) return { activeSy: viewedYear, activeTerm: viewed };
+  return getSchoolCurrentContext();
+}
+
+// The school's current year and term, as set for everyone
+function getSchoolCurrentContext() {
   const activeSy = (typeof SCHOOL_YEARS !== 'undefined' ? SCHOOL_YEARS.find(y => y.isActive) : null)
     || (typeof SCHOOL_YEARS !== 'undefined' && SCHOOL_YEARS.length > 0 ? SCHOOL_YEARS[0] : { id: 1, yearCode: 'AY 2026-2027' });
 
@@ -108,8 +130,8 @@ function getActiveAcademicContext() {
 // Steps: 1 School Year, 2 School Term, 3 Load Subjects, 4 Create Sections, 5 Rooms & Instructors,
 // 6 Validate Resources, 7 Timetable. Returns the first unfinished setup step, or null when all are done.
 function firstIncompleteStep() {
-  const activeSy = SCHOOL_YEARS.find(y => y.isActive);
-  if (!activeSy) return { step: 1, reason: 'Set an active school year.' };
+  if (!SCHOOL_YEARS.length) return { step: 1, reason: 'Add a school year.' };
+  const { activeSy } = getActiveAcademicContext();
   if (!SCHOOL_TERMS.some(t => t.yearId === activeSy.id)) return { step: 2, reason: `Add a school term for ${activeSy.yearCode}.` };
 
   const { activeTerm } = getActiveAcademicContext();

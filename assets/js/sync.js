@@ -343,26 +343,29 @@ function saveTermSchedule(action, termId, schedules, extra = {}) {
 // before, up to the last 10. If someone else changes the same term, the list is cleared, so Undo can never
 // remove their work.
 const EDIT_UNDO_LIMIT = 10;
-let editUndoStack = [];
-let editUndoBaseline = null;     // this term's classes as last saved or loaded
+let editUndoStack = [];          // each entry: { termId, classes } — the timetable just before one change
+let editUndoBaseline = null;     // { termId, classes }: the open term's timetable as last saved or loaded
 let editUndoTermId = null;
 let editUndoKnownVersion = null; // the term's schedule version after our own last save
 let undoInProgress = false;
 const copyClasses = list => list.map(c => ({ ...c }));
+const currentTermSnapshot = () => ({ termId: getActiveAcademicContext().activeTerm.id, classes: copyClasses(activeTermClasses()) });
 
 function clearEditUndo() {
   editUndoStack = [];
-  editUndoBaseline = copyClasses(activeTermClasses());
+  editUndoTermId = getActiveAcademicContext().activeTerm.id;
+  editUndoBaseline = currentTermSnapshot();
   updateUndoEditButton();
 }
-// After data loads: start over for a new term, or when the version moved because of someone else's save
+// After data loads or the open term changes: start over for a different term, or when the version moved because
+// of someone else's save; then take the open term's timetable as the starting point
 function refreshEditUndoBaseline() {
   const { activeTerm } = getActiveAcademicContext();
   if (!activeTerm) return;
   if (editUndoTermId !== activeTerm.id || (editUndoKnownVersion !== null && activeTerm.scheduleVersion !== editUndoKnownVersion)) editUndoStack = [];
   editUndoTermId = activeTerm.id;
   editUndoKnownVersion = activeTerm.scheduleVersion ?? null;
-  editUndoBaseline = copyClasses(activeTermClasses());
+  editUndoBaseline = currentTermSnapshot();
   updateUndoEditButton();
 }
 function updateUndoEditButton() {
@@ -375,8 +378,15 @@ window.undoLastEdit = function() {
   if (!editUndoStack.length || !canEditSchedule()) return;
   const { activeTerm } = getActiveAcademicContext();
   const previous = editUndoStack.pop();
-  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(copyClasses(previous));
-  editUndoBaseline = copyClasses(previous);
+  // An entry only ever goes back into the term it came from
+  if (previous.termId !== activeTerm.id) {
+    editUndoStack = [];
+    updateUndoEditButton();
+    alert("That change was made in another term, so it can't be undone here.");
+    return;
+  }
+  MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(copyClasses(previous.classes));
+  editUndoBaseline = { termId: activeTerm.id, classes: copyClasses(previous.classes) };
   undoInProgress = true;
   saveStateToStorage();
   renderGrid();
@@ -389,13 +399,20 @@ window.undoLastEdit = function() {
 // Saves the active term's timetable after a manual change
 function queueScheduleSave() {
   if (IS_STANDALONE) return;
-  // Remember the timetable as it was before this change, unless this save is itself an Undo
+  // Remember the timetable as it was before this change, unless this save is itself an Undo. A starting point
+  // from another term is never used: the list starts over in the term now open.
+  const openTermId = getActiveAcademicContext().activeTerm.id;
+  if (editUndoBaseline && editUndoBaseline.termId !== openTermId) {
+    editUndoStack = [];
+    editUndoBaseline = null;
+    editUndoTermId = openTermId;
+  }
   if (!undoInProgress && editUndoBaseline) {
     editUndoStack.push(editUndoBaseline);
     if (editUndoStack.length > EDIT_UNDO_LIMIT) editUndoStack.shift();
   }
   undoInProgress = false;
-  editUndoBaseline = copyClasses(activeTermClasses());
+  editUndoBaseline = currentTermSnapshot();
   updateUndoEditButton();
   clearTimeout(scheduleSaveTimer);
   scheduleSaveTimer = setTimeout(async () => {

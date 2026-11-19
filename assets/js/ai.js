@@ -49,7 +49,7 @@ async function runAiAnalysis(action = 'full_audit', customQuestion = '') {
     const res = await fetch('api/gemini_suggestions.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ action, question: customQuestion })
+      body: JSON.stringify({ action, question: customQuestion, term_id: getActiveAcademicContext().activeTerm.id })
     });
     const backendData = await res.json();
     if (backendData.success && backendData.data) {

@@ -6,7 +6,7 @@ ini_set('log_errors', '1');
 
 // ─────────────────────────────────────────────────────────
 // DATABASE CREDENTIALS
-// Reads from environment variables (set in Koyeb dashboard).
+// Reads from environment variables (set in the Render dashboard).
 // Aiven MySQL provides: host, port, dbname, user, password,
 // and requires SSL (sslmode=required).
 // ─────────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ define('DB_NAME', getenv('DB_NAME') ?: 'sti_classroom_system');
 define('DB_USER', getenv('DB_USER') ?: 'root');
 define('DB_PASS', getenv('DB_PASS') ?: '');
 
-// Aiven requires SSL. Set DB_SSL=true in Koyeb env vars.
+// Aiven requires SSL. Set DB_SSL=true in Render's environment variables.
 // Raise this whenever a new database column or table is added
 define('SCHEMA_VERSION', '2026-11-20.1');
 define('DB_SSL', filter_var(getenv('DB_SSL') ?: 'false', FILTER_VALIDATE_BOOLEAN));

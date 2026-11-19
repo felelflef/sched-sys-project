@@ -8,30 +8,6 @@ const viewerSelection = { section: '', teacher: '', room: '' };
 const VIEWER_LABELS = { section: 'Section', teacher: 'Professor', room: 'Room' };
 let viewerDefaultedFor = null; // Email of the faculty member already shown their own timetable
 
-/**
- * Adds any room used by a class to the ROOMS catalog so its timetable can still be viewed.
- */
-function syncMasterScheduleRoomsWithCatalog() {
-  if (typeof MASTER_SCHEDULE_DATA === 'undefined' || !Array.isArray(MASTER_SCHEDULE_DATA)) return;
-
-  MASTER_SCHEDULE_DATA.forEach(c => {
-    if (!c.room || c.room === 'TBA') return;
-    const roomCode = c.room.trim();
-    const exists = ROOMS.some(r => r.code.toUpperCase() === roomCode.toUpperCase());
-    if (!exists) {
-      let floor = '1F';
-      if (roomCode.includes('20') || roomCode.startsWith('LR-2')) floor = '2F';
-      else if (roomCode.includes('30') || roomCode.startsWith('LR-3')) floor = '3F';
-
-      let type = 'Lecture';
-      if (roomCode.toLowerCase().includes('lab') || roomCode.startsWith('CL-')) type = 'CompLab';
-      else if (roomCode.toLowerCase().includes('kitchen') || roomCode.toLowerCase().includes('tourism')) type = 'Special';
-
-      ROOMS.push({ code: roomCode, floor, type, cap: 40, name: roomCode });
-    }
-  });
-}
-
 function viewerOptions(activeTerm, termClasses) {
   const byLabel = (a, b) => a.label.localeCompare(b.label);
 
@@ -84,7 +60,6 @@ function renderScheduleViewer() {
   const body = document.getElementById('viewerGridBody');
   if (!body) return;
 
-  syncMasterScheduleRoomsWithCatalog();
 
   const { activeSy, activeTerm } = getActiveAcademicContext();
   const termLabel = `${activeTerm.termName} ${activeSy.yearCode}`;

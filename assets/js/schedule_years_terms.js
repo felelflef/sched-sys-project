@@ -154,6 +154,7 @@ function applySchoolLevelOptions() {
 }
 
 function refreshAllSchedulingViews() {
+  if (typeof refreshEditUndoBaseline === 'function') refreshEditUndoBaseline();
   applySchoolLevelOptions();
   renderSchoolYearTable();
   renderSchoolTermTable();
@@ -172,7 +173,7 @@ function refreshAllSchedulingViews() {
 
 function syncAllSyFilters() {
   if (typeof SCHOOL_YEARS === 'undefined') return;
-  const activeSy = SCHOOL_YEARS.find(y => y.isActive) || SCHOOL_YEARS[0];
+  const { activeSy } = getActiveAcademicContext();
 
   const selects = [
     document.getElementById('masterScheduleSyFilter')
@@ -181,7 +182,7 @@ function syncAllSyFilters() {
   selects.forEach(sel => {
     if (!sel) return;
     sel.innerHTML = SCHOOL_YEARS.map(sy => {
-      return `<option value="${sy.id}" ${sy.isActive ? 'selected' : ''}>${escapeHtml(sy.yearCode)}${sy.isActive ? ' (Active)' : ''}</option>`;
+      return `<option value="${sy.id}" ${activeSy && sy.id === activeSy.id ? 'selected' : ''}>${escapeHtml(sy.yearCode)}${sy.isActive ? ' (current)' : ''}</option>`;
     }).join('');
     if (activeSy) sel.value = String(activeSy.id);
   });
@@ -287,6 +288,9 @@ function setActiveSchoolYear(id) {
       t.isActive = t.id === firstTerm.id;
     });
   }
+  // The person who changed it works on the new current term too
+  viewingTermId = firstTerm ? firstTerm.id : null;
+  try { if (viewingTermId) localStorage.setItem('sti_viewing_term', String(viewingTermId)); else localStorage.removeItem('sti_viewing_term'); } catch (e) {}
 
   saveStateToStorage();
   refreshAllSchedulingViews();
@@ -298,11 +302,12 @@ function setActiveSchoolYear(id) {
 async function handleActiveYearFilter(select) {
   const id = parseInt(select.value, 10);
   const target = SCHOOL_YEARS.find(y => y.id === id);
-  if (!target || !(await askConfirm(`This changes the active school year to ${target.yearCode} for all users, not just this view.`, { title: 'Switch the active school year?', confirmLabel: 'Switch year' }))) {
-    syncAllSyFilters();
-    return;
-  }
-  setActiveSchoolYear(id);
+  if (!target) return syncAllSyFilters();
+  // Only your own view: the year's current term if it has one, otherwise its first term (Step 1 changes it for everyone)
+  const terms = termsOfYear(target.id);
+  const term = terms.find(t => t.isActive) || terms[0];
+  if (term) setViewingTerm(term.id);
+  else syncAllSyFilters();
 }
 
 async function deleteSchoolYear(id) {
@@ -327,7 +332,7 @@ async function deleteSchoolYear(id) {
 // It is kept by year code, which stays the same when a reload from the server renumbers a new year.
 let termViewYearCode = null;
 function termViewYear() {
-  return SCHOOL_YEARS.find(y => y.yearCode === termViewYearCode) || SCHOOL_YEARS.find(y => y.isActive) || SCHOOL_YEARS[0];
+  return SCHOOL_YEARS.find(y => y.yearCode === termViewYearCode) || getActiveAcademicContext().activeSy || SCHOOL_YEARS[0];
 }
 function changeTermViewYear(yearId) {
   const year = SCHOOL_YEARS.find(y => String(y.id) === String(yearId));
@@ -363,7 +368,7 @@ function renderSchoolTermTable() {
     saveStateToStorage();
   }
 
-  const activeTerm = SCHOOL_TERMS.find(t => t.isActive);
+  const { activeTerm } = getActiveAcademicContext();
   const sub2 = document.getElementById('stepSub-2');
   if (sub2 && activeTerm) sub2.textContent = activeTerm.termName;
 
@@ -372,14 +377,17 @@ function renderSchoolTermTable() {
 
   container.innerHTML = ['tertiary', 'shs'].map(level => {
     const boxes = terms.filter(t => schoolLevelOfTerm(t) === level).map(term => `
-      <div class="term-box${term.isActive ? ' is-current' : ''}" ${term.isActive ? '' : `role="button" tabindex="0" title="Switch to ${escapeHtml(term.termName)}"
-        onclick="setActiveSchoolTerm(${term.id})" onkeydown="if (event.key === 'Enter') setActiveSchoolTerm(${term.id})"`}>
+      <div class="term-box${term.id === activeTerm.id ? ' is-current' : ''}" ${term.id === activeTerm.id ? '' : `role="button" tabindex="0" title="Work on ${escapeHtml(term.termName)}"
+        onclick="setViewingTerm(${term.id})" onkeydown="if (event.key === 'Enter') setViewingTerm(${term.id})"`}>
         <div class="term-box-head">
           <span class="term-box-name">${escapeHtml(term.termName)}</span>
           ${statusPill(term.status)}
         </div>
         <div class="term-box-dates">${escapeHtml(term.startDate || '')} – ${escapeHtml(term.endDate || '')}</div>
-        <div class="term-box-current">${term.isActive ? '✓ Current working term' : 'Click to switch to this term'}</div>
+        <div class="term-box-current">${term.id === activeTerm.id ? '✓ You are working on this term' : 'Click to work on this term'}</div>
+        ${term.isActive ? '<div class="term-box-school">School\'s current term</div>'
+          : `<button type="button" class="btn btn-outline term-box-make-current" onclick="event.stopPropagation(); setActiveSchoolTerm(${term.id})"
+              title="Faculty and new sign-ins open this term">Make current for everyone</button>`}
         <div class="term-box-actions" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()">
           <select onchange="updateTermStatusDirectly(${term.id}, this.value)" aria-label="Status of ${escapeHtml(term.termName)}">
             <option value="draft" ${term.status === 'draft' ? 'selected' : ''}>Draft</option>
@@ -420,12 +428,14 @@ async function setActiveSchoolTerm(termId) {
   const targetYear = SCHOOL_YEARS.find(y => y.id === targetTerm.yearId);
   const changesYear = targetYear && !targetYear.isActive;
   const termLabel = `${targetTerm.termName}${targetYear ? ` ${targetYear.yearCode}` : ''}`;
-  if (!(await askConfirm(`This makes ${termLabel} the active term for all users, not just this view.${changesYear ? ` The active school year also changes to ${targetYear.yearCode}.` : ''}`,
-    { title: 'Switch the active term?', confirmLabel: 'Switch term' }))) return;
+  if (!(await askConfirm(`This makes ${termLabel} the school's current term for everyone: faculty and anyone signing in will see it. To only work on a term yourself, click its box instead.${changesYear ? ` The school's current year also changes to ${targetYear.yearCode}.` : ''}`,
+    { title: 'Make this the current term for everyone?', confirmLabel: 'Make current' }))) return;
 
   // Make sure parent year is active
   SCHOOL_YEARS.forEach(y => y.isActive = (y.id === targetTerm.yearId));
   SCHOOL_TERMS.forEach(t => t.isActive = (t.id === termId));
+  viewingTermId = termId;
+  try { localStorage.setItem('sti_viewing_term', String(termId)); } catch (e) {}
 
   saveStateToStorage();
   refreshAllSchedulingViews();

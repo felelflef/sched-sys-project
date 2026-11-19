@@ -9,7 +9,12 @@ let searchActiveIndex = -1;
 
 function searchCandidates() {
   const { activeTerm } = getActiveAcademicContext();
-  const sections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id).map(s => ({ kind: 'section', label: s.code, detail: s.name, value: s.code }));
+  // Sections of the open term and of the term running alongside it (College with SHS)
+  const termIds = [activeTerm.id, ...pairedTermIds(activeTerm.id)];
+  const sections = ACADEMIC_SECTIONS.filter(s => termIds.includes(s.termId)).map(s => ({
+    kind: 'section', label: s.code, value: s.code, termId: s.termId,
+    detail: s.termId === activeTerm.id ? s.name : `${s.name} · ${termWithLevel(s.termId)}`
+  }));
   const teachers = FACULTY.map(f => ({ kind: 'teacher', label: f.name, detail: f.dept || 'Professor', value: f.name }));
   const rooms = ROOMS.map(r => ({ kind: 'room', label: r.code, detail: `${r.type}, ${r.cap} seats`, value: r.code }));
   const subjects = SUBJECTS.map(s => ({ kind: 'subject', label: s.code, detail: s.title || s.name || '', value: s.code }));
@@ -62,6 +67,8 @@ function openSearchResult(index) {
     if (filter) { filter.value = result.value; renderSubjectTable(); }
     return;
   }
+  // A section of the term running alongside opens that term for you first
+  if (result.termId && result.termId !== getActiveAcademicContext().activeTerm.id) setViewingTerm(result.termId);
   switchPage('viewer');
   setViewerMode(result.kind);
   setViewerSelection(result.value);

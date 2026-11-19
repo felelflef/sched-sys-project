@@ -268,8 +268,9 @@ function drawTimetablePage(pdf, card, classes, mode, isFirstPage) {
 }
 
 // The active term's classes shown on the Master Schedule sheet
+// The classes the Step 7 timetable is showing: a section, a room or a professor
 function masterSheetClasses() {
-  return activeTermClasses().filter(c => c.section === currentSelectedSection);
+  return gridModeClasses();
 }
 
 // A real PDF of one timetable. If drawing fails, a picture of the sheet is used instead.
@@ -302,7 +303,7 @@ function exportTimetablePDF() {
   const menu = document.getElementById('exportDropdownMenu');
   if (menu) menu.style.display = 'none';
 
-  saveTimetableSheetPdf(document.getElementById('sectionTimetableCard'), currentSelectedSection, masterSheetClasses(), 'section');
+  saveTimetableSheetPdf(document.getElementById('sectionTimetableCard'), gridMode === 'section' ? currentSelectedSection : gridSelection[gridMode], masterSheetClasses(), gridMode);
 }
 
 async function exportTimetablePNG() {
