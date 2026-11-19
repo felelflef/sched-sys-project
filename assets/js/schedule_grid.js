@@ -340,6 +340,75 @@ function checkFacultySubjectConflict(instructorName, subjectCode, sectionCode) {
 }
 
 /* ─── Main Timetable Grid Renderer ─── */
+// Step 7 shows one section, room or professor at a time. Room and professor views also show the classes of the
+// term running alongside (College with SHS), read-only, because those hold the same rooms and teachers.
+let gridMode = 'section';
+const gridSelection = { room: '', teacher: '' };
+const GRID_MODE_LABELS = { section: 'Section', room: 'Room', teacher: 'Professor' };
+
+function gridModeClasses() {
+  const { activeTerm } = getActiveAcademicContext();
+  if (gridMode === 'section') return activeTermClasses().filter(c => c.section === currentSelectedSection);
+  const selected = gridSelection[gridMode];
+  const alongside = MASTER_SCHEDULE_DATA.filter(c => c.termId && pairedTermIds(activeTerm.id).includes(c.termId));
+  return [...activeTermClasses(), ...alongside].filter(c => gridMode === 'room' ? c.room === selected : c.instructor === selected);
+}
+
+window.setGridMode = function(mode) {
+  gridMode = mode;
+  document.querySelectorAll('[data-grid-mode]').forEach(btn => {
+    const on = btn.dataset.gridMode === mode;
+    btn.classList.toggle('btn-primary', on);
+    btn.classList.toggle('btn-outline', !on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
+  document.getElementById('gridSectionPickers').hidden = mode !== 'section';
+  document.getElementById('gridOtherPicker').hidden = mode === 'section';
+  renderGrid();
+};
+window.setGridSelection = function(value) {
+  gridSelection[gridMode] = value;
+  renderGrid();
+};
+
+function renderRoomOrTeacherGrid(tbody) {
+  const { activeSy, activeTerm } = getActiveAcademicContext();
+  const options = gridMode === 'room'
+    ? ROOMS.map(r => ({ value: r.code, label: `${r.code} (${r.type}, ${r.cap} seats)` })).sort((a, b) => a.label.localeCompare(b.label))
+    : FACULTY.map(f => ({ value: f.name, label: f.dept ? `${f.name} (${f.dept})` : f.name })).sort((a, b) => a.label.localeCompare(b.label));
+  if (!options.some(o => o.value === gridSelection[gridMode])) gridSelection[gridMode] = options.length ? options[0].value : '';
+  const selected = gridSelection[gridMode];
+  document.getElementById('gridPickLabel').textContent = `${GRID_MODE_LABELS[gridMode]}:`;
+  const pick = document.getElementById('gridPickSelect');
+  pick.innerHTML = options.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('');
+  pick.value = selected;
+
+  const classes = gridModeClasses();
+  const weeklyHours = classes.reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0) / 60;
+  document.getElementById('sheetSectionTitle').textContent = selected || `No ${GRID_MODE_LABELS[gridMode]}`;
+  if (gridMode === 'room') {
+    const room = ROOMS.find(r => r.code === selected);
+    document.getElementById('sheetProgramYear').textContent = `Room timetable • ${activeTerm.termName} ${activeSy.yearCode}`;
+    [['Room Type', room ? room.type : '—'], ['Capacity', room ? `${room.cap} seats` : '—'], ['Weekly Hours', `${weeklyHours.toFixed(1)} hrs`]]
+      .forEach(([label, value], i) => setSheetStat(i, label, value));
+  } else {
+    const fac = FACULTY.find(f => f.name === selected);
+    const load = fac ? facultyLoadUnits(fac.name) + concurrentLoadUnits(fac.name, activeTerm.id) : 0;
+    document.getElementById('sheetProgramYear').textContent = `Professor timetable • ${activeTerm.termName} ${activeSy.yearCode}`;
+    [['Teaching Load', fac ? `${formatUnits(load)} of ${facultyMinUnits(fac)}–${facultyMaxUnits(fac)} units` : '—'], ['Weekly Teaching', `${weeklyHours.toFixed(1)} hrs`], ['Department', (fac && fac.dept) || '—']]
+      .forEach(([label, value], i) => setSheetStat(i, label, value));
+  }
+  tbody.innerHTML = timetableRowsHtml(classes, !canEditSchedule());
+  renderTimetableHours(classes, 'hrs-', 'weeklyTotalHours');
+}
+// The three numbers under the timetable title
+function setSheetStat(index, label, value) {
+  const labels = ['sheetStatLabel1', 'sheetStatLabel2', 'sheetStatLabel3'];
+  const values = ['sheetTotalUnits', 'sheetStudentsCount', 'sheetAdviser'];
+  document.getElementById(labels[index]).textContent = label;
+  document.getElementById(values[index]).textContent = value;
+}
+
 function renderGrid() {
   const tbody = document.getElementById('sectionGridBody');
   if (!tbody) return;
@@ -349,6 +418,7 @@ function renderGrid() {
     goToScheduleStep(7);
     return;
   }
+  if (gridMode !== 'section') return renderRoomOrTeacherGrid(tbody);
 
   const { activeSy, activeTerm } = getActiveAcademicContext();
   let filteredClasses = [];
@@ -412,6 +482,7 @@ function classPartTag(item) {
 }
 
 function timetableRowsHtml(filteredClasses, readOnly = false) {
+  const viewedTermId = getActiveAcademicContext().activeTerm.id;
   // Auto-trim used range: Calculate earliest start & latest end
   let minMinutes = 7 * 60; // 07:00
   let maxMinutes = 19 * 60; // 19:00
@@ -506,14 +577,16 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
 
       if (cell && cell.type === 'class') {
         const item = cell.classItem;
-        const conflictReason = readOnly ? null : checkClassConflict(item);
+        // A class of the term running alongside is shown for reference; it is edited from its own term
+        const cellReadOnly = readOnly || (item.termId && item.termId !== viewedTermId);
+        const conflictReason = cellReadOnly ? null : checkClassConflict(item);
         const conflictClass = conflictReason ? 'has-conflict' : '';
         const itemType = (item.type || 'lecture').toLowerCase();
 
         rowsHtml += `
           <td class="class-block-cell type-${itemType} ${conflictClass}"
               rowspan="${cell.rowspan}"
-              ${readOnly ? '' : `draggable="true"
+              ${cellReadOnly ? '' : `draggable="true"
               ondragstart="handleClassDragStart(event, '${item.id}')"
               onclick="showClassDetails('${item.id}')"
               tabindex="0" role="button"
@@ -521,8 +594,8 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
               title="${escapeHtml(item.subjectCode)}: ${escapeHtml(item.subjectTitle || '')} (${formatTime12(item.startTime)} – ${formatTime12(item.endTime)})">
             <div class="class-cell-inner">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
-                <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}${otherTermBadge(item)}</span>
-                ${readOnly ? '' : `<button class="cell-quick-edit-btn" onclick="event.stopPropagation(); openEditClassScheduleModal('${item.id}')" title="Edit subject or time" aria-label="Edit ${escapeHtml(item.subjectCode)}">Edit</button>`}
+                <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}${item.locked ? ' <span class="class-lock-badge" title="Locked: Generate keeps this class where it is">Locked</span>' : ''}${otherTermBadge(item)}</span>
+                ${cellReadOnly ? '' : `<button class="cell-quick-edit-btn" onclick="event.stopPropagation(); openEditClassScheduleModal('${item.id}')" title="Edit subject or time" aria-label="Edit ${escapeHtml(item.subjectCode)}">Edit</button>`}
               </div>
               <span class="class-subj-title">${escapeHtml(item.subjectCode)}${classPartTag(item)}</span>
               <span class="class-meta-line">Room ${escapeHtml(item.room)}</span>
@@ -573,6 +646,19 @@ function renderTimetableHours(filteredClasses, dayIdPrefix, totalId) {
 }
 
 /* ─── Class Details Modal ─── */
+// A locked class stays put when the timetable is generated again; everything else is placed around it
+window.toggleClassLock = function(classId) {
+  const item = MASTER_SCHEDULE_DATA.find(c => c.id === classId);
+  if (!item || !canEditSchedule()) return;
+  item.locked = !item.locked;
+  saveStateToStorage();
+  renderGrid();
+  queueScheduleSave();
+  // The saved timetable comes back with new class IDs, so the details window closes rather than go stale
+  closeClassDetailModal();
+  alert(item.locked ? `${item.subjectCode} for ${item.section} is locked. Generate will keep it at ${item.day} ${formatTime12(item.startTime)}.` : `${item.subjectCode} for ${item.section} is unlocked.`);
+};
+
 function showClassDetails(classId) {
   const item = MASTER_SCHEDULE_DATA.find(c => c.id === classId);
   if (!item) return;
@@ -591,7 +677,9 @@ function showClassDetails(classId) {
         <button class="btn btn-outline" style="color:var(--danger); border-color:#FCA5A5; font-size:0.857rem; padding:6px 12px;" onclick="deleteClassSchedule('${escapeHtml(item.id)}')">
           🗑️ Remove
         </button>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+          <button class="btn btn-outline" style="font-size:0.857rem; padding:6px 14px;" onclick="toggleClassLock('${escapeHtml(item.id)}')"
+            title="${item.locked ? 'Let Generate move this class again' : 'Generate keeps a locked class at this day, time, room and teacher'}">${item.locked ? 'Unlock' : 'Lock'}</button>
           <button class="btn btn-secondary" style="font-size:0.857rem; padding:6px 14px;" onclick="closeClassDetailModal()">Close</button>
           <button class="btn btn-primary" style="font-size:0.857rem; padding:6px 16px; font-weight:700;" onclick="openEditClassScheduleModal('${escapeHtml(item.id)}')">
             ✏️ Edit Schedule
@@ -879,9 +967,6 @@ function submitEditClassSchedule() {
   renderGrid();
   updateScheduleStats();
 
-  if (typeof syncMasterScheduleRoomsWithCatalog === 'function') {
-    syncMasterScheduleRoomsWithCatalog();
-  }
   queueScheduleSave();
 }
 
@@ -978,8 +1063,8 @@ function openManualSlotModal(day, timeStr) {
 
   if (errDiv) errDiv.style.display = 'none';
 
-  // Target Section
-  let targetSection = currentSelectedSection || 'IT701M';
+  // Target Section (in room and professor views the section is typed in)
+  let targetSection = gridMode === 'section' ? (currentSelectedSection || '') : '';
   if (secInput) secInput.value = targetSection;
 
   // Target Program
@@ -1007,7 +1092,8 @@ function openManualSlotModal(day, timeStr) {
     && startMin < timeToMinutes(c.endTime) && timeToMinutes(endTimeStr) > timeToMinutes(c.startTime));
   roomSel.innerHTML = ROOMS.map(r => `<option value="${escapeHtml(r.code)}">${escapeHtml(r.code)} (${escapeHtml(r.type)}, ${r.cap} seats)</option>`).join('');
   const firstFree = ROOMS.find(isRoomFree);
-  if (firstFree) roomSel.value = firstFree.code;
+  if (gridMode === 'room' && gridSelection.room) roomSel.value = gridSelection.room;
+  else if (firstFree) roomSel.value = firstFree.code;
 
   // Populate Faculty Select
   if (facSel) {
@@ -1025,6 +1111,7 @@ function openManualSlotModal(day, timeStr) {
     `).join('');
   }
 
+  if (gridMode === 'teacher' && facSel && gridSelection.teacher) facSel.value = gridSelection.teacher;
   if (subInput) subInput.value = '';
 
   modal.style.display = 'flex';
@@ -1055,8 +1142,12 @@ function submitSlotAssignment() {
   const instructor = facSel?.value || (FACULTY.length > 0 ? FACULTY[0].name : 'TBA');
   const subjectCode = (subInput?.value || '').trim().toUpperCase();
   const program = progSel?.value || 'BSIT';
-  const section = (secInput?.value || '').trim().toUpperCase() || currentSelectedSection || 'IT701M';
+  const section = (secInput?.value || '').trim().toUpperCase();
 
+  if (!section) {
+    showError('Please enter the section this class is for.');
+    return;
+  }
   if (!subjectCode) {
     if (errDiv) {
       errDiv.textContent = 'Please enter or select a Course / Subject Code.';
@@ -1139,9 +1230,6 @@ function submitSlotAssignment() {
   renderGrid();
   updateScheduleStats();
 
-  if (typeof syncMasterScheduleRoomsWithCatalog === 'function') {
-    syncMasterScheduleRoomsWithCatalog();
-  }
 }
 
 /* ─── Global Class Conflict Check Helper ─── */
@@ -1190,10 +1278,10 @@ function handleSectionSearch(query) {
 
 /* ─── Dynamic Stats & Subtitles Updater ─── */
 function updateScheduleStats() {
-  const activeSy = (typeof SCHOOL_YEARS !== 'undefined' ? SCHOOL_YEARS.find(y => y.isActive) : null) || { yearCode: 'AY 2026–2027' };
-  const activeTerm = (typeof SCHOOL_TERMS !== 'undefined' ? SCHOOL_TERMS.find(t => t.isActive && (!activeSy || t.yearId === activeSy.id)) : null)
-    || (typeof SCHOOL_TERMS !== 'undefined' && activeSy ? SCHOOL_TERMS.find(t => t.yearId === activeSy.id) : null)
-    || { termName: '1st Sem' };
+  const summary = document.getElementById('generateSummary');
+  if (summary && !summary.hidden && summary.dataset.termId !== String(getActiveAcademicContext().activeTerm.id)) summary.hidden = true;
+  const { activeSy, activeTerm } = getActiveAcademicContext();
+  const schoolTerm = getSchoolCurrentContext().activeTerm;
   const termSections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id);
   const totalSections = termSections.length;
   const fullyScheduledSections = termSections.filter(isSectionFullyScheduled).length;
@@ -1207,7 +1295,8 @@ function updateScheduleStats() {
 
   const headerSub = document.getElementById('headerSubtitle');
   if (headerSub) {
-    headerSub.textContent = `${activeTerm.termName} ${activeSy.yearCode} · ${totalSections} sections across ${totalRooms} rooms`;
+    headerSub.textContent = `${activeTerm.termName} ${activeSy.yearCode} · ${totalSections} sections across ${totalRooms} rooms`
+      + (schoolTerm && schoolTerm.id !== activeTerm.id ? ` · You're working on this term; the school's current term is ${schoolTerm.termName}` : '');
   }
 
   const sub1 = document.getElementById('stepSub-1');

@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS schedules (
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     ai_generated TINYINT(1) NOT NULL DEFAULT 0,
+    is_locked TINYINT(1) NOT NULL DEFAULT 0,
     INDEX idx_schedules_term_day (term_id, day_of_week),
     FOREIGN KEY (room_id) REFERENCES classrooms(room_id) ON DELETE CASCADE,
     FOREIGN KEY (faculty_id) REFERENCES users(user_id) ON DELETE CASCADE
@@ -112,6 +113,14 @@ CREATE TABLE IF NOT EXISTS schedule_snapshots (
     term_id INT PRIMARY KEY,
     saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     schedule_json MEDIUMTEXT NOT NULL
+);
+
+-- Sign-ins, kept in the database so they survive restarts and deploys
+CREATE TABLE IF NOT EXISTS app_sessions (
+    session_id VARCHAR(128) PRIMARY KEY,
+    data MEDIUMTEXT NOT NULL,
+    updated_at INT NOT NULL,
+    INDEX idx_sessions_updated (updated_at)
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (

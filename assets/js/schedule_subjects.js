@@ -9,17 +9,16 @@ let curriculumFilterActiveTermId = null;
 function updateCurriculumTermFilter() {
   const sel = document.getElementById('curriculumTermFilter');
   if (!sel) return;
-  const activeSy = SCHOOL_YEARS.find(y => y.isActive) || SCHOOL_YEARS[0];
+  const { activeSy, activeTerm } = getActiveAcademicContext();
   const terms = activeSy ? termsOfYear(activeSy.id) : SCHOOL_TERMS;
-  const activeTerm = terms.find(t => t.isActive) || terms[0];
 
   // A term the user picked stays picked, until the active term itself changes
   const activeTermChanged = activeTerm && activeTerm.id !== curriculumFilterActiveTermId;
   curriculumFilterActiveTermId = activeTerm ? activeTerm.id : null;
   const currentVal = activeTermChanged ? '' : sel.value;
   sel.innerHTML = `<option value="all">All Terms</option>` + terms.map(t => `
-    <option value="${t.id}" ${t.isActive ? 'selected' : ''}>
-      ${escapeHtml(t.termName)} ${t.isActive ? '(Active)' : ''}
+    <option value="${t.id}" ${t.id === activeTerm.id ? 'selected' : ''}>
+      ${escapeHtml(t.termName)}${t.id === activeTerm.id ? ' (working on)' : ''}${t.isActive ? ' (current)' : ''}
     </option>
   `).join('');
 
@@ -368,7 +367,7 @@ async function submitAddSubjectModal() {
       subj.year = year;
     }
   } else {
-    const activeTerm = SCHOOL_TERMS.find(t => t.isActive) || SCHOOL_TERMS[0];
+    const { activeTerm } = getActiveAcademicContext();
     const currentTermFilterVal = document.getElementById('curriculumTermFilter')?.value;
     const termId = (currentTermFilterVal && currentTermFilterVal !== 'all')
       ? parseInt(currentTermFilterVal, 10)

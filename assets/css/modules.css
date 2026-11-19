@@ -594,3 +594,42 @@ th[data-sorted="desc"]::after { content: ' \25BC'; font-size: 0.857rem; }
 /* Shown while the server can't be reached: the screen shows the last saved copy and changes can't be saved */
 .server-status-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 3000; background: #FEF3C7; color: #78350F; border-bottom: 2px solid #F59E0B; padding: 10px 16px; font-size: 1rem; font-weight: 700; text-align: center; }
 .server-status-banner[hidden] { display: none; }
+
+/* Search in the page header */
+.page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.global-search { position: relative; flex: 0 1 340px; min-width: 220px; }
+.global-search input { width: 100%; min-height: 2.75rem; padding: 8px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; font-size: 1rem; background: #fff; }
+.global-search-results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1200; margin: 0; padding: 4px 0; list-style: none; background: #fff; border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-height: 60vh; overflow-y: auto; }
+.global-search-option { padding: 8px 12px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.global-search-option.active, .global-search-option:hover { background: #EEF4FF; }
+.global-search-kind { font-size: 0.8rem; font-weight: 700; color: var(--accent-primary); min-width: 4.5rem; }
+.global-search-detail { color: var(--text-secondary); font-size: 0.9rem; }
+.global-search-empty { padding: 10px 12px; color: var(--text-secondary); }
+@media (max-width: 760px) { .global-search { flex-basis: 100%; } }
+
+/* Results after Generate */
+.generate-summary { border: 1px solid #C7D7FE; background: #F5F8FF; border-radius: 10px; padding: 12px 16px; margin: 0 0 14px; }
+.generate-summary-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 6px; }
+.generate-summary-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.generate-summary-list li span { display: inline-block; width: 1.3rem; font-weight: 800; }
+.generate-summary-list li.ok span { color: #047857; }
+.generate-summary-list li.warn span { color: #B45309; }
+.generate-summary-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+/* View Schedule on phones: a list per day instead of the wide grid */
+.viewer-day-list { display: none; }
+@media (max-width: 700px) {
+  #page-viewer .timetable-table-container { display: none; }
+  .viewer-day-list { display: block; }
+  .viewer-export-buttons { flex-wrap: wrap; }
+}
+.viewer-day { margin-bottom: 12px; }
+.viewer-day h4 { margin: 0 0 6px; font-size: 1.05rem; color: var(--accent-primary); }
+.viewer-day ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.viewer-day-class { border: 1px solid var(--border-subtle); border-left: 4px solid #2563EB; border-radius: 8px; padding: 8px 10px; background: #fff; }
+.viewer-day-class.type-lab { border-left-color: #059669; }
+.viewer-day-class.type-pe, .viewer-day-class.type-special { border-left-color: #D97706; }
+.viewer-day-time { font-weight: 700; font-size: 0.95rem; }
+.viewer-day-title, .viewer-day-meta { color: var(--text-secondary); font-size: 0.9rem; }
+.viewer-day-empty { color: var(--text-secondary); }
+@media print { .viewer-day-list { display: none !important; } #page-viewer .timetable-table-container { display: block !important; } }

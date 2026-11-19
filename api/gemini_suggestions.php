@@ -45,10 +45,11 @@ try {
         FROM schedules s 
         JOIN classrooms c ON s.room_id = c.room_id 
         JOIN users u ON s.faculty_id = u.user_id
-        WHERE s.term_id IS NULL OR s.term_id = (SELECT term_id FROM school_terms WHERE is_active = 1 LIMIT 1)
+        WHERE s.term_id = COALESCE(NULLIF(?, 0), (SELECT term_id FROM school_terms WHERE is_active = 1 LIMIT 1))
         ORDER BY s.day_of_week, s.start_time
     ");
-    $stmtSched->execute();
+    // The term the person is working on, or the school's current term
+    $stmtSched->execute([(int)($input['term_id'] ?? 0)]);
     $schedules = $stmtSched->fetchAll();
 
     foreach ($schedules as $sched) {

@@ -88,7 +88,7 @@ function resolveScheduleRows(PDO $db, array $items, int $termId, ?array $qualifi
                 jsonResponse(['success' => false, 'message' => "{$instructor} isn't set to teach {$levelName} classes, so they can't teach {$subCode} for {$secName}. Change their teaching level in Faculty Profiles. No changes were made."], 400);
             }
         }
-        $rows[] = [$rowTermId ?: null, $roomId, $facultyId, $subCode, $subCat, $secName, $day, $start, $end, empty($item['aiPlaced']) ? 0 : 1];
+        $rows[] = [$rowTermId ?: null, $roomId, $facultyId, $subCode, $subCat, $secName, $day, $start, $end, empty($item['aiPlaced']) ? 0 : 1, empty($item['locked']) ? 0 : 1];
     }
     return $rows;
 }
@@ -378,11 +378,11 @@ function bumpScheduleVersion(PDO $db, int $termId): void {
 
 function insertScheduleRows(PDO $db, array $rows): void {
     $ins = $db->prepare("
-        INSERT INTO schedules (term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time, ai_generated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO schedules (term_id, room_id, faculty_id, subject_code, subject_category, section_name, day_of_week, start_time, end_time, ai_generated, is_locked)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     foreach ($rows as $row) {
-        $ins->execute($row);
+        $ins->execute(array_pad(array_slice($row, 0, 11), 11, 0));
     }
 }
 
@@ -1955,6 +1955,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $db->beginTransaction();
         try {
             $newVersion = lockScheduleVersion($db, $term_id, $input['expected_version'] ?? null);
+            // Safety net: an edit changes a few classes, so an edit save that would wipe out most of a term is refused
+            // (replacing a whole term is done by Generate, which can be undone)
+            if ($action === 'bulk_save_schedules') {
+                $countExisting = $db->prepare("SELECT COUNT(*) FROM schedules WHERE term_id = ?");
+                $countExisting->execute([$term_id]);
+                $existing = (int)$countExisting->fetchColumn();
+                if ($existing - count($rows) > 10 && count($rows) < $existing / 2) {
+                    $db->rollBack();
+                    jsonResponse(['success' => false, 'message' => 'This change would remove ' . ($existing - count($rows)) . ' classes at once, so it was stopped and nothing was changed. Reload the page and try again.'], 409);
+                }
+            }
             // Checked inside the lock, against the rows actually saved now
             requireNoNewClashesOrOverloads($db, $rows, $term_id);
             // A full regenerate can be undone; ordinary edits don't replace the undo copy
@@ -2001,7 +2012,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             if (!$valid) {
                 jsonResponse(['success' => false, 'message' => "The earlier schedule can't be restored because {$r['section_name']} {$r['subject_code']} no longer meets the current rooms, qualifications or availability."], 409);
             }
-            $rows[] = [$term_id, (int)$r['room_id'], $facultyId, $r['subject_code'], $r['subject_category'], $r['section_name'], $r['day_of_week'], $r['start_time'], $r['end_time'], (int)$r['ai_generated']];
+            $rows[] = [$term_id, (int)$r['room_id'], $facultyId, $r['subject_code'], $r['subject_category'], $r['section_name'], $r['day_of_week'], $r['start_time'], $r['end_time'], (int)$r['ai_generated'], (int)($r['is_locked'] ?? 0)];
         }
 
         $db->beginTransaction();

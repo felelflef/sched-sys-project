@@ -178,8 +178,15 @@
 
       <!-- ─── PAGE HEADING (filled in by navigation.js) ─── -->
       <div class="page-heading">
-        <h2 id="headerTitle">Master Schedule</h2>
-        <p id="headerSubtitle">Set up the term and build the weekly timetable</p>
+        <div>
+          <h2 id="headerTitle">Master Schedule</h2>
+          <p id="headerSubtitle">Set up the term and build the weekly timetable</p>
+        </div>
+        <div class="global-search" role="search">
+          <input type="search" id="globalSearchInput" placeholder="Find a section, professor, room or subject" aria-label="Find a section, professor, room or subject"
+            autocomplete="off" role="combobox" aria-expanded="false" aria-controls="globalSearchResults" aria-autocomplete="list" />
+          <ul id="globalSearchResults" class="global-search-results" role="listbox" hidden></ul>
+        </div>
       </div>
 
       <!-- ─── CONTENT ─── -->
@@ -527,8 +534,8 @@
                   </div>
                 </div>
                 <div style="display:flex; gap:8px;">
+                  <button class="btn btn-outline" onclick="openAutoGenerateSectionsModal()" style="font-size:0.857rem; padding:6px 14px;">Create Several Sections</button>
                   <button class="btn btn-primary" onclick="openAddSectionModal()" style="font-size:0.857rem; padding:6px 14px;">+ Add Section</button>
-
                 </div>
               </div>
 
@@ -610,6 +617,9 @@
               </div>
             </div>
 
+            <!-- What the last Generate produced, shown right after it runs -->
+            <div class="generate-summary" id="generateSummary" role="status" hidden></div>
+
             <!-- Diagnostics: Unassigned Classes Alert Banner -->
             <div class="unassigned-banner" id="unassignedBanner">
               <div class="unassigned-title">
@@ -627,8 +637,14 @@
 
             <!-- Grid Controls & Toolbar -->
             <div class="grid-controls">
-              <!-- Single Master View: Section Filters -->
+              <!-- Show the timetable by section, room or professor; all three can be edited -->
+              <div class="grid-mode-switch" role="group" aria-label="Show the timetable by">
+                <button type="button" class="btn btn-primary" data-grid-mode="section" aria-pressed="true" onclick="setGridMode('section')">Section</button>
+                <button type="button" class="btn btn-outline" data-grid-mode="room" aria-pressed="false" onclick="setGridMode('room')">Room</button>
+                <button type="button" class="btn btn-outline" data-grid-mode="teacher" aria-pressed="false" onclick="setGridMode('teacher')">Professor</button>
+              </div>
               <div id="filterGroupSection" class="filter-group" style="display:flex;">
+                <span id="gridSectionPickers" class="grid-pickers">
                 <label>Program:</label>
                 <select id="programFilter">
                   <option value="all">All Programs</option>
@@ -650,6 +666,11 @@
                   <!-- Populated dynamically -->
                 </select>
                 <input type="search" id="sectionSearchInput" placeholder="Search section..." oninput="handleSectionSearch(this.value)" style="padding:4px 8px; font-size:0.857rem; border:1px solid var(--border-subtle); border-radius:6px; width:130px; margin-left:6px;" />
+                </span>
+                <span id="gridOtherPicker" class="grid-pickers" hidden>
+                  <label for="gridPickSelect" id="gridPickLabel">Room:</label>
+                  <select id="gridPickSelect" onchange="setGridSelection(this.value)" style="min-width:180px; font-weight:700;"></select>
+                </span>
                 <label style="margin-left:8px; font-weight:700; color:var(--accent-primary);">Academic Year:</label>
                 <select id="masterScheduleSyFilter" style="font-weight:700; background:var(--bg-surface); color:var(--accent-primary); border:1px solid var(--border-subtle); padding:4px 8px; border-radius:6px;" onchange="handleActiveYearFilter(this)">
                   <!-- Populated dynamically via JS -->
@@ -681,6 +702,7 @@
                   </div>
                 </div>
 
+                <button class="btn btn-outline" id="btnUndoEdit" onclick="undoLastEdit()" disabled style="font-size:0.857rem; padding:6px 14px;">Undo Last Change</button>
                 <button class="btn btn-outline" id="btnUndoGenerate" onclick="undoLastGenerate()" style="display:none; font-size:0.857rem; padding:6px 14px;">Undo Last Generate</button>
                 <button class="btn btn-outline" id="btnGenerateAi" onclick="openAiDraftModal()" style="font-size:0.857rem; padding:6px 14px;">Generate with AI</button>
                 <button class="btn btn-primary" id="btnGenerate" onclick="openConfirmRegenerateModal()" style="font-size:0.857rem; padding:6px 14px;">
@@ -837,6 +859,9 @@
                 </tfoot>
               </table>
             </div>
+
+            <!-- Phones: the same week as a list, one day at a time -->
+            <div class="viewer-day-list" id="viewerDayList"></div>
 
             <div class="timetable-legend-bar">
               <span class="legend-label">Class Types:</span>
@@ -2177,7 +2202,7 @@
       </div>
       <div style="padding:22px; font-size:0.929rem; color:var(--text-primary); line-height:1.6;">
         <p>This action will auto-assign day, time, room, and teacher per section, honoring room type, capacity, faculty qualification, and zero overlap constraints.</p>
-        <p style="margin-top:10px; font-weight:700; color:#B45309;">&#9888; Please note: This will overwrite any existing baseline schedules for this semester.</p>
+        <p style="margin-top:10px; font-weight:700; color:#B45309;">&#9888; Please note: This replaces this term's timetable. Classes you have locked stay where they are.</p>
       </div>
       <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
         <button class="btn btn-outline" onclick="closeConfirmRegenerateModal()">Cancel</button>
@@ -2303,6 +2328,7 @@
   <script src="assets/js/ai.js"></script>
   <script src="assets/js/sync.js"></script>
   <script src="assets/js/ai_schedule.js"></script>
+  <script src="assets/js/search.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
 </html>
