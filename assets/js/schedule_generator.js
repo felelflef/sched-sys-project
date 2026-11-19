@@ -46,9 +46,49 @@ async function executeGenerateBaseline() {
   // Persist to DB, then reload to pick up saved IDs and the Undo option
   saveTermSchedule('generate_baseline', activeTerm.id, newSchedules, { strict: true })
     .then(res => { if (res.ok && !IS_STANDALONE) loadServerState(); })
-    .catch(e => { if (!e || !e.reported) alert('Could not reach the server, so this schedule exists only in this browser.'); });
+    .catch(e => { if (!e || !e.reported) alert("Couldn't reach the server, so this schedule wasn't saved. Check your connection and generate again."); });
 
   alert(`Master schedule successfully generated (${newSchedules.length} classes scheduled across ${sectionsToSchedule.length} sections for ${activeTerm.termName}).`);
+  renderGenerateSummary();
+}
+
+// The results card after Generate: what was placed, what still needs attention, and how busy the rooms are
+function renderGenerateSummary() {
+  const box = document.getElementById('generateSummary');
+  if (!box) return;
+  const { activeSy, activeTerm } = getActiveAcademicContext();
+  const classes = activeTermClasses();
+  const sections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id);
+  const short = sections.filter(s => sectionSubjectProgress(s).some(p => p.scheduledMinutes < p.requiredMinutes));
+  const saturday = new Set(classes.filter(c => c.day === 'Sat').map(c => c.section));
+  const loadOf = f => facultyLoadUnits(f.name) + concurrentLoadUnits(f.name, activeTerm.id);
+  const teaching = FACULTY.filter(f => classes.some(c => c.instructor === f.name));
+  const over = FACULTY.filter(f => loadOf(f) > facultyMaxUnits(f) + 0.001);
+  const under = teaching.filter(f => loadOf(f) < facultyMinUnits(f) - 0.001);
+  const idle = FACULTY.length - teaching.length;
+  const lectureRooms = ROOMS.filter(r => r.type === 'Lecture').map(r => r.code);
+  const lectureMinutes = classes.filter(c => lectureRooms.includes(c.room)).reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
+  const roomUse = lectureRooms.length ? Math.round(100 * lectureMinutes / (lectureRooms.length * 6 * 12 * 60)) : 0;
+  const names = list => list.slice(0, 3).map(f => escapeHtml(f.name)).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '');
+  const line = (ok, text) => `<li class="${ok ? 'ok' : 'warn'}"><span aria-hidden="true">${ok ? '✓' : '!'}</span> ${text}</li>`;
+  box.innerHTML = `
+    <div class="generate-summary-head"><strong>Results for ${escapeHtml(activeTerm.termName)} ${escapeHtml(activeSy.yearCode)}</strong>
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('generateSummary').hidden = true" aria-label="Close the results">Close</button></div>
+    <ul class="generate-summary-list">
+      ${line(true, `${classes.length} classes placed; ${sections.length - short.length} of ${sections.length} sections fully scheduled`)}
+      ${line(short.length === 0, short.length === 0 ? 'Every required hour is on the timetable' : `${short.length} section${short.length === 1 ? ' is' : 's are'} still missing hours; the list below says why`)}
+      ${line(saturday.size === 0, saturday.size === 0 ? 'No Saturday classes' : `${saturday.size} section${saturday.size === 1 ? ' has' : 's have'} Saturday classes`)}
+      ${line(over.length === 0, over.length === 0 ? 'No professor is over their maximum load' : `Over their maximum load: ${names(over)}`)}
+      ${line(under.length === 0, under.length === 0 ? 'Every teaching professor reaches their minimum load' : `Under their minimum load: ${under.length} professor${under.length === 1 ? '' : 's'} (${names(under)})`)}
+      ${idle > 0 ? line(false, `${idle} professor${idle === 1 ? ' has' : 's have'} no classes this term`) : ''}
+      ${line(true, `Lecture rooms are in use ${roomUse}% of the week (Monday to Saturday, 7:00 AM to 7:00 PM)`)}
+    </ul>
+    <div class="generate-summary-actions">
+      <button type="button" class="btn btn-outline" onclick="switchPage('reports')">Open Schedule Overview</button>
+      <button type="button" class="btn btn-outline" onclick="switchPage('viewer')">View timetables</button>
+    </div>`;
+  box.dataset.termId = String(activeTerm.id);
+  box.hidden = false;
 }
 
 function updateUndoButton() {
@@ -69,7 +109,11 @@ window.undoLastGenerate = async function() {
     body: JSON.stringify({ action: 'restore_schedule', term_id: activeTerm.id, expected_version: activeTerm.scheduleVersion })
   });
   await loadServerState();
-  if (res.ok) alert('The previous schedule has been restored.');
+  if (res.ok) {
+    alert('The previous schedule has been restored.');
+    const summary = document.getElementById('generateSummary');
+    if (summary) summary.hidden = true;
+  }
 };
 
 // Lists what is still missing from the current schedule, with up-to-date reasons.

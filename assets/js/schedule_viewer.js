@@ -137,6 +137,27 @@ function renderScheduleViewer() {
         : `There is no ${VIEWER_LABELS[viewerMode].toLowerCase()} to show for this term.`}</td></tr>`;
 
   renderTimetableHours(classes, 'viewerHrs-', 'viewerWeeklyTotal');
+  renderViewerDayList(classes);
+}
+
+// On phones the week shows as a list, one day at a time, instead of a wide grid
+const VIEWER_DAY_NAMES = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday' };
+function renderViewerDayList(classes) {
+  const box = document.getElementById('viewerDayList');
+  if (!box) return;
+  const detail = c => viewerMode === 'section' ? [c.room, c.instructor]
+    : viewerMode === 'teacher' ? [c.section, c.room] : [c.section, c.instructor];
+  const days = DAYS.map(day => {
+    const list = classes.filter(c => c.day === day).sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+    if (!list.length) return '';
+    return `<section class="viewer-day"><h4>${VIEWER_DAY_NAMES[day]}</h4><ul>${list.map(c => `
+      <li class="viewer-day-class type-${escapeHtml((c.type || 'lecture').toLowerCase())}">
+        <div class="viewer-day-time">${formatTime12(c.startTime)} – ${formatTime12(c.endTime)}</div>
+        <div><strong>${escapeHtml(c.subjectCode)}</strong>${classPartTag(c)} <span class="viewer-day-title">${escapeHtml(c.subjectTitle || '')}</span></div>
+        <div class="viewer-day-meta">${detail(c).filter(Boolean).map(escapeHtml).join(' · ')}</div>
+      </li>`).join('')}</ul></section>`;
+  }).join('');
+  box.innerHTML = days || '<p class="viewer-day-empty">No classes this week.</p>';
 }
 
 // Excel treats a leading = + - or @ as a formula, so those cells are kept as plain text

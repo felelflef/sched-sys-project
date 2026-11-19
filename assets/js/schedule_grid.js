@@ -1190,6 +1190,8 @@ function handleSectionSearch(query) {
 
 /* ─── Dynamic Stats & Subtitles Updater ─── */
 function updateScheduleStats() {
+  const summary = document.getElementById('generateSummary');
+  if (summary && !summary.hidden && summary.dataset.termId !== String(getActiveAcademicContext().activeTerm.id)) summary.hidden = true;
   const activeSy = (typeof SCHOOL_YEARS !== 'undefined' ? SCHOOL_YEARS.find(y => y.isActive) : null) || { yearCode: 'AY 2026–2027' };
   const activeTerm = (typeof SCHOOL_TERMS !== 'undefined' ? SCHOOL_TERMS.find(t => t.isActive && (!activeSy || t.yearId === activeSy.id)) : null)
     || (typeof SCHOOL_TERMS !== 'undefined' && activeSy ? SCHOOL_TERMS.find(t => t.yearId === activeSy.id) : null)

@@ -178,8 +178,15 @@
 
       <!-- ─── PAGE HEADING (filled in by navigation.js) ─── -->
       <div class="page-heading">
-        <h2 id="headerTitle">Master Schedule</h2>
-        <p id="headerSubtitle">Set up the term and build the weekly timetable</p>
+        <div>
+          <h2 id="headerTitle">Master Schedule</h2>
+          <p id="headerSubtitle">Set up the term and build the weekly timetable</p>
+        </div>
+        <div class="global-search" role="search">
+          <input type="search" id="globalSearchInput" placeholder="Find a section, professor, room or subject" aria-label="Find a section, professor, room or subject"
+            autocomplete="off" role="combobox" aria-expanded="false" aria-controls="globalSearchResults" aria-autocomplete="list" />
+          <ul id="globalSearchResults" class="global-search-results" role="listbox" hidden></ul>
+        </div>
       </div>
 
       <!-- ─── CONTENT ─── -->
@@ -610,6 +617,9 @@
               </div>
             </div>
 
+            <!-- What the last Generate produced, shown right after it runs -->
+            <div class="generate-summary" id="generateSummary" role="status" hidden></div>
+
             <!-- Diagnostics: Unassigned Classes Alert Banner -->
             <div class="unassigned-banner" id="unassignedBanner">
               <div class="unassigned-title">
@@ -837,6 +847,9 @@
                 </tfoot>
               </table>
             </div>
+
+            <!-- Phones: the same week as a list, one day at a time -->
+            <div class="viewer-day-list" id="viewerDayList"></div>
 
             <div class="timetable-legend-bar">
               <span class="legend-label">Class Types:</span>
@@ -2303,6 +2316,7 @@
   <script src="assets/js/ai.js"></script>
   <script src="assets/js/sync.js"></script>
   <script src="assets/js/ai_schedule.js"></script>
+  <script src="assets/js/search.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
 </html>
