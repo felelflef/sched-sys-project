@@ -98,7 +98,7 @@ function renderScheduleViewer() {
 
   const details = viewerSheetDetails(selected, classes, activeTerm, termLabel);
   const pairedShown = [...new Set(classes.filter(c => c.termId && c.termId !== activeTerm.id).map(c => c.termId))];
-  document.getElementById('viewerSheetSubtitle').textContent = details.subtitle + (pairedShown.length ? ` · also showing ${pairedShown.map(termWithLevel).join(', ')}` : '');
+  document.getElementById('viewerSheetSubtitle').textContent = details.subtitle + (pairedShown.length ? ` · also showing ${pairedShown.map(id => { const when = overlapNote(id, activeTerm.id); return termWithLevel(id) + (when ? ` ${when}` : ''); }).join(', ')}` : '');
   document.getElementById('viewerSheetTitle').textContent = selected || `No ${VIEWER_LABELS[viewerMode]} Available`;
   details.stats.forEach(([label, value], index) => {
     document.getElementById(`viewerStatLabel${index + 1}`).textContent = label;

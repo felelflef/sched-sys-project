@@ -15,6 +15,17 @@ function closeConfirmRegenerateModal() {
 
 async function executeGenerateBaseline() {
   closeConfirmRegenerateModal();
+  // A term that has already started stays editable class by class (for example when a professor is away);
+  // replacing its whole timetable is asked about first
+  const { activeTerm: termToGenerate } = getActiveAcademicContext();
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  if (termToGenerate.startDate && termToGenerate.startDate <= today && activeTermClasses().length > 0) {
+    const started = new Date(`${termToGenerate.startDate}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const ok = await askConfirm(`${termToGenerate.termName} started on ${started}, so teachers and students may already be following its timetable. Generate replaces all of its classes (locked classes stay where they are).\n\nTo change only some classes, for example when a professor is away, open those classes and edit them instead.`,
+      { title: 'Replace the timetable of a term that has started?', confirmLabel: 'Replace the timetable', danger: true });
+    if (!ok) return;
+  }
   // Teachers, qualifications and rooms come fresh from the database, as the server will check them
   if (!IS_STANDALONE && typeof loadServerState === 'function') {
     try { await loadServerState(); } catch (e) {}

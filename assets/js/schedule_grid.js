@@ -112,18 +112,21 @@ function currentAndOverlappingClasses() {
   const { activeTerm } = getActiveAcademicContext();
   return [...activeTermClasses(), ...concurrentClasses(activeTerm.id)];
 }
-// For display: of each other level's overlapping terms, the one that overlaps this term the longest
+// For display: every term whose dates overlap this one. While College 2nd Sem is planned, SHS 2nd Term (fixed,
+// running until late February) and SHS 3rd Term (from March) both hold rooms and teachers, so both are shown.
 function pairedTermIds(termId) {
+  return concurrentTermIds(termId);
+}
+// "until Feb 26" or "from Mar 8" when another term covers only part of this one
+function overlapNote(otherId, termId) {
   const term = SCHOOL_TERMS.find(t => t.id === termId);
-  if (!term) return [];
-  const days = other => (Math.min(new Date(term.endDate), new Date(other.endDate)) - Math.max(new Date(term.startDate), new Date(other.startDate))) / 86400000;
-  const best = {};
-  concurrentTermIds(termId).forEach(id => {
-    const other = SCHOOL_TERMS.find(t => t.id === id);
-    const level = termSchoolLevel(id);
-    if (!best[level] || days(other) > best[level].days) best[level] = { id, days: days(other) };
-  });
-  return Object.values(best).map(b => b.id);
+  const other = SCHOOL_TERMS.find(t => t.id === otherId);
+  if (!term || !other) return '';
+  const short = d => new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (other.endDate < term.endDate && other.startDate > term.startDate) return `${short(other.startDate)}–${short(other.endDate)}`;
+  if (other.endDate < term.endDate) return `until ${short(other.endDate)}`;
+  if (other.startDate > term.startDate) return `from ${short(other.startDate)}`;
+  return '';
 }
 
 function activeTermClasses() {
@@ -470,7 +473,8 @@ function otherTermBadge(item) {
   if (!item.termId || item.termId === activeTerm.id) return '';
   const term = SCHOOL_TERMS.find(t => t.id === item.termId);
   const level = termSchoolLevel(item.termId) === 'shs' ? 'SHS' : 'College';
-  return ` <span class="class-ai-badge" style="background:#F3E8FF; color:#6B21A8;" title="${escapeHtml(termWithLevel(item.termId))}">${level}${term ? ` · ${escapeHtml(term.termName)}` : ''}</span>`;
+  const when = overlapNote(item.termId, activeTerm.id);
+  return ` <span class="class-ai-badge" style="background:#F3E8FF; color:#6B21A8;" title="${escapeHtml(termWithLevel(item.termId))}${when ? `, ${escapeHtml(when)}` : ''}: fixed, shown for reference">${level}${term ? ` · ${escapeHtml(term.termName)}` : ''}${when ? ` · ${escapeHtml(when)}` : ''}</span>`;
 }
 
 // " · Lab" or " · Lecture" on a class of a subject that has both parts
