@@ -24,19 +24,62 @@ function renderStepHelp(stepNumber) {
 /* ==================== STEP 5: ROOMS & INSTRUCTORS ==================== */
 // Each section gets a room and, for each subject, an instructor. Automatic leaves the choice to the generator,
 // which keeps the section in its room whenever the room is free and gives each subject the chosen instructor.
+// One section shows at a time, picked from a list that says what each section already has set.
+const roomPlanSelection = {};   // the section shown, for each term
+
+// "CS101M (BSCS 1A) · room LR-104 · 2 of 6 instructors chosen"
+function roomPlanSectionLabel(sec) {
+  const chosen = Object.keys(sec.subjectTeachers || {}).length;
+  const status = [sec.homeRoom ? `room ${sec.homeRoom}` : '', chosen ? `${chosen} of ${sectionSubjects(sec).length} instructors chosen` : ''].filter(Boolean);
+  return `${sec.code} (${sec.name})${status.length ? ` · ${status.join(' · ')}` : ' · all Automatic'}`;
+}
+
+function roomPlanPickerHtml(sections, current) {
+  const index = sections.indexOf(current);
+  const options = sections.map(sec => `<option value="${escapeHtml(sec.code)}" ${sec === current ? 'selected' : ''}>${escapeHtml(roomPlanSectionLabel(sec))}</option>`).join('');
+  return `<div class="room-plan-picker">
+    <label class="room-plan-picker-label">Section
+      <select class="room-plan-select" onchange="selectRoomPlanSection(this.value)">${options}</select></label>
+    <div class="room-plan-picker-nav">
+      <button type="button" class="btn btn-outline" onclick="stepRoomPlanSection(-1)" ${index <= 0 ? 'disabled' : ''}>&lsaquo; Previous</button>
+      <span>${index + 1} of ${sections.length}</span>
+      <button type="button" class="btn btn-outline" onclick="stepRoomPlanSection(1)" ${index >= sections.length - 1 ? 'disabled' : ''}>Next &rsaquo;</button>
+    </div>
+  </div>`;
+}
+
+function roomPlanSections() {
+  const { activeTerm } = getActiveAcademicContext();
+  return ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id).sort((a, b) => a.code.localeCompare(b.code));
+}
+
+window.selectRoomPlanSection = function(code) {
+  roomPlanSelection[getActiveAcademicContext().activeTerm.id] = code;
+  renderRoomPlan();
+};
+
+window.stepRoomPlanSection = function(delta) {
+  const sections = roomPlanSections();
+  const current = sections.findIndex(s => s.code === roomPlanSelection[getActiveAcademicContext().activeTerm.id]);
+  const next = sections[Math.max(0, Math.min(sections.length - 1, current + delta))];
+  if (next) selectRoomPlanSection(next.code);
+};
+
 function renderRoomPlan() {
   const box = document.getElementById('roomPlanList');
   if (!box) return;
   const { activeTerm } = getActiveAcademicContext();
   const level = termSchoolLevel(activeTerm.id);
   const canEdit = canManageData();
-  const sections = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id).sort((a, b) => a.code.localeCompare(b.code));
+  const sections = roomPlanSections();
   if (sections.length === 0) {
     box.innerHTML = '<p class="term-empty">No sections yet. Create them in Step 4 first.</p>';
     return;
   }
+  const current = sections.find(s => s.code === roomPlanSelection[activeTerm.id]) || sections[0];
+  roomPlanSelection[activeTerm.id] = current.code;
   const loadText = f => `${formatUnits(facultyLoadUnits(f.name) + concurrentLoadUnits(f.name, activeTerm.id))} of ${facultyMaxUnits(f)} units`;
-  box.innerHTML = sections.map(sec => {
+  box.innerHTML = roomPlanPickerHtml(sections, current) + [current].map(sec => {
     const rooms = ROOMS.filter(r => r.cap >= sec.studentCount).sort((a, b) => a.code.localeCompare(b.code));
     const sharing = code => sections.filter(o => o !== sec && o.homeRoom === code).map(o => o.code);
     const roomOptions = '<option value="">Automatic (the generator picks one room and reuses it)</option>' + rooms.map(r => {

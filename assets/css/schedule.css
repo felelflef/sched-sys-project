@@ -841,6 +841,9 @@ select:focus, input:focus {
 .section-subjects-list p { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }
 
 /* Step 5: Rooms & Instructors */
+.room-plan-picker { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin: 4px 0 14px; }
+.room-plan-picker-label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 320px; max-width: 560px; font-weight: 700; font-size: 0.9rem; }
+.room-plan-picker-nav { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; }
 .room-plan-card { border: 1px solid var(--border-subtle); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; background: #fff; }
 .room-plan-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .room-plan-title { font-size: 1.1rem; font-weight: 800; color: var(--accent-primary); }
