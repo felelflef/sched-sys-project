@@ -234,11 +234,14 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
   const roomMinutes = new Map();
   const sectionRoomUses = new Map();
   // Classes of other terms only hold their room and teacher; this term's classes also count toward loads and room use
+  const teacherDayMinutes = new Map();   // `${termId}|${teacher}|${day}` -> minutes taught that day in that term
   function track(c, units, ownTerm) {
     const start = timeToMinutes(c.startTime);
     const end = timeToMinutes(c.endTime);
     addBusy('room', c.day, c.room, start, end);
     addBusy('teacher', c.day, c.instructor, start, end);
+    const dayKey = `${c.termId || generatorTerm.id}|${c.instructor}|${c.day}`;
+    teacherDayMinutes.set(dayKey, (teacherDayMinutes.get(dayKey) || 0) + end - start);
     if (!ownTerm) return;
     addBusy('section', c.day, c.section, start, end);
     loadUnits.set(c.instructor, (loadUnits.get(c.instructor) || 0) + units);
@@ -247,6 +250,39 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
   }
   schedules.forEach(c => track(c, classUnits(c), true));
   otherTermClasses.forEach(c => track(c, 0, false));
+
+  // A healthy teaching day: at most 6 hours of classes, at most 3 hours in a row, and a free half hour for lunch
+  // between 11:00 and 1:30 when the day runs through midday. Generate tries healthy times first and uses any
+  // clash-free time only when none is left. Of the terms running alongside, only the busiest one counts toward
+  // the day's hours, since the terms of one level follow each other.
+  const HEALTHY_DAY_MINUTES = 6 * 60;
+  const HEALTHY_RUN_MINUTES = 3 * 60;
+  const alongsideTermIds = concurrentTermIds(generatorTerm.id);
+  function healthyTeacherDay(teacherName, day, start, end) {
+    const minutesIn = termId => teacherDayMinutes.get(`${termId}|${teacherName}|${day}`) || 0;
+    const otherTerms = Math.max(0, ...alongsideTermIds.map(minutesIn));
+    if (minutesIn(generatorTerm.id) + otherTerms + end - start > HEALTHY_DAY_MINUTES) return false;
+    const blocks = [...(busy.get(busyKey('teacher', day, teacherName)) || []), [start, end]].sort((a, b) => a[0] - b[0]);
+    // The stretch of back-to-back classes this one would join (classes that touch count as one stretch)
+    let runStart = start, runEnd = end, grew = true;
+    while (grew) {
+      grew = false;
+      for (const [s, e] of blocks) {
+        if (s <= runEnd && e >= runStart && (s < runStart || e > runEnd)) {
+          runStart = Math.min(runStart, s);
+          runEnd = Math.max(runEnd, e);
+          grew = true;
+        }
+      }
+    }
+    if (runEnd - runStart > HEALTHY_RUN_MINUTES) return false;
+    const throughMidday = blocks.some(([s]) => s < 11 * 60 + 30) && blocks.some(([, e]) => e > 13 * 60);
+    if (!throughMidday) return true;
+    for (let t = 11 * 60; t + 30 <= 13 * 60 + 30; t += 30) {
+      if (!blocks.some(([s, e]) => s < t + 30 && e > t)) return true;
+    }
+    return false;
+  }
 
   function fitsTeacherLoad(teacher, addedUnits) {
     return (loadUnits.get(teacher.name) || 0) + otherUnits(teacher.name) + addedUnits <= facultyMaxUnits(teacher) + 0.001;
@@ -457,8 +493,9 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
         ? [[inShiftStarts, [homeRoom]], [inShiftStarts, candidateRooms], [otherStarts, [homeRoom]], [otherStarts, candidateRooms]]
         : [[inShiftStarts, candidateRooms], [otherStarts, candidateRooms]];
 
+      // Healthy teaching days first; any clash-free time only when no healthy one is left
       const tryPlace = () => {
-        for (const [starts, rooms] of passes) {
+        for (const healthyOnly of [true, false]) for (const [starts, rooms] of passes) {
           for (const days of dayPlans) {
             for (const start of starts) {
               const meetings = days.map((day, i) => ({ day, start, end: minutesToTime(timeToMinutes(start) + meetingLengths[i]) }));
@@ -467,7 +504,8 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
                 for (const teacherObj of teachersToTry) {
                   const fits = meetings.every(m =>
                     !hasOverlap(m.day, m.start, m.end, roomObj.code, teacherObj.name, sec.code)
-                    && !facultyAvailabilityProblem(teacherObj.name, m.day, m.start, m.end));
+                    && !facultyAvailabilityProblem(teacherObj.name, m.day, m.start, m.end)
+                    && (!healthyOnly || healthyTeacherDay(teacherObj.name, m.day, timeToMinutes(m.start), timeToMinutes(m.end))));
                   if (!fits) continue;
                   meetings.forEach((m, i) => {
                     schedCounter++;

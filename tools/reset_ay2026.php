@@ -1,16 +1,20 @@
 <?php
 /**
- * Reset the scheduling data to a fresh, complete AY 2026-2027 for College and Senior High School.
+ * Reset the scheduling data to a fresh, complete school year (AY 2026-2027 unless --year says otherwise) for College
+ * and Senior High School.
  *
  * Run it from your own terminal (it refuses to run from a web request):
  *   php tools/reset_ay2026.php                 Dry run: shows what would change, changes nothing
  *   php tools/reset_ay2026.php --apply         Resets, after you type RESET
- *   add --add-teachers                         Also adds teaching records (no login) where qualified teachers run short
+ *   add --year=2027-2028                       Builds that school year instead (the term dates move with it)
+ *   add --add-teachers                         Replaces the sample teaching records (no login) an earlier run added with
+ *                                              the fewest new ones that cover the shortfall, Mixed (College and SHS) where possible
  *
  * Connection: the same variables the live site uses (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS, DB_SSL,
  * optional DB_SSL_CA), read from the environment or from a .env file in the project folder.
  *
- * Kept as they are: every user account and password, FCC certificates and who holds them, departments, app settings.
+ * Kept as they are: every user account and password, FCC certificates and who holds them, departments, app settings
+ * (with --add-teachers, only the earlier sample teaching records are replaced).
  * Replaced: school years, terms, subjects, sections, rooms, the subject catalog, subject sets, timetables
  * and the activity log. A backup of everything it deletes is written to tools/backups/ first, and the
  * whole reset runs in one transaction, so a failure part-way changes nothing.
@@ -23,12 +27,19 @@ if (PHP_SAPI !== 'cli') {
 $args = array_slice($argv, 1);
 $apply = in_array('--apply', $args, true);
 $addTeachers = in_array('--add-teachers', $args, true);
+$yearArg = null;
 foreach ($args as $a) {
+    if (preg_match('/^--year=(\d{4})-(\d{4})$/', $a, $m) && (int)$m[2] === (int)$m[1] + 1) {
+        $yearArg = [(int)$m[1], (int)$m[2]];
+        continue;
+    }
     if (!in_array($a, ['--apply', '--add-teachers'], true)) {
-        fwrite(STDERR, "Unknown option: {$a}\n");
+        fwrite(STDERR, str_starts_with($a, '--year') ? "Write the school year like --year=2027-2028.\n" : "Unknown option: {$a}\n");
         exit(2);
     }
 }
+[$FIRST_YEAR, $SECOND_YEAR] = $yearArg ?? [2026, 2027];
+$YEAR_CODE = "AY {$FIRST_YEAR}-{$SECOND_YEAR}";
 $projectDir = dirname(__DIR__);
 
 /* ───────────── Connection ───────────── */
@@ -80,7 +91,7 @@ if ($missing || $stamp !== $schemaVersion) {
     exit(1);
 }
 
-/* ───────────── AY 2026-2027 ───────────── */
+/* ───────────── The school year (term dates below are for AY 2026-2027 and move with --year) ───────────── */
 $AREAS = ['IT / Computing', 'Tourism', 'Hospitality & Culinary', 'Business & Entrepreneurship', 'Arts & Social Sciences', 'General Education', 'PE & NSTP'];
 // The Subject Catalog: [code, title, area, units]. Standard CHED / TESDA / DepEd subject names.
 $CATALOG = [
@@ -186,14 +197,6 @@ $CATALOG = [
   ['BE 105', 'Applied Economics', 'Business & Entrepreneurship', 3],
   ['BE 106', 'Business Ethics and Social Responsibility', 'Business & Entrepreneurship', 3],
   ['BE 107', 'Entrepreneurship', 'Business & Entrepreneurship', 3],
-  // Arts & Social Sciences (SHS ASSH)
-  ['ASSH 101', 'Creative Writing', 'Arts & Social Sciences', 3],
-  ['ASSH 102', 'Malikhaing Pagsulat', 'Arts & Social Sciences', 3],
-  ['ASSH 103', 'Introduction to the Philosophy of the Human Person', 'Arts & Social Sciences', 3],
-  ['ASSH 104', 'Disciplines and Ideas in the Social Sciences', 'Arts & Social Sciences', 3],
-  ['ASSH 105', 'Philippine Politics and Governance', 'Arts & Social Sciences', 3],
-  ['ASSH 106', 'Community Engagement, Solidarity and Citizenship', 'Arts & Social Sciences', 3],
-  ['ASSH 107', 'Trends, Networks and Critical Thinking', 'Arts & Social Sciences', 3],
   // SHS core
   ['SHS 101', 'Effective Communication', 'General Education', 3],
   ['SHS 102', 'General Mathematics', 'General Education', 3],
@@ -230,6 +233,17 @@ $TERMS = [
     'tertiary' => [['1st Sem', '2026-08-16', '2026-12-17'], ['2nd Sem', '2027-01-10', '2027-05-26'], ['Summer', '2027-06-07', '2027-07-23']],
     'shs'      => [['1st Term', '2026-08-16', '2026-11-14'], ['2nd Term', '2026-11-23', '2027-02-26'], ['3rd Term', '2027-03-08', '2027-05-28'], ['Summer', '2027-06-07', '2027-07-23']],
 ];
+// Another school year keeps the same calendar, moved by whole years
+$yearShift = $FIRST_YEAR - 2026;
+if ($yearShift !== 0) {
+    foreach ($TERMS as &$levelTerms) {
+        foreach ($levelTerms as &$term) {
+            foreach ([1, 2] as $i) $term[$i] = date('Y-m-d', strtotime("{$yearShift} years", strtotime($term[$i])));
+        }
+        unset($term);
+    }
+    unset($levelTerms);
+}
 // Curriculum: the subjects each program and year takes each term
 $CURRICULUM = [
     'BSIT' => [
@@ -265,7 +279,6 @@ $SHS_STRAND = [
     'HTTO'     => [11 => ['1st Term' => ['HTTO 101'], '2nd Term' => ['HTTO 102'], '3rd Term' => ['HTTO 103']], 12 => ['1st Term' => ['HTTO 103', 'HTTO 104'], '2nd Term' => ['HTTO 104', 'HTTO 102'], '3rd Term' => ['HTTO 104']]],
     'ICT-SCPT' => [11 => ['1st Term' => ['SCPT 101'], '2nd Term' => ['SCPT 102'], '3rd Term' => ['SCPT 103']], 12 => ['1st Term' => ['SCPT 103', 'SCPT 104'], '2nd Term' => ['SCPT 104', 'SCPT 102'], '3rd Term' => ['SCPT 104']]],
     'B&E'      => [11 => ['1st Term' => ['BE 101'], '2nd Term' => ['BE 102'], '3rd Term' => ['BE 104']], 12 => ['1st Term' => ['BE 103', 'BE 105'], '2nd Term' => ['BE 106'], '3rd Term' => ['BE 107']]],
-    'ASSH'     => [11 => ['1st Term' => ['ASSH 103'], '2nd Term' => ['ASSH 104'], '3rd Term' => ['ASSH 101']], 12 => ['1st Term' => ['ASSH 102', 'ASSH 105'], '2nd Term' => ['ASSH 106'], '3rd Term' => ['ASSH 107']]],
 ];
 foreach ($SHS_STRAND as $strand => $years) {
     foreach ($years as $grade => $terms) {
@@ -275,8 +288,9 @@ foreach ($SHS_STRAND as $strand => $years) {
 $PROGRAM_LEVEL = ['BSIT' => 'tertiary', 'BSCS' => 'tertiary', 'BSTM' => 'tertiary', 'HRS' => 'tertiary',
     'HTCUA' => 'shs', 'HTTO' => 'shs', 'ICT-SCPT' => 'shs', 'B&E' => 'shs', 'ASSH' => 'shs'];
 // Sections per program and year; each regular term of the level has the same sections
-$SECTION_COUNTS = ['BSIT' => [1 => 3, 2 => 2, 3 => 2, 4 => 1], 'BSCS' => [1 => 2, 2 => 1, 3 => 1, 4 => 1], 'BSTM' => [1 => 2, 2 => 1, 3 => 1, 4 => 1], 'HRS' => [1 => 2, 2 => 1],
-    'HTCUA' => [11 => 2, 12 => 1], 'HTTO' => [11 => 2, 12 => 1], 'ICT-SCPT' => [11 => 2, 12 => 1], 'B&E' => [11 => 2, 12 => 1], 'ASSH' => [11 => 2, 12 => 1]];
+$SECTION_COUNTS = ['BSIT' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSCS' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSTM' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'HRS' => [1 => 3, 2 => 3],
+    'HTCUA' => [11 => 3, 12 => 3], 'HTTO' => [11 => 3, 12 => 3], 'ICT-SCPT' => [11 => 3, 12 => 3], 'B&E' => [11 => 3, 12 => 3]];
+const SECTION_STUDENTS = 30;
 $ROOMS = [];
 // Floors 1-3: the app's room form and server accept floors 1 to 3 only
 foreach ([1, 2, 3] as $floor) for ($n = 1; $n <= 6; $n++) $ROOMS[] = [sprintf('LR-%d%02d', $floor, $n), 'Lecture', 45, $floor];
@@ -291,13 +305,10 @@ function sectionCode(string $program, int $year, int $i): string {
     return $year >= 11 ? "{$prefix}{$year}-" . chr(65 + $i) : "{$prefix}{$year}0" . ($i + 1) . 'M';
 }
 $sections = [];   // [program, year, code, name, students, shift]
-$studentPattern = [38, 36, 34, 40, 35, 32, 37, 39, 33];
-$k = 0;
 foreach ($SECTION_COUNTS as $program => $years) {
     foreach ($years as $year => $count) {
         for ($i = 0; $i < $count; $i++) {
-            $students = $studentPattern[$k++ % count($studentPattern)];
-            if (in_array($program, ['HRS', 'HTCUA'], true)) $students = min($students, 35);
+            $students = SECTION_STUDENTS;
             $shift = $year >= 11 ? ($year === 12 || $i === 1 ? 'PM' : 'AM') : ['AM', 'PM', 'MIDSHIFT'][$i % 3];
             $label = $year >= 11 ? "{$program} {$year}" . chr(65 + $i) : "{$program} {$year}" . chr(65 + $i);
             $sections[] = [$program, $year, sectionCode($program, $year, $i), $label, $students, $shift];
@@ -327,22 +338,38 @@ foreach ($windows as [$collegeTerm, $shsTerms]) {
         $demand[$area]['shs'] = max($demand[$area]['shs'] ?? 0, max(array_map(fn($t) => $need['shs'][$t][$area] ?? 0, $shsTerms)));
     }
 }
+// A mixed teacher can take both levels, so per area what counts is College plus the busiest SHS term beside it
+$combined = [];   // [area] = busiest units of both levels together
+foreach ($windows as [$collegeTerm, $shsTerms]) {
+    foreach ($AREAS as $area) {
+        $both = ($need['tertiary'][$collegeTerm][$area] ?? 0) + max(array_map(fn($t) => $need['shs'][$t][$area] ?? 0, $shsTerms));
+        $combined[$area] = max($combined[$area] ?? 0, $both);
+    }
+}
+// Sample teaching records (no login) made by an earlier reset with --add-teachers are replaced by a fresh set
+$SAMPLE_RECORD = "u.email LIKE 'sample.%@sti.edu' AND u.password_hash = '!'";
+$oldSamples = (int)$db->query("SELECT COUNT(*) FROM users u WHERE {$SAMPLE_RECORD}")->fetchColumn();
 $teachers = $db->query("
     SELECT u.user_id, u.email, u.max_load, u.teaching_level, GROUP_CONCAT(c.areas_json SEPARATOR '|') AS areas
     FROM users u LEFT JOIN faculty_certificates fc ON fc.user_id = u.user_id LEFT JOIN fcc_certificates c ON c.cert_id = fc.cert_id
-    WHERE u.role IN ('faculty', 'program-head') GROUP BY u.user_id")->fetchAll();
+    WHERE u.role IN ('faculty', 'program-head')" . ($addTeachers ? " AND NOT ({$SAMPLE_RECORD})" : '') . " GROUP BY u.user_id")->fetchAll();
 $teacherAreas = function (array $t): array {
     $areas = [];
     foreach (explode('|', (string)$t['areas']) as $json) foreach (json_decode($json, true) ?: [] as $a) $areas[$a] = true;
     return array_keys($areas);
 };
 // Hand each teacher's units to the areas and levels they can teach (one-level teachers first). The generator
-// can't pack loads perfectly, so a teacher counts for 85% of their max load.
+// can't pack loads perfectly, so a teacher counts for 90% of their max load: with 3 sections of 30 everywhere
+// that gave the fewest teachers (37) whose days stayed healthy (no day over 8 hours, longest 7.5); one fewer
+// still placed every class but left some 9-hour days.
+const LOAD_PACKING = 0.9;
+// Demo teachers carry a regular full-time load (the app's default maximum, about 6 teaching hours a day)
+const SAMPLE_MAX_LOAD = 30;
 function shortages(array $teachers, array $demand, callable $teacherAreas): array {
     $left = $demand;
     usort($teachers, fn($a, $b) => (($a['teaching_level'] ?: 'tertiary') === 'mixed') <=> (($b['teaching_level'] ?: 'tertiary') === 'mixed'));
     foreach ($teachers as $t) {
-        $capacity = 0.85 * (int)$t['max_load'];
+        $capacity = LOAD_PACKING * (int)$t['max_load'];
         $levels = ($t['teaching_level'] ?: 'tertiary') === 'mixed' ? ['tertiary', 'shs'] : [$t['teaching_level'] ?: 'tertiary'];
         foreach ($teacherAreas($t) as $area) {
             foreach ($levels as $level) {
@@ -356,21 +383,27 @@ function shortages(array $teachers, array $demand, callable $teacherAreas): arra
 }
 $left = shortages($teachers, $demand, $teacherAreas);
 $sampleTeachers = [];
-$emailTaken = $db->prepare("SELECT COUNT(*) FROM users WHERE email = ?");
+// Old sample records are replaced, so only a real account's email counts as taken
+$emailTaken = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.email = ?" . ($addTeachers ? " AND NOT ({$SAMPLE_RECORD})" : ''));
 $slug =fn(string $area) => trim(preg_replace('/[^a-z]+/', '-', strtolower(explode(' ', $area)[0])), '-');
+// As few new teachers as cover the shortfall: Mixed (College and SHS) wherever the area has both levels' classes
 foreach ($AREAS as $area) {
-    foreach (['tertiary', 'shs'] as $level) {
-        $short = $left[$area][$level] ?? 0;
-        if ($short <= 0.001) continue;
-        // Numbers already used by sample teachers from an earlier reset are skipped, so the shortfall is really added
-        $wanted = (int)ceil($short / 25.5);   // 85% of a 30-unit max load
-        for ($n = 1; $wanted > 0; $n++) {
-            $email = "sample.{$slug($area)}." . ($level === 'shs' ? 'shs' : 'college') . ".{$n}@sti.edu";
-            $emailTaken->execute([$email]);
-            if ((int)$emailTaken->fetchColumn() > 0) continue;
-            $sampleTeachers[] = ['first' => 'Sample', 'last' => ($level === 'shs' ? 'SHS ' : 'College ') . "{$area} Teacher {$n}", 'area' => $area, 'level' => $level, 'email' => $email];
-            $wanted--;
-        }
+    $shortCollege = max(0, $left[$area]['tertiary'] ?? 0);
+    $shortShs = max(0, $left[$area]['shs'] ?? 0);
+    if ($shortCollege + $shortShs <= 0.001) continue;
+    $level = $shortCollege > 0.001 && $shortShs > 0.001 ? 'mixed' : ($shortShs > 0.001 ? 'shs' : 'tertiary');
+    // Both levels together peak lower than each level's own peak added up, since the peaks fall in different terms
+    $coveredByOthers = ($demand[$area]['tertiary'] ?? 0) + ($demand[$area]['shs'] ?? 0) - $shortCollege - $shortShs;
+    $short = $level === 'mixed' ? max(0, ($combined[$area] ?? 0) - $coveredByOthers) : $shortCollege + $shortShs;
+    $wanted = (int)ceil($short / (LOAD_PACKING * SAMPLE_MAX_LOAD));
+    $prefix = $level === 'mixed' ? '' : ($level === 'shs' ? 'SHS ' : 'College ');
+    // A number an account already uses is skipped, so the shortfall is really added
+    for ($n = 1; $wanted > 0; $n++) {
+        $email = "sample.{$slug($area)}." . ($level === 'mixed' ? 'mixed' : ($level === 'shs' ? 'shs' : 'college')) . ".{$n}@sti.edu";
+        $emailTaken->execute([$email]);
+        if ((int)$emailTaken->fetchColumn() > 0) continue;
+        $sampleTeachers[] = ['first' => 'Sample', 'last' => "{$prefix}{$area} Teacher {$n}", 'area' => $area, 'level' => $level, 'email' => $email];
+        $wanted--;
     }
 }
 
@@ -385,9 +418,9 @@ $subjectRows = 0;
 foreach ($CURRICULUM as $years) foreach ($years as $terms) foreach ($terms as $codes) $subjectRows += count($codes);
 $collegeSecs = count(array_filter($sections, fn($s) => $PROGRAM_LEVEL[$s[0]] === 'tertiary'));
 $shsSecs = count($sections) - $collegeSecs;
-echo "\nWILL ADD: AY 2026-2027 (active) with {$termCount} terms (College 1st Sem, 2nd Sem, Summer; SHS 1st, 2nd, 3rd Term, Summer),\n"
+echo "\nWILL ADD: {$YEAR_CODE} (active) with {$termCount} terms (College 1st Sem, 2nd Sem, Summer; SHS 1st, 2nd, 3rd Term, Summer),\n"
     . "  {$collegeSecs} College and {$shsSecs} SHS sections in each regular term, {$subjectRows} curriculum entries, " . count($CATALOG) . " catalog subjects, "
-    . count($ROOMS) . " rooms (18 lecture, 6 computer labs, 2 kitchen labs, 2 tourism labs).\n"
+    . count($ROOMS) . ' rooms (' . implode(', ', array_map(fn($type, $n) => "{$n} {$type}", array_keys(array_count_values(array_column($ROOMS, 1))), array_count_values(array_column($ROOMS, 1)))) . ").\n"
     . "  Active term: College 1st Sem (SHS 1st Term runs alongside it). Timetables are empty, ready to generate in Step 7.\n";
 echo "\nTEACHERS: weekly units needed at the busiest time against what the current faculty can teach\n";
 printf("  %-30s %-9s %8s %10s\n", 'Subject area', 'Level', 'Needed', 'Short by');
@@ -402,7 +435,8 @@ foreach ($AREAS as $area) {
 }
 if ($anyShort) {
     echo $addTeachers
-        ? "\n  --add-teachers: will add " . count($sampleTeachers) . " teaching records (no login, max 30 units) holding the right certificate, to cover the shortfall.\n"
+        ? "\n  --add-teachers: will " . ($oldSamples ? "replace the {$oldSamples} sample teaching records from an earlier run with " : 'add ') . count($sampleTeachers)
+            . ' teaching records (no login, max ' . SAMPLE_MAX_LOAD . ' units, ' . count(array_filter($sampleTeachers, fn($t) => $t['level'] === 'mixed')) . " of them Mixed) holding the right certificate, to cover the shortfall.\n"
         : "\n  Some areas are short. Give more teachers the FCC certificate for those areas (Faculty Profiles), or run again\n  with --add-teachers to add teaching records (no login) that cover the shortfall.\n";
 }
 
@@ -424,6 +458,8 @@ $backup = ['database' => $dbName, 'host' => $host, 'saved_at' => date('c'), 'tab
 foreach (array_merge($tables, ['fcc_certificates', 'faculty_certificates', 'departments', 'app_settings']) as $t) {
     $backup['tables'][$t] = $db->query("SELECT * FROM `{$t}`")->fetchAll();
 }
+// The sample teaching records this run replaces (they have no password)
+if ($addTeachers) $backup['tables']['users (sample teaching records)'] = $db->query("SELECT * FROM users u WHERE {$SAMPLE_RECORD}")->fetchAll();
 $backupFile = "{$backupDir}/backup_" . date('Ymd_His') . '.json';
 if (file_put_contents($backupFile, json_encode($backup, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) === false) {
     fwrite(STDERR, "Could not write the backup, so nothing was changed.\n");
@@ -452,7 +488,7 @@ try {
     $insRoom = $db->prepare("INSERT INTO classrooms (room_name_number, room_type, capacity, floor_level, current_status) VALUES (?, ?, ?, ?, 'Vacant')");
     foreach ($ROOMS as $r) $insRoom->execute($r);
 
-    $db->prepare("INSERT INTO school_years (year_code, is_active) VALUES ('AY 2026-2027', 1)")->execute();
+    $db->prepare("INSERT INTO school_years (year_code, is_active) VALUES (?, 1)")->execute([$YEAR_CODE]);
     $yearId = (int)$db->lastInsertId();
     $insTerm = $db->prepare("INSERT INTO school_terms (year_id, term_name, level, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)");
     $insSection = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, adviser, shift) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)");
@@ -484,13 +520,17 @@ try {
         }
     }
 
+    if ($addTeachers && $oldSamples) {
+        $db->exec("DELETE fc FROM faculty_certificates fc JOIN users u ON u.user_id = fc.user_id WHERE {$SAMPLE_RECORD}");
+        $db->exec("DELETE u FROM users u WHERE {$SAMPLE_RECORD}");
+    }
     if ($addTeachers && $sampleTeachers) {
         $insUser = $db->prepare("INSERT IGNORE INTO users (first_name, last_name, email, password_hash, role, subject_role, employment_status, max_load, min_load, teaching_level)
-            VALUES (?, ?, ?, '!', 'faculty', ?, 'Full-time', 30, 24, ?)");
+            VALUES (?, ?, ?, '!', 'faculty', ?, 'Full-time', ?, 24, ?)");
         $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ?");
         $giveCert = $db->prepare("INSERT IGNORE INTO faculty_certificates (user_id, cert_id) VALUES (?, ?)");
         foreach ($sampleTeachers as $t) {
-            $insUser->execute([$t['first'], mb_substr($t['last'], 0, 50), $t['email'], $t['area'], $t['level']]);
+            $insUser->execute([$t['first'], mb_substr($t['last'], 0, 50), $t['email'], $t['area'], SAMPLE_MAX_LOAD, $t['level']]);
             $findUser->execute([$t['email']]);
             $giveCert->execute([(int)$findUser->fetchColumn(), $certOf[$t['area']]]);
         }
@@ -499,13 +539,13 @@ try {
     // Keeps a browser's old local copy from being published over this data
     $db->exec("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('state_published', '1')");
     $db->prepare("INSERT INTO activity_log (user_email, user_name, user_role, category, summary) VALUES ('system', 'Database reset', 'admin', 'Schedule', ?)")
-        ->execute(['Reset the scheduling data to a fresh AY 2026-2027 for College and SHS' . ($addTeachers && $sampleTeachers ? ' (added ' . count($sampleTeachers) . ' teaching records)' : '')]);
+        ->execute(["Reset the scheduling data to a fresh {$YEAR_CODE} for College and SHS" . ($addTeachers && $sampleTeachers ? ' (added ' . count($sampleTeachers) . ' teaching records)' : '')]);
     $db->commit();
 } catch (Throwable $e) {
     $db->rollBack();
     fwrite(STDERR, "The reset failed and was rolled back, so nothing was changed: {$e->getMessage()}\n");
     exit(1);
 }
-echo "\nDONE: the database now holds a fresh AY 2026-2027. Everyone should reload the app.\n"
+echo "\nDONE: the database now holds a fresh {$YEAR_CODE}. Everyone should reload the app.\n"
     . "Next, in Master Schedule: check Step 5 (Rooms & Instructors), Step 6 (Validate Resources), then Generate in Step 7\n"
     . "for College 1st Sem and for SHS 1st Term.\n";
