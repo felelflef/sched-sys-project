@@ -256,7 +256,7 @@
               <div class="stepper-step active" id="stepBtn-7" onclick="goToScheduleStep(7)">
                 <div class="step-number" id="stepNum-7">7</div>
                 <div class="step-info">
-                  <div class="step-label">Timetable &amp; Schedule</div>
+                  <div class="step-label">Timetable</div>
                   <div class="step-sub" id="stepSub-7">Master Grid</div>
                 </div>
               </div>
@@ -707,7 +707,7 @@
                 <button class="btn btn-outline" id="btnGenerateAi" onclick="openAiDraftModal()" style="font-size:0.857rem; padding:6px 14px;">Generate with AI</button>
                 <button class="btn btn-primary" id="btnGenerate" onclick="openConfirmRegenerateModal()" style="font-size:0.857rem; padding:6px 14px;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                  Quick Generate
+                  Generate
                 </button>
               </div>
             </div>
@@ -962,6 +962,7 @@
             <div style="margin-left:auto; display:flex; gap:10px;">
               <button class="btn btn-outline" id="btnManageDepts" onclick="openDeptModal()" style="font-size:0.857rem; padding:7px 14px;">Manage Departments</button>
               <button class="btn btn-outline" id="btnManageCerts" onclick="openCertModal()" style="font-size:0.857rem; padding:7px 14px;">🎓 FCC Certificates</button>
+              <button class="btn btn-outline" id="btnDefaultLoads" onclick="openDefaultLoadsModal()" style="font-size:0.857rem; padding:7px 14px;">Default Loads</button>
               <button class="btn btn-primary" id="btnAddFaculty" onclick="openAddFacultyModal()" style="font-size:0.857rem; padding:7px 16px;">+ Add Faculty</button>
             </div>
           </div>
@@ -1213,7 +1214,7 @@
 
 
   <!-- ═══ DEPARTMENT MANAGEMENT MODAL ═══ -->
-  <div class="modal-overlay" id="deptModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="deptModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Manage Departments</h3>
@@ -1239,7 +1240,37 @@
   </div>
 
   <!-- ═══ FCC CERTIFICATES MODAL ═══ -->
-  <div class="modal-overlay" id="certModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <!-- ═══ SCHOOL DEFAULT LOADS ═══ -->
+  <div class="modal-overlay" id="defaultLoadsModal" style="display:none; z-index:1000;">
+    <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:460px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;" role="dialog" aria-labelledby="defaultLoadsTitle">
+      <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 id="defaultLoadsTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Default Loads</h3>
+        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeDefaultLoadsModal()" aria-label="Close">✕</button>
+      </div>
+      <div style="padding:20px 24px;">
+        <p style="margin:0 0 14px; font-size:0.929rem; color:var(--text-secondary);">The school's usual teaching load per term, in units (SHS classes count 1 unit per teaching hour). New teachers start with these, and you can still change any teacher's own load in Edit Profile.</p>
+        <div id="defaultLoadsError" style="display:none; color:var(--danger); font-size:0.857rem; margin-bottom:12px;"></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:end;">
+          <strong>Full-time</strong>
+          <label class="form-label">Minimum<input type="number" id="defLoadFullMin" class="form-input" min="0" max="40" /></label>
+          <label class="form-label">Maximum<input type="number" id="defLoadFullMax" class="form-input" min="3" max="40" /></label>
+          <strong>Part-time</strong>
+          <label class="form-label">Minimum<input type="number" id="defLoadPartMin" class="form-input" min="0" max="40" /></label>
+          <label class="form-label">Maximum<input type="number" id="defLoadPartMax" class="form-input" min="3" max="40" /></label>
+        </div>
+        <label style="display:flex; gap:8px; align-items:flex-start; margin-top:14px; font-size:0.929rem; cursor:pointer;">
+          <input type="checkbox" id="defLoadApplyExisting" />
+          <span>Also give these loads to current teachers who still have the old default loads (teachers whose load was set by hand keep it)</span>
+        </label>
+      </div>
+      <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
+        <button class="btn btn-outline" onclick="closeDefaultLoadsModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitDefaultLoads()">Save Default Loads</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="certModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:540px; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">🎓 FCC Certificates</h3>
@@ -1269,7 +1300,7 @@
   </div>
 
   <!-- ═══ ADD FACULTY MODAL ═══ -->
-  <div class="modal-overlay" id="addFacultyModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="addFacultyModal" style="display:none; z-index:1000;">
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:460px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Add Faculty Member</h3>
@@ -1333,7 +1364,7 @@
   </div>
 
   <!-- ═══ ROOM ADD / EDIT MODAL ═══ -->
-  <div class="modal-overlay" id="roomModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="roomModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 id="roomModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Add Room</h3>
@@ -1376,7 +1407,7 @@
   </div>
 
   <!-- ═══ ADD USER ACCOUNT MODAL ═══ -->
-  <div class="modal-overlay" id="addUserModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="addUserModal" style="display:none; z-index:1000;">
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:460px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Create User / Faculty Account</h3>
@@ -1434,7 +1465,7 @@
   </div>
 
   <!-- ═══ REMOVE USER CONFIRMATION MODAL ═══ -->
-  <div class="modal-overlay" id="deleteUserModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="deleteUserModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFF5F5;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Remove User Account</h3>
@@ -1457,7 +1488,7 @@
   </div>
 
   <!-- ═══ EDIT USER ACCOUNT MODAL ═══ -->
-  <div class="modal-overlay" id="passwordModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="passwordModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:400px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 id="passwordModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Change Password</h3>
@@ -1487,7 +1518,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="editUserModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="editUserModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Edit User Account</h3>
@@ -1524,7 +1555,7 @@
   </div>
 
   <!-- ═══ CHANGE FACULTY DEPARTMENT / PROFILE MODAL ═══ -->
-  <div class="modal-overlay" id="changeFacultyDeptModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="changeFacultyDeptModal" style="display:none; z-index:1000;">
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Edit Faculty Profile</h3>
@@ -1591,7 +1622,7 @@
   </div>
 
   <!-- ═══ REMOVE FACULTY PROFILE CONFIRMATION MODAL ═══ -->
-  <div class="modal-overlay" id="deleteFacultyModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="deleteFacultyModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFF5F5;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Remove Faculty Profile</h3>
@@ -1614,7 +1645,7 @@
   </div>
 
   <!-- ═══ REMOVE ROOM CONFIRMATION MODAL ═══ -->
-  <div class="modal-overlay" id="deleteRoomModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="deleteRoomModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFF5F5;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Remove Classroom</h3>
@@ -1637,7 +1668,7 @@
   </div>
 
   <!-- ═══ SUBJECT MODAL (ADD / EDIT) ═══ -->
-  <div class="modal-overlay" id="subjectModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="subjectModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 id="subjectModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Add Subject</h3>
@@ -1684,7 +1715,7 @@
   </div>
 
   <!-- ═══ REMOVE SUBJECT CONFIRMATION MODAL ═══ -->
-  <div class="modal-overlay" id="deleteSubjectModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="deleteSubjectModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFF5F5;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Remove Subject</h3>
@@ -1707,7 +1738,7 @@
   </div>
 
   <!-- ═══ SLOT ASSIGNMENT / CHANGE PROFESSOR MODAL ═══ -->
-  <div class="modal-overlay" id="slotModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1000; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="slotModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:450px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 id="slotModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Assign Professor to Slot</h3>
@@ -1774,7 +1805,7 @@
   </div>
 
   <!-- ═══ CLASS SCHEDULE DETAILS MODAL ═══ -->
-  <div class="modal-overlay" id="classDetailModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="classDetailModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="detailModalTitle">Class Schedule Details</h3>
@@ -1790,7 +1821,7 @@
   </div>
 
     <!-- ==================== SCHOOL YEAR MODAL ==================== -->
-  <div class="modal-overlay" id="schoolYearModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="schoolYearModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="syModalTitle">Add School Year</h3>
@@ -1819,7 +1850,7 @@
   </div>
 
   <!-- ==================== SCHOOL TERM MODAL ==================== -->
-  <div class="modal-overlay" id="termModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="termModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="termModalTitle">Configure Academic Term</h3>
@@ -1865,7 +1896,7 @@
   </div>
 
   <!-- ==================== SAVED SUBJECT SET MODAL ==================== -->
-  <div class="modal-overlay" id="subjectSetModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1150; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="subjectSetModal" style="display:none; z-index:1150;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:660px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="subjectSetModalTitle">New Subject Set</h3>
@@ -1933,7 +1964,7 @@
   </div>
 
   <!-- ==================== LOAD SAVED SUBJECTS MODAL (STEP 3) ==================== -->
-  <div class="modal-overlay" id="loadSubjectSetModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="loadSubjectSetModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:620px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Load Saved Subjects</h3>
@@ -1966,7 +1997,7 @@
   </div>
 
   <!-- ==================== CURRICULUM SUBJECT MODAL ==================== -->
-  <div class="modal-overlay" id="manualSubjectModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="manualSubjectModal" style="display:none; z-index:1100;">
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="curricSubjModalTitle">Add Curriculum Subject</h3>
@@ -2027,7 +2058,7 @@
             <input type="number" id="curricSubjLabHrs" value="0" min="0" max="6" step="0.5" style="width:100%;" />
           </div>
         </div>
-        <span class="modal-full" style="font-size:0.857rem; color:var(--text-secondary); display:block; margin-bottom:12px;">Filled in as 1 hour per lecture unit and 3 hours per lab unit; change them if this subject differs. Lecture hours go in a lecture room and lab hours in a lab.</span>
+        <span class="modal-full" style="font-size:0.857rem; color:var(--text-secondary); display:block; margin-bottom:12px;">Filled in as 1 hour per lecture unit and 3 hours per lab unit for college, and 4.5 hours a week for SHS; change them if this subject differs. Lecture hours go in a lecture room and lab hours in a lab.</span>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:0;">
           <div>
             <label class="form-label" style="font-weight:700; font-size:0.857rem;">Program</label>
@@ -2057,7 +2088,7 @@
   </div>
 
   <!-- ==================== SECTION MODAL ==================== -->
-  <div class="modal-overlay" id="sectionModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="sectionModal" style="display:none; z-index:1100;">
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="secModalTitle">Configure Section</h3>
@@ -2131,7 +2162,7 @@
   </div>
 
   <!-- ==================== SECTION MODAL ==================== -->
-  <div class="modal-overlay" id="splitSectionModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="splitSectionModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Split Section</h3>
@@ -2165,7 +2196,7 @@
   </div>
 
   <!-- ==================== CONFIRM REGENERATE MODAL ==================== -->
-  <div class="modal-overlay" id="aiDraftModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="aiDraftModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:640px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:800; color:var(--accent-primary);">Generate with AI</h3>
@@ -2191,12 +2222,12 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="confirmRegenerateModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="confirmRegenerateModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFFBEB;">
         <div style="display:flex; align-items:center; gap:8px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <h3 style="margin:0; font-size:1.143rem; font-weight:800; color:#92400E;">Quick Generate Schedule?</h3>
+          <h3 style="margin:0; font-size:1.143rem; font-weight:800; color:#92400E;">Generate the Timetable?</h3>
         </div>
         <button onclick="closeConfirmRegenerateModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
       </div>
@@ -2206,13 +2237,13 @@
       </div>
       <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
         <button class="btn btn-outline" onclick="closeConfirmRegenerateModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="executeGenerateBaseline()" style="background:#25447A; border-color:#25447A;">Yes, Quick Generate</button>
+        <button class="btn btn-primary" onclick="executeGenerateBaseline()" style="background:#25447A; border-color:#25447A;">Yes, Generate</button>
       </div>
     </div>
   </div>
 
   <!-- ═══ AUTO-GENERATE SECTIONS MODAL ═══ -->
-  <div class="modal-overlay" id="autoGenerateSectionsModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); z-index:1100; align-items:center; justify-content:center;">
+  <div class="modal-overlay" id="autoGenerateSectionsModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <div style="display:flex; align-items:center; gap:8px;">

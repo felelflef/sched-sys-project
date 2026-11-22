@@ -79,7 +79,9 @@ function renderGenerateSummary() {
   const teaching = FACULTY.filter(f => classes.some(c => c.instructor === f.name));
   const over = FACULTY.filter(f => loadOf(f) > facultyMaxUnits(f) + 0.001);
   const under = teaching.filter(f => loadOf(f) < facultyMinUnits(f) - 0.001);
-  const idle = FACULTY.length - teaching.length;
+  // Only teachers who teach this term's level (College or SHS) can be idle in it
+  const level = termSchoolLevel(activeTerm.id);
+  const idle = FACULTY.filter(f => facultyTeachesLevel(f, level) && !teaching.includes(f)).length;
   const lectureRooms = ROOMS.filter(r => r.type === 'Lecture').map(r => r.code);
   const lectureMinutes = classes.filter(c => lectureRooms.includes(c.room)).reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
   const roomUse = lectureRooms.length ? Math.round(100 * lectureMinutes / (lectureRooms.length * 6 * 12 * 60)) : 0;
@@ -92,9 +94,9 @@ function renderGenerateSummary() {
       ${line(true, `${classes.length} classes placed; ${sections.length - short.length} of ${sections.length} sections fully scheduled`)}
       ${line(short.length === 0, short.length === 0 ? 'Every required hour is on the timetable' : `${short.length} section${short.length === 1 ? ' is' : 's are'} still missing hours; the list below says why`)}
       ${line(saturday.size === 0, saturday.size === 0 ? 'No Saturday classes' : `${saturday.size} section${saturday.size === 1 ? ' has' : 's have'} Saturday classes`)}
-      ${line(over.length === 0, over.length === 0 ? 'No professor is over their maximum load' : `Over their maximum load: ${names(over)}`)}
-      ${line(under.length === 0, under.length === 0 ? 'Every teaching professor reaches their minimum load' : `Under their minimum load: ${under.length} professor${under.length === 1 ? '' : 's'} (${names(under)})`)}
-      ${idle > 0 ? line(false, `${idle} professor${idle === 1 ? ' has' : 's have'} no classes this term`) : ''}
+      ${line(over.length === 0, over.length === 0 ? 'No teacher is over their maximum load' : `Over their maximum load: ${names(over)}`)}
+      ${line(under.length === 0, under.length === 0 ? 'Every teacher with classes reaches their minimum load' : `Under their minimum load: ${under.length} teacher${under.length === 1 ? '' : 's'} (${names(under)})`)}
+      ${idle > 0 ? line(false, `${idle} ${level === 'shs' ? 'SHS' : 'College'} teacher${idle === 1 ? ' has' : 's have'} no classes this term`) : ''}
       ${line(true, `Lecture rooms are in use ${roomUse}% of the week (Monday to Saturday, 7:00 AM to 7:00 PM)`)}
     </ul>
     <div class="generate-summary-actions">
@@ -159,11 +161,11 @@ function refreshUnassignedBanner() {
     const trial = trialReasons.find(u => u.section === m.section.code && u.code === code);
     let reason;
     if (m.scheduledMinutes > 0) {
-      reason = `Only ${hours(m.scheduledMinutes)} of ${hours(m.requiredMinutes)} hrs a week are scheduled. Add the remaining time manually or run Quick Generate.`;
+      reason = `Only ${hours(m.scheduledMinutes)} of ${hours(m.requiredMinutes)} hrs a week are scheduled. Add the remaining time manually or run Generate.`;
     } else if (trial) {
       reason = trial.reason;
     } else {
-      reason = 'Not scheduled yet, but a clash-free time is now available. Run Quick Generate or add it manually.';
+      reason = 'Not scheduled yet, but a clash-free time is now available. Run Generate or add it manually.';
     }
     return { section: m.section.code, code, reason };
   });
@@ -404,10 +406,18 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       const subjectMinutes = subjectWeeklyMinutes(subj);
       const meetingLengths = splitIntoMeetings(weeklyMinutes);
 
+      // Three meetings rotate between day patterns, as pairs do, so no day fills up first. SHS keeps DepEd's
+      // Monday-to-Friday week: its patterns use each weekday equally, and days with Saturday are tried last.
+      const DAY_TRIPLES = sectionLevel === 'shs'
+        ? [['Mon', 'Wed', 'Fri'], ['Tue', 'Thu', 'Fri'], ['Mon', 'Wed', 'Thu'], ['Tue', 'Wed', 'Fri'], ['Mon', 'Tue', 'Thu']]
+        : [['Mon', 'Wed', 'Fri'], ['Tue', 'Thu', 'Sat']];
+      const orderedTriples = DAY_TRIPLES.map((_, i) => DAY_TRIPLES[(subjIdx + i) % DAY_TRIPLES.length]);
+
       // Day combinations to try, best first
       const dayPlans = meetingLengths.length === 1
         ? [['Wed'], ['Sat'], ['Fri'], ['Thu'], ['Tue'], ['Mon']]
-        : [...(meetingLengths.length === 2 ? orderedDayPairs : [['Mon', 'Wed', 'Fri'], ['Tue', 'Thu', 'Sat']]), ...dayCombinations(workDays, meetingLengths.length)];
+        : [...(meetingLengths.length === 2 ? orderedDayPairs : orderedTriples), ...dayCombinations(workDays, meetingLengths.length)];
+      if (sectionLevel === 'shs') dayPlans.sort((a, b) => a.includes('Sat') - b.includes('Sat'));
 
       // In-shift times are tried on every day before any out-of-shift time is used
       const firstLength = meetingLengths[0];
@@ -423,7 +433,8 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       // Part-time professors go first, since their time slots are limited. Then professors still under their
       // minimum units, then the least-loaded, so classes spread out; between professors within about 3 units
       // of each other, a seasoned one goes first.
-      const partUnits = (Number(subj.units) || 0) * weeklyMinutes / (subjectMinutes || weeklyMinutes);
+      const subjectLoad = subjectLoadUnits(subj, activeTerm.id);
+      const partUnits = subjectLoad * weeklyMinutes / (subjectMinutes || weeklyMinutes);
       const usedUnits = t => loadUnits.get(t.name) || 0;
       const statusRank = t => limitedHours(t) ? 0 : t.status === 'Part-time' ? 1 : 2;
       const underMin = t => usedUnits(t) < facultyMinUnits(t) ? 0 : 1;
@@ -478,7 +489,7 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
                       endTime: m.end
                     };
                     schedules.push(placedClass);
-                    track(placedClass, (Number(subj.units) || 0) * meetingLengths[i] / (subjectMinutes || meetingLengths[i]), true);
+                    track(placedClass, subjectLoad * meetingLengths[i] / (subjectMinutes || meetingLengths[i]), true);
                   });
                   return true;
                 }

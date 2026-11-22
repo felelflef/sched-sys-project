@@ -121,7 +121,7 @@ function evaluateResourceReadiness() {
   // Every section takes each of its subjects, so the units needed are counted per section
   const totalRequiredUnits = ACADEMIC_SECTIONS.filter(sec => sec.termId === activeTerm.id)
     .reduce((sum, sec) => sum + includedSubjects.filter(s => s.program === sec.program && Number(s.year) === Number(sec.year))
-      .reduce((units, s) => units + (Number(s.units) || 0), 0), 0);
+      .reduce((units, s) => units + subjectLoadUnits(s, activeTerm.id), 0), 0);
 
   function checkSubjectHasQualifiedFaculty(subj) {
     return FACULTY.some(f => isFacultyQualified(f, subj.code) && facultyTeachesLevel(f, termSchoolLevel(subj.termId)));

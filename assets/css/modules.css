@@ -318,9 +318,12 @@ select:focus, input:focus { box-shadow: 0 0 0 3px rgba(37, 68, 122, 0.1); }
 .stat-label { margin-top: 2px; }
 
 /* Stepper shows every step in full */
-.schedule-stepper-container { padding: 8px 10px; margin-bottom: 14px; }
+.schedule-stepper-container { padding: 8px; margin-bottom: 14px; }
 .schedule-stepper { gap: 2px; }
-.stepper-step { flex: 1 1 auto; min-width: max-content; padding: 6px 8px; gap: 8px; }
+/* Sized so all seven steps fit on a 1366px laptop screen */
+.stepper-step { flex: 1 1 auto; min-width: max-content; padding: 6px; gap: 6px; }
+.stepper-step .step-number { width: 24px; height: 24px; }
+.step-sub { font-size: 0.786rem; }
 .stepper-divider { flex: 0 1 12px; min-width: 4px; }
 
 /* Toolbars */
@@ -578,6 +581,8 @@ th[data-sorted="desc"]::after { content: ' \25BC'; font-size: 0.857rem; }
 /* Pop-ups are never taller than the screen: the title and the Save / Cancel buttons stay in view and the
    middle part scrolls. Every pop-up is title, body, buttons. */
 .modal-overlay { padding: 16px; box-sizing: border-box; }
+/* The shared look of every pop-up backdrop; each pop-up keeps display:none and its own z-index inline */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.45); backdrop-filter: blur(3px); align-items: center; justify-content: center; }
 .modal-overlay > .modal { display: flex !important; flex-direction: column; max-height: calc(100vh - 32px) !important; max-height: calc(100dvh - 32px) !important; }
 .modal-overlay > .modal > * { flex-shrink: 0; }
 .modal-overlay > .modal > :nth-child(2) { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -633,3 +638,15 @@ th[data-sorted="desc"]::after { content: ' \25BC'; font-size: 0.857rem; }
 .viewer-day-title, .viewer-day-meta { color: var(--text-secondary); font-size: 0.9rem; }
 .viewer-day-empty { color: var(--text-secondary); }
 @media print { .viewer-day-list { display: none !important; } #page-viewer .timetable-table-container { display: block !important; } }
+
+/* Search box for long dropdowns (ui_helpers.js): sits over everything, including dialogs */
+.select-search { position: fixed; z-index: 3000; display: flex; flex-direction: column; box-sizing: border-box; padding: 6px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); }
+.select-search-input { flex-shrink: 0; width: 100%; box-sizing: border-box; margin-bottom: 4px; padding: 7px 10px; font: inherit; font-size: 0.929rem; color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 6px; }
+.select-search-input:focus { outline: 2px solid var(--accent-primary); outline-offset: -1px; }
+.select-search-list { position: relative; flex: 1 1 auto; min-height: 0; max-height: 300px; overflow-y: auto; }
+.select-search-option { padding: 6px 10px; border-radius: 6px; font-size: 0.929rem; line-height: 1.35; color: var(--text-primary); cursor: pointer; overflow-wrap: anywhere; }
+.select-search-option.is-active { background: var(--info-bg); }
+.select-search-option.is-selected { font-weight: 700; color: var(--accent-primary); }
+.select-search-option.is-disabled { color: var(--text-secondary); opacity: 0.6; cursor: default; }
+.select-search-group { padding: 6px 10px 2px; font-size: 0.786rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; }
+.select-search-empty { padding: 8px 10px; font-size: 0.929rem; color: var(--text-secondary); }

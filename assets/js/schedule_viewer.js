@@ -94,11 +94,10 @@ function renderScheduleViewer() {
   select.value = selected;
   select.disabled = options.length === 0;
 
-  const classes = viewerClassesFor(selected, termClasses, activeTerm);
+  const classes = viewerClassesFor(selected, termClasses);
 
   const details = viewerSheetDetails(selected, classes, activeTerm, termLabel);
-  const pairedShown = [...new Set(classes.filter(c => c.termId && c.termId !== activeTerm.id).map(c => c.termId))];
-  document.getElementById('viewerSheetSubtitle').textContent = details.subtitle + (pairedShown.length ? ` · also showing ${pairedShown.map(id => { const when = overlapNote(id, activeTerm.id); return termWithLevel(id) + (when ? ` ${when}` : ''); }).join(', ')}` : '');
+  document.getElementById('viewerSheetSubtitle').textContent = details.subtitle;
   document.getElementById('viewerSheetTitle').textContent = selected || `No ${VIEWER_LABELS[viewerMode]} Available`;
   details.stats.forEach(([label, value], index) => {
     document.getElementById(`viewerStatLabel${index + 1}`).textContent = label;
@@ -286,16 +285,13 @@ window.exportTermExcel = function() {
   }, classes, 'Master Schedule');
 };
 
-// A section belongs to one term. Teachers and rooms are shared by College and SHS, so their timetables
-// also show the other level's term that runs alongside this one.
-function viewerClassesFor(selected, termClasses, activeTerm) {
-  const shared = viewerMode === 'section' ? [] : MASTER_SCHEDULE_DATA.filter(c => c.termId && pairedTermIds(activeTerm.id).includes(c.termId));
-  return [...termClasses, ...shared].filter(c => viewerMode === 'section' ? c.section === selected : viewerMode === 'room' ? c.room === selected : c.instructor === selected);
+// Every timetable shows only the open term's classes, also for rooms and teachers shared by College and SHS
+function viewerClassesFor(selected, termClasses) {
+  return termClasses.filter(c => viewerMode === 'section' ? c.section === selected : viewerMode === 'room' ? c.room === selected : c.instructor === selected);
 }
 
 function viewerSelectedClasses() {
-  const { activeTerm } = getActiveAcademicContext();
-  return viewerClassesFor(viewerSelection[viewerMode], activeTermClasses(), activeTerm);
+  return viewerClassesFor(viewerSelection[viewerMode], activeTermClasses());
 }
 
 window.exportViewerExcel = function() {

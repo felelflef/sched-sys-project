@@ -248,3 +248,192 @@ function askConfirm(message, { title = 'Please confirm', confirmLabel = 'Confirm
     overlay.querySelector(danger ? '[data-answer="no"]' : '[data-answer="yes"]').focus();
   });
 }
+
+/* Long dropdowns get a search box. Opening a dropdown with 8 or more choices shows the choices under a search
+   box instead of the plain list; typing narrows them (every word must match), and picking one sets the dropdown
+   and fires its usual change. The dropdown itself is untouched, so all code that fills or reads it keeps working.
+   Touch screens keep the phone's own picker. */
+const SEARCHABLE_SELECT_MIN = 8;
+let selectSearch = null;   // the open list: { select, box, input, list, items, active }
+
+function selectSearchWanted(sel) {
+  return !!sel && !sel.multiple && !sel.disabled && !(sel.size > 1) && sel.options.length >= SEARCHABLE_SELECT_MIN
+    && !window.matchMedia('(pointer: coarse)').matches;
+}
+
+function closeSelectSearch(refocus) {
+  if (!selectSearch) return;
+  const { select, box } = selectSearch;
+  selectSearch = null;
+  box.remove();
+  if (refocus) select.focus({ preventScroll: true });
+}
+
+function setSelectSearchActive(index) {
+  const s = selectSearch;
+  if (!s || !s.items.length) return;
+  s.active = Math.max(0, Math.min(index, s.items.length - 1));
+  s.items.forEach(({ item }, i) => item.classList.toggle('is-active', i === s.active));
+  const active = s.items[s.active].item;
+  s.input.setAttribute('aria-activedescendant', active.id);
+  // Scrolls only the list (scrolling the page would close it)
+  if (active.offsetTop < s.list.scrollTop) s.list.scrollTop = active.offsetTop;
+  else if (active.offsetTop + active.offsetHeight > s.list.scrollTop + s.list.clientHeight) s.list.scrollTop = active.offsetTop + active.offsetHeight - s.list.clientHeight;
+}
+
+function pickSelectSearch(opt) {
+  const sel = selectSearch.select;
+  closeSelectSearch(true);
+  if (sel.selectedIndex === opt.index) return;
+  opt.selected = true;
+  sel.dispatchEvent(new Event('input', { bubbles: true }));
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function renderSelectSearchList() {
+  const s = selectSearch;
+  const words = s.input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  s.list.innerHTML = '';
+  s.items = [];
+  let lastGroup = null;
+  [...s.select.options].forEach(opt => {
+    if (opt.hidden) return;
+    const group = opt.parentElement && opt.parentElement.tagName === 'OPTGROUP' ? opt.parentElement.label : '';
+    const text = opt.textContent.trim();
+    if (words.length && !words.every(w => `${text} ${group}`.toLowerCase().includes(w))) return;
+    if (group && group !== lastGroup) {
+      const heading = document.createElement('div');
+      heading.className = 'select-search-group';
+      heading.textContent = group;
+      s.list.appendChild(heading);
+    }
+    lastGroup = group;
+    const item = document.createElement('div');
+    const isCurrent = opt.index === s.select.selectedIndex;
+    item.className = `select-search-option${isCurrent ? ' is-selected' : ''}${opt.disabled ? ' is-disabled' : ''}`;
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', String(isCurrent));
+    item.textContent = text || ' ';
+    item.title = text;
+    if (!opt.disabled) {
+      const index = s.items.length;
+      item.id = `selectSearchOption${index}`;
+      item.addEventListener('mousedown', event => event.preventDefault());   // the search box keeps focus
+      item.addEventListener('click', () => pickSelectSearch(opt));
+      item.addEventListener('mousemove', () => { if (selectSearch && selectSearch.active !== index) setSelectSearchActive(index); });
+      s.items.push({ item, opt });
+    } else {
+      item.setAttribute('aria-disabled', 'true');
+    }
+    s.list.appendChild(item);
+  });
+  if (!s.items.length) {
+    const none = document.createElement('div');
+    none.className = 'select-search-empty';
+    none.textContent = 'No matches';
+    s.list.appendChild(none);
+  }
+  const current = s.items.findIndex(({ opt }) => opt.index === s.select.selectedIndex);
+  setSelectSearchActive(words.length || current < 0 ? 0 : current);
+}
+
+// Under the dropdown, or above it when there is more room there
+function positionSelectSearch() {
+  const { select, box } = selectSearch;
+  const rect = select.getBoundingClientRect();
+  const width = Math.min(Math.max(rect.width, 260), window.innerWidth - 16);
+  box.style.width = `${width}px`;
+  box.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
+  const below = window.innerHeight - rect.bottom - 12;
+  const above = rect.top - 12;
+  // Either way it stays against the dropdown's edge as the list gets shorter
+  if (below >= 240 || below >= above) {
+    box.style.top = `${rect.bottom + 4}px`;
+    box.style.bottom = '';
+    box.style.maxHeight = `${below}px`;
+  } else {
+    box.style.top = '';
+    box.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+    box.style.maxHeight = `${above}px`;
+  }
+}
+
+function handleSelectSearchKeys(event) {
+  const s = selectSearch;
+  if (!s) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    setSelectSearchActive(s.active + (event.key === 'ArrowDown' ? 1 : -1));
+  } else if (event.key === 'PageDown' || event.key === 'PageUp') {
+    event.preventDefault();
+    setSelectSearchActive(s.active + (event.key === 'PageDown' ? 8 : -8));
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    if (s.items[s.active]) pickSelectSearch(s.items[s.active].opt);
+  } else if (event.key === 'Escape' || event.key === 'Tab') {
+    // Esc closes only this list, not the dialog it sits in
+    event.preventDefault();
+    event.stopPropagation();
+    closeSelectSearch(true);
+  }
+}
+
+function openSelectSearch(sel) {
+  closeSelectSearch(false);
+  const box = document.createElement('div');
+  box.className = 'select-search';
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.className = 'select-search-input';
+  input.placeholder = 'Type to search…';
+  input.autocomplete = 'off';
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-expanded', 'true');
+  input.setAttribute('aria-controls', 'selectSearchList');
+  input.setAttribute('aria-label', `Search ${sel.getAttribute('aria-label') || (sel.labels && sel.labels[0] ? sel.labels[0].textContent.trim() : 'the choices')}`);
+  const list = document.createElement('div');
+  list.className = 'select-search-list';
+  list.id = 'selectSearchList';
+  list.setAttribute('role', 'listbox');
+  box.append(input, list);
+  document.body.appendChild(box);
+  selectSearch = { select: sel, box, input, list, items: [], active: 0 };
+  positionSelectSearch();
+  renderSelectSearchList();
+  input.addEventListener('input', renderSelectSearchList);
+  input.addEventListener('keydown', handleSelectSearchKeys);
+  input.focus({ preventScroll: true });
+}
+
+// Clicking a long dropdown opens the search list; clicking anywhere else closes it
+document.addEventListener('mousedown', event => {
+  const sel = event.target.closest && event.target.closest('select');
+  if (selectSearch && !selectSearch.box.contains(event.target)) {
+    if (sel === selectSearch.select) {
+      event.preventDefault();
+      closeSelectSearch(true);
+      return;
+    }
+    closeSelectSearch(false);
+  }
+  if (event.button !== 0 || !selectSearchWanted(sel)) return;
+  event.preventDefault();
+  sel.focus({ preventScroll: true });
+  openSelectSearch(sel);
+}, true);
+
+// From the keyboard: Enter, Space, Alt+Down or F4 on a long dropdown opens it; arrows still step through the choices
+document.addEventListener('keydown', event => {
+  const sel = event.target;
+  if (!sel || sel.tagName !== 'SELECT' || !selectSearchWanted(sel)) return;
+  if (event.key === 'Enter' || event.key === ' ' || event.key === 'F4' || (event.altKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp'))) {
+    event.preventDefault();
+    openSelectSearch(sel);
+  }
+});
+
+// The list follows nothing on screen, so scrolling the page or resizing the window closes it
+document.addEventListener('scroll', event => {
+  if (selectSearch && !selectSearch.box.contains(event.target)) closeSelectSearch(false);
+}, true);
+window.addEventListener('resize', () => closeSelectSearch(false));

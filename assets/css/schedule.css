@@ -424,6 +424,24 @@ select:focus, input:focus {
   background: #DBEAFE !important;
   outline: 2px dashed #2563EB;
 }
+/* While a class is dragged: green where it fits, red where it can't go (hover a spot for the reason) */
+.section-spreadsheet-table td.empty-cell.drop-ok {
+  background: #DCFCE7;
+}
+.section-spreadsheet-table td.empty-cell.drop-bad {
+  background: #FEF2F2;
+}
+.section-spreadsheet-table td.class-block-cell.drop-ok {
+  outline: 3px solid #16A34A;
+  outline-offset: -3px;
+}
+.section-spreadsheet-table td.class-block-cell.drop-bad {
+  opacity: 0.55;
+}
+.section-spreadsheet-table td.class-block-cell.drag-over {
+  outline: 3px dashed #2563EB;
+  outline-offset: -3px;
+}
 
 /* ─── Class Block Cell (Merged Cell with Rowspan) ─── */
 .section-spreadsheet-table td.class-block-cell {

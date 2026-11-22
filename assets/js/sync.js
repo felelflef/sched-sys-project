@@ -140,6 +140,7 @@ function applyServerState(data) {
       return { id: Number(c.cert_id), name: c.cert_name, areas };
     });
   }
+  if (data.defaultLoads) setDefaultLoadUnits(data.defaultLoads);
   applyServerFaculty(data);
 
   MASTER_SCHEDULE_DATA = data.schedules.map(row => mapServerClass(row, ACADEMIC_SECTIONS, CURRICULUM_SUBJECTS));

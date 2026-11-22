@@ -42,10 +42,17 @@ function subjectWeeklyMinutes(subj) {
   const minutes = subjectPartMinutes(subj);
   return minutes.lec + minutes.lab;
 }
+// A subject's weekly teaching load. College counts its units (CHED: 1 lecture unit is 1 hour a week, 1 lab unit 3 hours);
+// SHS subjects count 1 unit per teaching hour, since DepEd measures SHS teaching time in hours
+function subjectLoadUnits(subj, termId) {
+  return termSchoolLevel(termId) === 'shs' ? subjectWeeklyMinutes(subj) / 60 : (Number(subj.units) || 0);
+}
 
 // Under 3 hours is one meeting; longer subjects split into meetings of at most 4 hours
 function splitIntoMeetings(totalMinutes) {
   if (totalMinutes < 180) return [totalMinutes];
+  // When two meetings can't be equal but three can (4.5 hours: 3 × 1.5 hours, Mon/Wed/Fri), use three equal ones
+  if (totalMinutes <= 480 && (totalMinutes / 2) % 30 !== 0 && (totalMinutes / 3) % 30 === 0) return [0, 0, 0].map(() => totalMinutes / 3);
   const count = totalMinutes <= 480 ? 2 : Math.ceil(totalMinutes / 240);
   const longest = Math.ceil(totalMinutes / count / 30) * 30;
   const lengths = [];
@@ -112,21 +119,9 @@ function currentAndOverlappingClasses() {
   const { activeTerm } = getActiveAcademicContext();
   return [...activeTermClasses(), ...concurrentClasses(activeTerm.id)];
 }
-// For display: every term whose dates overlap this one. While College 2nd Sem is planned, SHS 2nd Term (fixed,
-// running until late February) and SHS 3rd Term (from March) both hold rooms and teachers, so both are shown.
+// Every term whose dates overlap this one (search also lists their sections)
 function pairedTermIds(termId) {
   return concurrentTermIds(termId);
-}
-// "until Feb 26" or "from Mar 8" when another term covers only part of this one
-function overlapNote(otherId, termId) {
-  const term = SCHOOL_TERMS.find(t => t.id === termId);
-  const other = SCHOOL_TERMS.find(t => t.id === otherId);
-  if (!term || !other) return '';
-  const short = d => new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  if (other.endDate < term.endDate && other.startDate > term.startDate) return `${short(other.startDate)}–${short(other.endDate)}`;
-  if (other.endDate < term.endDate) return `until ${short(other.endDate)}`;
-  if (other.startDate > term.startDate) return `from ${short(other.startDate)}`;
-  return '';
 }
 
 function activeTermClasses() {
@@ -145,7 +140,7 @@ function classUnits(c) {
   const subj = sec && curriculumSubjectFor(sec, c.subjectCode, termId);
   if (!subj) return classMinutes(c) / 60;
   const total = subjectWeeklyMinutes(subj);
-  return total > 0 ? (Number(subj.units) || 0) * classMinutes(c) / total : 0;
+  return total > 0 ? subjectLoadUnits(subj, termId) * classMinutes(c) / total : 0;
 }
 
 function facultyLoadUnits(name, classes = activeTermClasses()) {
@@ -349,12 +344,12 @@ let gridMode = 'section';
 const gridSelection = { room: '', teacher: '' };
 const GRID_MODE_LABELS = { section: 'Section', room: 'Room', teacher: 'Professor' };
 
+// Only the open term's classes are shown. Terms running alongside still hold their rooms and teachers: every
+// check (Generate, edits, moves, the server) keeps them from being double-booked.
 function gridModeClasses() {
-  const { activeTerm } = getActiveAcademicContext();
   if (gridMode === 'section') return activeTermClasses().filter(c => c.section === currentSelectedSection);
   const selected = gridSelection[gridMode];
-  const alongside = MASTER_SCHEDULE_DATA.filter(c => c.termId && pairedTermIds(activeTerm.id).includes(c.termId));
-  return [...activeTermClasses(), ...alongside].filter(c => gridMode === 'room' ? c.room === selected : c.instructor === selected);
+  return activeTermClasses().filter(c => gridMode === 'room' ? c.room === selected : c.instructor === selected);
 }
 
 window.setGridMode = function(mode) {
@@ -467,15 +462,6 @@ function renderGrid() {
 }
 
 // Builds the timetable rows. readOnly leaves out editing, dragging and conflict notes.
-// A class from the other level's term shown alongside the active term, such as "SHS · 1st Term"
-function otherTermBadge(item) {
-  const { activeTerm } = getActiveAcademicContext();
-  if (!item.termId || item.termId === activeTerm.id) return '';
-  const term = SCHOOL_TERMS.find(t => t.id === item.termId);
-  const level = termSchoolLevel(item.termId) === 'shs' ? 'SHS' : 'College';
-  const when = overlapNote(item.termId, activeTerm.id);
-  return ` <span class="class-ai-badge" style="background:#F3E8FF; color:#6B21A8;" title="${escapeHtml(termWithLevel(item.termId))}${when ? `, ${escapeHtml(when)}` : ''}: fixed, shown for reference">${level}${term ? ` · ${escapeHtml(term.termName)}` : ''}${when ? ` · ${escapeHtml(when)}` : ''}</span>`;
-}
 
 // " · Lab" or " · Lecture" on a class of a subject that has both parts
 function classPartTag(item) {
@@ -590,15 +576,19 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
         rowsHtml += `
           <td class="class-block-cell type-${itemType} ${conflictClass}"
               rowspan="${cell.rowspan}"
-              ${cellReadOnly ? '' : `draggable="true"
+              ${cellReadOnly ? '' : `draggable="true" data-class-id="${escapeHtml(item.id)}"
               ondragstart="handleClassDragStart(event, '${item.id}')"
+              ondragend="clearDropTargets()"
+              ondragover="handleClassDragOver(event, '${item.id}')"
+              ondragleave="handleSlotDragLeave(event)"
+              ondrop="handleClassDrop(event, '${item.id}')"
               onclick="showClassDetails('${item.id}')"
               tabindex="0" role="button"
               aria-label="${escapeHtml(item.subjectCode)} for ${escapeHtml(item.section)}, ${escapeHtml(item.day)} ${formatTime12(item.startTime)} to ${formatTime12(item.endTime)}, ${escapeHtml(item.room)}, ${escapeHtml(item.instructor)}. Press Enter for details."`}
               title="${escapeHtml(item.subjectCode)}: ${escapeHtml(item.subjectTitle || '')} (${formatTime12(item.startTime)} – ${formatTime12(item.endTime)})">
             <div class="class-cell-inner">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
-                <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}${item.locked ? ' <span class="class-lock-badge" title="Locked: Generate keeps this class where it is">Locked</span>' : ''}${otherTermBadge(item)}</span>
+                <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}${item.locked ? ' <span class="class-lock-badge" title="Locked: Generate keeps this class where it is">Locked</span>' : ''}</span>
                 ${cellReadOnly ? '' : `<button class="cell-quick-edit-btn" onclick="event.stopPropagation(); openEditClassScheduleModal('${item.id}')" title="Edit subject or time" aria-label="Edit ${escapeHtml(item.subjectCode)}">Edit</button>`}
               </div>
               <span class="class-subj-title">${escapeHtml(item.subjectCode)}${classPartTag(item)}</span>
@@ -613,7 +603,7 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
       } else {
         // Empty cell: Droppable target & clickable manual schedule slot
         rowsHtml += `
-          <td class="empty-cell"
+          <td class="empty-cell" data-drop-day="${day}" data-drop-slot="${slotMin}"
               ondragover="handleSlotDragOver(event)"
               ondragleave="handleSlotDragLeave(event)"
               ondrop="handleSlotDrop(event, '${day}', ${slotMin})"
@@ -992,12 +982,129 @@ function closeClassDetailModal() {
 /* ─── HTML5 Drag-and-Drop Schedule Rescheduling ─── */
 let activeDraggedClassId = null;
 
+/* Moving a class by hand. Dropped on an empty time, a class keeps its room when that room is free; when only the
+   room is taken, the closest-fitting free room of the same type is used. Dropped on another class of the same
+   section, the two trade places. While a class is dragged, the spots it fits turn green and the rest red. */
+function withScheduleData(data, fn) {
+  const saved = MASTER_SCHEDULE_DATA;
+  MASTER_SCHEDULE_DATA = data;
+  try { return fn(); } finally { MASTER_SCHEDULE_DATA = saved; }
+}
+
+// Where a class would land at that day and start time: { day, start, end, room, roomChanged } or { problem }
+function moveTarget(item, day, startMin) {
+  const endMin = startMin + Math.max(30, timeToMinutes(item.endTime) - timeToMinutes(item.startTime));
+  if (endMin > CLASS_DAY_END) return { problem: `It would end at ${formatTime12(minutesToTime(endMin))}, after the 8:30 PM closing time` };
+  const moved = { ...item, day, startTime: minutesToTime(startMin), endTime: minutesToTime(endMin) };
+  const availability = facultyAvailabilityProblem(item.instructor, day, moved.startTime, moved.endTime);
+  if (availability) return { problem: availability };
+  const conflict = checkGlobalClassConflict(moved);
+  if (!conflict) return { day, start: moved.startTime, end: moved.endTime, room: item.room };
+  // Anything besides the room (teacher, section, a term running alongside) can't be solved by another room
+  if (checkGlobalClassConflict({ ...moved, room: '\u0000no room' }) !== null) return { problem: conflict };
+  const current = ROOMS.find(r => r.code === item.room);
+  const free = ROOMS.filter(r => r.code !== item.room && (!current || r.type === current.type))
+    .sort((a, b) => a.cap - b.cap)
+    .find(r => !checkGlobalClassConflict({ ...moved, room: r.code }) && !placementProblem({ ...moved, room: r.code }, item.id));
+  return free
+    ? { day, start: moved.startTime, end: moved.endTime, room: free.code, roomChanged: true }
+    : { problem: `${conflict}, and no other suitable room is free then` };
+}
+
+// Two classes of one section trade places: each takes the other's day and start time
+function swapPlan(item, other) {
+  if (other.section !== item.section || (other.termId || null) !== (item.termId || null)) {
+    return { problem: `Only classes of the same section can trade places, and ${other.subjectCode} belongs to ${other.section}` };
+  }
+  const rest = MASTER_SCHEDULE_DATA.filter(c => c.id !== item.id && c.id !== other.id);
+  const first = withScheduleData(rest, () => moveTarget(item, other.day, timeToMinutes(other.startTime)));
+  if (first.problem) return { problem: `${item.subjectCode} can't take ${other.day} ${formatTime12(other.startTime)}: ${first.problem}` };
+  const placed = { ...item, day: first.day, startTime: first.start, endTime: first.end, room: first.room };
+  const second = withScheduleData([...rest, placed], () => moveTarget(other, item.day, timeToMinutes(item.startTime)));
+  if (second.problem) return { problem: `${other.subjectCode} can't take ${item.day} ${formatTime12(item.startTime)}: ${second.problem}` };
+  return { first, second };
+}
+
+function applyMove(item, target) {
+  item.day = target.day;
+  item.startTime = target.start;
+  item.endTime = target.end;
+  item.room = target.room;
+}
+
+function finishManualMove() {
+  queueScheduleSave();
+  saveStateToStorage();
+  renderGrid();
+  updateScheduleStats();
+}
+
+function markDropCell(cell, ok, title) {
+  if (cell.dataset.titleBefore === undefined) cell.dataset.titleBefore = cell.title;
+  cell.classList.add(ok ? 'drop-ok' : 'drop-bad');
+  cell.title = title;
+}
+
+function showDropTargets(item) {
+  document.querySelectorAll('td.empty-cell[data-drop-day]').forEach(cell => {
+    const target = moveTarget(item, cell.dataset.dropDay, Number(cell.dataset.dropSlot));
+    markDropCell(cell, !target.problem, target.problem ? `Can't move here: ${target.problem}` : target.roomChanged ? `Fits here, in room ${target.room}` : 'Fits here');
+  });
+  // Other classes of the same section are places to trade with
+  document.querySelectorAll('td.class-block-cell[data-class-id]').forEach(cell => {
+    const other = MASTER_SCHEDULE_DATA.find(c => c.id === cell.dataset.classId);
+    if (!other || other.id === item.id || other.section !== item.section) return;
+    const plan = swapPlan(item, other);
+    markDropCell(cell, !plan.problem, plan.problem ? `Can't trade places: ${plan.problem}` : `Drop here to trade places with ${other.subjectCode}`);
+  });
+}
+
+function clearDropTargets() {
+  document.querySelectorAll('td.drop-ok, td.drop-bad, td.drag-over').forEach(cell => {
+    cell.classList.remove('drop-ok', 'drop-bad', 'drag-over');
+    if (cell.dataset.titleBefore !== undefined) {
+      cell.title = cell.dataset.titleBefore;
+      delete cell.dataset.titleBefore;
+    }
+  });
+}
+
 function handleClassDragStart(event, classId) {
   activeDraggedClassId = classId;
   if (event.dataTransfer) {
     event.dataTransfer.setData('text/plain', classId);
     event.dataTransfer.effectAllowed = 'move';
   }
+  const item = MASTER_SCHEDULE_DATA.find(c => c.id === classId);
+  if (item) showDropTargets(item);
+}
+
+// Another class accepts a drop only while a different class is being dragged
+function handleClassDragOver(event, classId) {
+  if (!activeDraggedClassId || activeDraggedClassId === classId) return;
+  handleSlotDragOver(event);
+}
+
+function handleClassDrop(event, targetId) {
+  event.preventDefault();
+  const classId = (event.dataTransfer && event.dataTransfer.getData('text/plain')) || activeDraggedClassId;
+  activeDraggedClassId = null;
+  clearDropTargets();
+  if (!classId || classId === targetId) return;
+  const item = MASTER_SCHEDULE_DATA.find(c => c.id === classId);
+  const other = MASTER_SCHEDULE_DATA.find(c => c.id === targetId);
+  if (!item || !other) return;
+
+  const plan = swapPlan(item, other);
+  if (plan.problem) {
+    alert(`These classes can't trade places. ${plan.problem}.`);
+    return;
+  }
+  const rooms = [plan.first.roomChanged ? `${item.subjectCode} is now in room ${plan.first.room}` : '', plan.second.roomChanged ? `${other.subjectCode} is now in room ${plan.second.room}` : ''].filter(Boolean);
+  applyMove(item, plan.first);
+  applyMove(other, plan.second);
+  finishManualMove();
+  alert(`${item.subjectCode} and ${other.subjectCode} traded places.${rooms.length ? ` ${rooms.join('; ')}, since the usual room was taken.` : ''}`);
 }
 
 function handleSlotDragOver(event) {
@@ -1018,38 +1125,21 @@ function handleSlotDrop(event, targetDay, targetSlotMin) {
 
   const classId = (event.dataTransfer && event.dataTransfer.getData('text/plain')) || activeDraggedClassId;
   activeDraggedClassId = null;
+  clearDropTargets();
   if (!classId) return;
 
   const item = MASTER_SCHEDULE_DATA.find(c => c.id === classId);
   if (!item) return;
 
-  const durationMin = Math.max(30, timeToMinutes(item.endTime) - timeToMinutes(item.startTime));
-  const targetEndMin = targetSlotMin + durationMin;
-  if (targetEndMin > CLASS_DAY_END) {
-    alert(`This class can't move there. It would end at ${formatTime12(minutesToTime(targetEndMin))}, after the 8:30 PM closing time.`);
+  const target = moveTarget(item, targetDay, targetSlotMin);
+  if (target.problem) {
+    alert(`This class can't move there. ${target.problem}.`);
     return;
   }
-
-  const availabilityProblem = facultyAvailabilityProblem(item.instructor, targetDay, minutesToTime(targetSlotMin), minutesToTime(targetEndMin));
-  if (availabilityProblem) {
-    alert(`This class can't move there. ${availabilityProblem}.`);
-    return;
-  }
-
-  const conflict = checkGlobalClassConflict({ ...item, day: targetDay, startTime: minutesToTime(targetSlotMin), endTime: minutesToTime(targetEndMin) });
-  if (conflict) {
-    alert(`This class can't move there. ${conflict}.`);
-    return;
-  }
-
-  item.day = targetDay;
-  item.startTime = minutesToTime(targetSlotMin);
-  item.endTime = minutesToTime(targetEndMin);
-
-  queueScheduleSave();
-  saveStateToStorage();
-  renderGrid();
-  updateScheduleStats();
+  const oldRoom = item.room;
+  applyMove(item, target);
+  finishManualMove();
+  if (target.roomChanged) alert(`${item.subjectCode} moved to ${targetDay} ${formatTime12(target.start)} in room ${target.room}, since ${oldRoom} is taken then.`);
 }
 
 /* ─── Manual Slot Scheduling via Modal ─── */
@@ -1317,10 +1407,10 @@ function updateScheduleStats() {
 
   const sub4 = document.getElementById('stepSub-4');
   if (sub4) sub4.textContent = `${totalSections} Sections`;
-  // Rooms & Instructors: how many sections have a room chosen
+  // Rooms & Instructors is optional (anything left on Automatic is picked when generating): how many sections have a room set
   const sub5 = document.getElementById('stepSub-5');
   if (sub5) {
     const withRoom = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id && s.homeRoom).length;
-    sub5.textContent = `${withRoom} of ${totalSections} rooms chosen`;
+    sub5.textContent = `Optional · ${withRoom} of ${totalSections} set`;
   }
 }
