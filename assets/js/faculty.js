@@ -961,7 +961,17 @@ window.closeDeleteFacultyModal = function() {
   document.getElementById('deleteFacultyModal').style.display = 'none';
 };
 
-window.confirmDeleteFacultyProfile = function() {
+// "19 classes: 9 in 1st Sem AY 2026-2027 and 10 in 2nd Sem AY 2026-2027"
+function classesByTermText(classes) {
+  const counts = new Map();
+  classes.forEach(c => counts.set(c.termId, (counts.get(c.termId) || 0) + 1));
+  const startOf = termId => (SCHOOL_TERMS.find(t => t.id === termId) || {}).startDate || '';
+  const parts = [...counts].sort((a, b) => startOf(a[0]).localeCompare(startOf(b[0]))).map(([termId, n]) => `${n} in ${SCHOOL_TERMS.some(t => t.id === termId) ? termLabelFor(termId) : 'a term that no longer exists'}`);
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+  return `${classes.length} class${classes.length === 1 ? '' : 'es'}: ${list}`;
+}
+
+window.confirmDeleteFacultyProfile = async function() {
   if (!canManageData()) {
     alert('Access Denied: Only the System Administrator or a Program Head can remove faculty profiles.');
     return;
@@ -969,20 +979,32 @@ window.confirmDeleteFacultyProfile = function() {
   const email = document.getElementById('deleteFacultyTargetEmail').value;
   const fac = FACULTY.find(f => f.email && f.email.toLowerCase() === email.toLowerCase());
   const facName = fac ? fac.name : null;
-  if (!IS_STANDALONE && MASTER_SCHEDULE_DATA.some(c => c.instructor === facName)) {
-    alert(`${facName} still has scheduled classes. Reassign them before removing this profile.`);
+  // Classes in any term count, so the message says where they are. Taking them off the timetable lets
+  // Generate give them to other teachers; otherwise nothing changes.
+  const theirClasses = IS_STANDALONE || !facName ? [] : MASTER_SCHEDULE_DATA.filter(c => c.instructor === facName);
+  if (theirClasses.length) {
     closeDeleteFacultyModal();
-    return;
+    const count = theirClasses.length;
+    const ok = await askConfirm(`${facName} still teaches ${classesByTermText(theirClasses)}.\n\nReassign ${count === 1 ? 'it' : 'them'} first, or take ${count === 1 ? 'it' : 'them'} off the timetable now and remove this profile. You can then run Generate in ${new Set(theirClasses.map(c => c.termId)).size === 1 ? 'that term' : 'each term'} to give the classes to other teachers.`,
+      { title: 'This teacher still has classes', confirmLabel: `Take off ${count} class${count === 1 ? '' : 'es'} and remove`, danger: true });
+    if (!ok) return;
+    // Every affected term is saved, and all must succeed, before the certificates go: the server refuses to take
+    // certificates from a teacher who still has classes
+    const termIds = [...new Set(theirClasses.map(c => c.termId))];
+    MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !theirClasses.includes(c));
+    saveStateToStorage();
+    const results = await Promise.all(termIds.map(termId => saveTermSchedule('bulk_save_schedules', termId, MASTER_SCHEDULE_DATA.filter(c => c.termId === termId)).catch(() => null)));
+    if (termIds.includes(getActiveAcademicContext().activeTerm.id)) clearEditUndo();
+    renderGrid();
+    updateScheduleStats();
+    if (results.some(res => !res || !res.ok)) {
+      await loadServerState();
+      alert(`Not all of ${facName}'s classes could be taken off the timetable, so the profile was kept. Please try again.`);
+      return;
+    }
   }
   saveFacultyQualifications({ email, certificates: [] });
   FACULTY = FACULTY.filter(f => !f.email || f.email.toLowerCase() !== email.toLowerCase());
-  if (facName) {
-    if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
-      MASTER_SCHEDULE_DATA.forEach(c => {
-        if (c.instructor === facName) c.instructor = 'TBA';
-      });
-    }
-  }
   if (typeof saveStateToStorage === 'function') saveStateToStorage();
   closeDeleteFacultyModal();
   renderFacultyCards();
