@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════
    SCHEDULE OVERVIEW
-   Professor loads, room use and missing hours for the active term.
+   Teacher loads, room use and missing hours for the active term.
    ═══════════════════════════════════════════════════ */
 
 // Six school days of the hours classes can be held (7:00 AM to 8:30 PM)
@@ -48,8 +48,8 @@ function renderScheduleReports() {
   const summary = [
     ['Classes This Term', classes.length],
     ['Subjects Missing Hours', missing.length],
-    ['Professors Over Max', overLimit.length],
-    ['Professors Under Min', underMin.length]
+    ['Teachers Over Max', overLimit.length],
+    ['Teachers Under Min', underMin.length]
   ];
   const loadBadge = l => l.units > l.max + 0.001 ? '<span class="badge badge-danger">Over max</span>'
     : l.units < l.min ? '<span class="badge badge-warning">Under min</span>' : '<span class="badge badge-success">Within range</span>';
@@ -64,8 +64,8 @@ function renderScheduleReports() {
     <div class="card report-card"><div class="card-header"><div><h3>Subjects Missing Hours</h3><p>Included subjects that don't have their full weekly hours yet</p></div></div>
       ${reportTable(['Section', 'Subject', 'Required', 'Scheduled'], missing.map(m => [escapeHtml(m.section), `${escapeHtml(m.label)} ${escapeHtml(m.subject.name)}`, `${m.required} hrs`, `${m.scheduled} hrs`]), 'Every subject has its full weekly hours.')}
     </div>
-    <div class="card report-card"><div class="card-header"><div><h3>Professor Loads</h3><p>Teaching units against each professor's minimum and maximum, counting the College or SHS term that runs at the same time</p></div></div>
-      ${reportTable(['Professor', 'Status', 'Classes', 'Units', 'Hours', 'Min–Max', ''], loads.map(l => [escapeHtml(l.name), escapeHtml(l.status), l.classes, `${formatUnits(l.units)} units${l.otherUnits > 0 ? ` <span style="font-size:0.857rem; color:var(--text-secondary);" title="Their classes in the term of the other level that runs at the same time">(incl. ${formatUnits(l.otherUnits)} from overlapping terms)</span>` : ''}`, `${l.hours.toFixed(1)} hrs`, `${l.min}–${l.max} units`, loadBadge(l)]), 'No professors yet.')}
+    <div class="card report-card"><div class="card-header"><div><h3>Teacher Loads</h3><p>Teaching units against each teacher's minimum and maximum, counting the College or SHS term that runs at the same time (SHS classes count 1 unit per teaching hour)</p></div></div>
+      ${reportTable(['Teacher', 'Status', 'Classes', 'Units', 'Hours this term', 'Min–Max', ''], loads.map(l => [escapeHtml(l.name), escapeHtml(l.status), l.classes, `${formatUnits(l.units)} units${l.otherUnits > 0 ? ` <span style="font-size:0.857rem; color:var(--text-secondary);" title="Their classes in the term of the other level that runs at the same time">(incl. ${formatUnits(l.otherUnits)} from overlapping terms)</span>` : ''}`, `${l.hours.toFixed(1)} hrs`, `${l.min}–${l.max} units`, loadBadge(l)]), 'No teachers yet.')}
     </div>
     <div class="card report-card"><div class="card-header"><div><h3>Room Use</h3><p>Share of the ${ROOM_WEEKLY_HOURS}-hour school week (Mon–Sat, 7:00 AM–8:30 PM) each room is booked</p></div></div>
       ${reportTable(['Room', 'Type', 'Classes', 'Hours', 'Use'], rooms.map(r => [escapeHtml(r.code), escapeHtml(r.type), r.classes, `${r.hours.toFixed(1)} hrs`, `${r.percent}%`]), 'No rooms yet.')}

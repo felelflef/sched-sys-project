@@ -192,6 +192,8 @@ function describeActivity(?PDO $db, string $key, array $in): ?array {
             return ['Setup', (int)($in['section_id'] ?? 0) > 0
                 ? "Updated section {$text('section_code')} ({$text('program')} " . activityYearLevel($in['year_level'] ?? 1) . ', ' . (int)($in['student_count'] ?? 0) . ' students' . ($text('home_room') !== '' ? ", home room {$text('home_room')}" : '') . ')'
                 : "Added section {$text('section_code')} to " . activityTerm($db, $in['term_id'] ?? 0)];
+        case 'schedules:save_default_loads':
+            return ['Resources', 'Set the default loads: full-time ' . (int)($in['full_min'] ?? 0) . '–' . (int)($in['full_max'] ?? 0) . ' units, part-time ' . (int)($in['part_min'] ?? 0) . '–' . (int)($in['part_max'] ?? 0) . ' units'];
         case 'schedules:save_section_plan':
             $section = activityLookup($db, "SELECT section_code FROM academic_sections WHERE section_id = ?", [(int)($in['section_id'] ?? 0)]) ?: 'a section';
             return ['Schedule', "Updated the room and instructors of section {$section}" . ($text('home_room') !== '' ? " (room {$text('home_room')})" : '')];

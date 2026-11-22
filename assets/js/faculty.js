@@ -34,6 +34,8 @@ function renderFacultyCards() {
   if (btnManageCerts) {
     btnManageCerts.style.display = isAdmin ? 'inline-flex' : 'none';
   }
+  const btnDefaultLoads = document.getElementById('btnDefaultLoads');
+  if (btnDefaultLoads) btnDefaultLoads.style.display = isAdmin ? 'inline-flex' : 'none';
 
   const deptFilter = document.getElementById('facultyDeptFilter')?.value || 'all';
   const statusFilter = document.getElementById('facultyStatusFilter')?.value || 'all';
@@ -103,7 +105,7 @@ function renderFacultyCards() {
 }
 
 // Asks before removing qualifications a professor still teaches this term. If the user agrees,
-// those classes come off the schedule with the qualification, so Quick Generate can reassign them.
+// those classes come off the schedule with the qualification, so Generate can reassign them.
 // Returns null if cancelled, otherwise whether classes were removed.
 async function confirmClassRemoval(affected) {
   if (affected.length === 0) return { removeClasses: false };
@@ -111,7 +113,7 @@ async function confirmClassRemoval(affected) {
   const teachers = teacherNames.join(', ');
   const codes = [...new Set(affected.map(c => c.subjectCode))].join(', ');
   const count = affected.length;
-  const ok = await askConfirm(`${teachers} ${teacherNames.length === 1 ? 'teaches' : 'teach'} ${count} ${codes} class${count === 1 ? '' : 'es'} this term.\n\nRemoving the qualification also takes ${count === 1 ? 'that class' : 'those classes'} off the schedule. You can then run Quick Generate to give ${count === 1 ? 'it' : 'them'} to another qualified professor.`, { title: 'Remove the qualification?', confirmLabel: `Remove and unschedule ${count === 1 ? 'class' : 'classes'}`, danger: true });
+  const ok = await askConfirm(`${teachers} ${teacherNames.length === 1 ? 'teaches' : 'teach'} ${count} ${codes} class${count === 1 ? '' : 'es'} this term.\n\nRemoving the qualification also takes ${count === 1 ? 'that class' : 'those classes'} off the schedule. You can then run Generate to give ${count === 1 ? 'it' : 'them'} to another qualified professor.`, { title: 'Remove the qualification?', confirmLabel: `Remove and unschedule ${count === 1 ? 'class' : 'classes'}`, danger: true });
   if (!ok) return null;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !affected.includes(c));
   return { removeClasses: true };
@@ -148,6 +150,58 @@ function setLoadInputs(prefix, min, max) {
   document.getElementById(`${prefix}MinLoad`).value = min;
   document.getElementById(`${prefix}MaxLoad`).value = max;
 }
+// Faculty Profiles > Default Loads: the school's usual loads for full-time and part-time teachers
+window.openDefaultLoadsModal = function() {
+  document.getElementById('defLoadFullMin').value = DEFAULT_LOAD_UNITS['Full-time'].min;
+  document.getElementById('defLoadFullMax').value = DEFAULT_LOAD_UNITS['Full-time'].max;
+  document.getElementById('defLoadPartMin').value = DEFAULT_LOAD_UNITS['Part-time'].min;
+  document.getElementById('defLoadPartMax').value = DEFAULT_LOAD_UNITS['Part-time'].max;
+  document.getElementById('defLoadApplyExisting').checked = false;
+  document.getElementById('defaultLoadsError').style.display = 'none';
+  document.getElementById('defaultLoadsModal').style.display = 'flex';
+};
+window.closeDefaultLoadsModal = function() {
+  document.getElementById('defaultLoadsModal').style.display = 'none';
+};
+window.submitDefaultLoads = async function() {
+  const read = id => document.getElementById(id).value;
+  const errorBox = document.getElementById('defaultLoadsError');
+  const showError = text => { errorBox.textContent = text; errorBox.style.display = 'block'; };
+  const values = { full_min: read('defLoadFullMin'), full_max: read('defLoadFullMax'), part_min: read('defLoadPartMin'), part_max: read('defLoadPartMax') };
+  const problem = INPUT_RULES.int('Full-time minimum', values.full_min, 0, 40) || INPUT_RULES.int('Full-time maximum', values.full_max, 3, 40)
+    || INPUT_RULES.int('Part-time minimum', values.part_min, 0, 40) || INPUT_RULES.int('Part-time maximum', values.part_max, 3, 40);
+  if (problem) return showError(problem);
+  const n = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, parseInt(v, 10)]));
+  if (n.full_min > n.full_max || n.part_min > n.part_max) return showError("A minimum load can't be more than its maximum.");
+  const old = { 'Full-time': { ...DEFAULT_LOAD_UNITS['Full-time'] }, 'Part-time': { ...DEFAULT_LOAD_UNITS['Part-time'] } };
+  if (!IS_STANDALONE) {
+    const res = await fetch('api/schedules.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, quietFailure: true, body: JSON.stringify({ action: 'save_default_loads', ...n }) }).catch(() => null);
+    const body = res ? await res.json().catch(() => ({})) : {};
+    if (!res || !res.ok || !body.success) return showError(body.message || "Couldn't reach the server, so the default loads weren't saved.");
+  }
+  // Who is on the old defaults is decided before the defaults change (a teacher with no minimum saved follows them)
+  const onOldDefaults = FACULTY.filter(f => {
+    const status = f.status === 'Part-time' ? 'Part-time' : 'Full-time';
+    return facultyMinUnits(f) === old[status].min && facultyMaxUnits(f) === old[status].max;
+  });
+  setDefaultLoadUnits({ 'Full-time': { min: n.full_min, max: n.full_max }, 'Part-time': { min: n.part_min, max: n.part_max } });
+  // Teachers still on the old defaults move to the new ones; a load set by hand stays as it is
+  let moved = 0;
+  if (document.getElementById('defLoadApplyExisting').checked) {
+    onOldDefaults.forEach(f => {
+      const status = f.status === 'Part-time' ? 'Part-time' : 'Full-time';
+      f.minLoad = DEFAULT_LOAD_UNITS[status].min;
+      f.maxLoad = DEFAULT_LOAD_UNITS[status].max;
+      saveFacultyAvailability(f);
+      moved++;
+    });
+  }
+  saveStateToStorage();
+  closeDefaultLoadsModal();
+  renderFacultyCards();
+  alert(`Default loads saved: full-time ${n.full_min}–${n.full_max} units, part-time ${n.part_min}–${n.part_max} units.${moved ? ` ${moved} teacher${moved === 1 ? '' : 's'} on the old defaults now use them.` : ''}`);
+};
+
 function applyLoadDefaults(prefix, status) {
   const range = defaultLoadUnits(status);
   setLoadInputs(prefix, range.min, range.max);

@@ -219,7 +219,15 @@ function convertMainQualsToCertificates(fac) {
 
 /* Teaching load is counted in units, with a minimum and a maximum per teacher. Defaults: full-time 24 to 30 units,
    part-time 15 to 24 units; both can be changed in the teacher's profile. */
+// The school's default loads in units, a school setting (Faculty Profiles > Default Loads). A teacher's own
+// minimum and maximum, when saved, take precedence; these fill in for new teachers and any not set.
 const DEFAULT_LOAD_UNITS = { 'Full-time': { min: 24, max: 30 }, 'Part-time': { min: 15, max: 24 } };
+function setDefaultLoadUnits(loads) {
+  ['Full-time', 'Part-time'].forEach(status => {
+    const r = loads && loads[status];
+    if (r && Number.isFinite(Number(r.min)) && Number(r.max) > 0) DEFAULT_LOAD_UNITS[status] = { min: Number(r.min), max: Number(r.max) };
+  });
+}
 function defaultLoadUnits(status) {
   return DEFAULT_LOAD_UNITS[status === 'Part-time' ? 'Part-time' : 'Full-time'];
 }
@@ -314,7 +322,7 @@ let USERS = [
 const MODULE_TITLES = {
   schedule: { title: 'Master Schedule', sub: 'Set up the term and build the weekly timetable' },
   viewer:   { title: 'View Schedule', sub: 'Weekly timetables by section, professor or room' },
-  reports:  { title: 'Schedule Overview', sub: 'Professor loads, room use and missing hours' },
+  reports:  { title: 'Schedule Overview', sub: 'Teacher loads, room use and missing hours' },
   rooms:    { title: 'Room Information', sub: 'Rooms, capacity and weekly schedules' },
   faculty:  { title: 'Faculty Profiles', sub: 'Professors and the subjects they can teach' },
   subjects: { title: 'Subject Catalog', sub: 'Courses, subject areas and units' },

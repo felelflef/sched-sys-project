@@ -196,7 +196,8 @@ function openAddCurriculumSubjectModal() {
   document.getElementById('curricSubjEditId').value = '';
   document.getElementById('curricSubjCode').value = '';
   document.getElementById('curricSubjName').value = '';
-  setCurriculumUnitFields(3, 0, 3, 0);
+  const startHours = defaultSubjectHours(3, 0, curricFormLevel());
+  setCurriculumUnitFields(3, 0, startHours.lec, startHours.lab);
   document.getElementById('curricSubjType').value = 'lecture';
   fillCurriculumFormPrograms('');
   fillCurriculumAreaSelect('');
@@ -213,13 +214,21 @@ function setCurriculumUnitFields(lecUnits, labUnits, lecHrs, labHrs) {
   document.getElementById('curricSubjLabHrs').value = labHrs;
 }
 
-// Changing the unit split fills in the usual hours: 1 per lecture unit, 3 per lab unit
+// SHS subjects meet 4.5 hours a week by default; college hours follow the units (1 hour per lecture unit,
+// 3 per lab unit). Either can be changed for a subject that differs.
+const SHS_WEEKLY_HOURS = 4.5;
+function defaultSubjectHours(lecUnits, labUnits, level) {
+  if (level !== 'shs') return { lec: lecUnits, lab: labUnits * LAB_HOURS_PER_UNIT };
+  const lab = Math.min(labUnits * LAB_HOURS_PER_UNIT, SHS_WEEKLY_HOURS);
+  return { lec: SHS_WEEKLY_HOURS - lab, lab };
+}
 function syncCurriculumUnitHours() {
   const lecUnits = Math.max(parseInt(document.getElementById('curricSubjLecUnits').value, 10) || 0, 0);
   const labUnits = Math.max(parseInt(document.getElementById('curricSubjLabUnits').value, 10) || 0, 0);
+  const hours = defaultSubjectHours(lecUnits, labUnits, curricFormLevel());
   document.getElementById('curricSubjUnits').value = lecUnits + labUnits;
-  document.getElementById('curricSubjLecHrs').value = lecUnits;
-  document.getElementById('curricSubjLabHrs').value = labUnits * LAB_HOURS_PER_UNIT;
+  document.getElementById('curricSubjLecHrs').value = hours.lec;
+  document.getElementById('curricSubjLabHrs').value = hours.lab;
 }
 
 // The subject area comes from the Subject Catalog; a subject not in the catalog yet defaults to the first area
@@ -257,7 +266,8 @@ function fillCurriculumFromCatalog(code) {
   if (previous && Number(previous.units) === Number(units)) {
     setCurriculumUnitFields(subjectLecUnits(previous), subjectLabUnits(previous), previous.lecHours || 0, previous.labHours || 0);
   } else {
-    setCurriculumUnitFields(units, 0, units, 0);
+    const hours = defaultSubjectHours(units, 0, curricFormLevel());
+    setCurriculumUnitFields(units, 0, hours.lec, hours.lab);
   }
   document.getElementById('curricSubjType').value = previous ? (previous.type || 'lecture') : 'lecture';
   fillCurriculumAreaSelect(subj.code);

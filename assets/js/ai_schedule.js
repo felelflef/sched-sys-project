@@ -74,7 +74,7 @@ function aiDraftRejectReason(raw, accepted, sections, termId) {
   const partHours = aiDraftPartHours(accepted, { section: raw.section, subjectCode: raw.subject, room: raw.room }, subject, section);
   if (partHours + hours > subjectPartMinutes(subject)[part] / 60) return `More ${part === 'lab' ? 'lab' : 'lecture'} hours than the subject requires`;
 
-  const addedUnits = (Number(subject.units) || 0) * hours * 60 / (subjectWeeklyMinutes(subject) || hours * 60);
+  const addedUnits = subjectLoadUnits(subject, termId) * hours * 60 / (subjectWeeklyMinutes(subject) || hours * 60);
   if (facultyLoadUnits(raw.teacher, accepted) + concurrentLoadUnits(raw.teacher, termId) + addedUnits > facultyMaxUnits(teacher) + 0.001) return 'Teacher would exceed their maximum load';
 
   return null;

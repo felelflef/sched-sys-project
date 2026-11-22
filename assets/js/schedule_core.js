@@ -218,6 +218,16 @@ function goToScheduleStep(stepNumber) {
 
   updateStepLocks();
 
+  // On a screen too narrow for all seven steps, the bar scrolls sideways so the current step is in view
+  const activeBtn = document.getElementById(`stepBtn-${stepNumber}`);
+  const bar = activeBtn && activeBtn.parentElement;
+  if (bar && bar.scrollWidth > bar.clientWidth) {
+    const left = activeBtn.getBoundingClientRect().left - bar.getBoundingClientRect().left + bar.scrollLeft;
+    if (left < bar.scrollLeft || left + activeBtn.offsetWidth > bar.scrollLeft + bar.clientWidth) {
+      bar.scrollLeft = left - (bar.clientWidth - activeBtn.offsetWidth) / 2;
+    }
+  }
+
   // Update Active Panel
   for (let i = 1; i <= 7; i++) {
     const panel = document.getElementById(`stepPanel-${i}`);

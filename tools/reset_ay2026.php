@@ -213,6 +213,9 @@ function subjectHours(string $code): array {
     $lab2 = [3, 2, 1, 6];   // 1 hour lecture + 6 hours lab
     $lecture = [3, 0, 3, 0];
     if (preg_match('/^PATHFIT|^SHS 106$/', $code)) return [2, 0, 2, 0, 'pe'];
+    // SHS subjects meet 4.5 hours a week: lecture only, or 1.5 hours lecture + 3 hours lab
+    if (preg_match('/^(SCPT|HTCUA 10[234]|HTTO 10[134])$|^SCPT /', $code)) return [3, 1, 1.5, 3, preg_match('/^HTCUA/', $code) ? 'lab' : 'lecture'];
+    if (preg_match('/^(SHS|BE|ASSH|HTTO|HTCUA) /', $code)) return [3, 0, 4.5, 0, 'lecture'];
     if (str_starts_with($code, 'NSTP')) return [3, 0, 3, 0, 'special'];
     if (in_array($code, ['IT 112', 'IT 113', 'CS 114', 'CS 115', 'CS 101', 'CS 102', 'CS 104', 'CS 105', 'CS 106'], true)) return [...$lecture, 'lecture'];
     if (preg_match('/^(COMP|IT|CS|SCPT) /', $code)) return [...$lab1, 'lecture'];
@@ -303,12 +306,15 @@ foreach ($SECTION_COUNTS as $program => $years) {
 }
 
 /* ───────────── Teachers: what the terms need against who can teach ───────────── */
-// Weekly units each subject area needs, per level, for each term
+// Weekly units each subject area needs, per level, for each term (SHS subjects count 1 unit per teaching hour)
 $need = [];
 foreach ($sections as [$program, $year]) {
     $level = $PROGRAM_LEVEL[$program];
     foreach ($CURRICULUM[$program][$year] as $term => $codes) {
-        foreach ($codes as $code) $need[$level][$term][$catalogByCode[$code]['area']] = ($need[$level][$term][$catalogByCode[$code]['area']] ?? 0) + subjectHours($code)[0];
+        foreach ($codes as $code) {
+            $h = subjectHours($code);
+            $need[$level][$term][$catalogByCode[$code]['area']] = ($need[$level][$term][$catalogByCode[$code]['area']] ?? 0) + ($level === 'shs' ? $h[2] + $h[3] : $h[0]);
+        }
     }
 }
 // A teacher's load adds up across terms running at the same time, so the busiest overlap counts:
@@ -350,14 +356,20 @@ function shortages(array $teachers, array $demand, callable $teacherAreas): arra
 }
 $left = shortages($teachers, $demand, $teacherAreas);
 $sampleTeachers = [];
-$slug = fn(string $area) => trim(preg_replace('/[^a-z]+/', '-', strtolower(explode(' ', $area)[0])), '-');
+$emailTaken = $db->prepare("SELECT COUNT(*) FROM users WHERE email = ?");
+$slug =fn(string $area) => trim(preg_replace('/[^a-z]+/', '-', strtolower(explode(' ', $area)[0])), '-');
 foreach ($AREAS as $area) {
     foreach (['tertiary', 'shs'] as $level) {
         $short = $left[$area][$level] ?? 0;
         if ($short <= 0.001) continue;
-        for ($n = 1; $n <= (int)ceil($short / 25.5); $n++) {   // 85% of a 30-unit max load
-            $sampleTeachers[] = ['first' => 'Sample', 'last' => ($level === 'shs' ? 'SHS ' : 'College ') . "{$area} Teacher {$n}", 'area' => $area, 'level' => $level,
-                'email' => "sample.{$slug($area)}." . ($level === 'shs' ? 'shs' : 'college') . ".{$n}@sti.edu"];
+        // Numbers already used by sample teachers from an earlier reset are skipped, so the shortfall is really added
+        $wanted = (int)ceil($short / 25.5);   // 85% of a 30-unit max load
+        for ($n = 1; $wanted > 0; $n++) {
+            $email = "sample.{$slug($area)}." . ($level === 'shs' ? 'shs' : 'college') . ".{$n}@sti.edu";
+            $emailTaken->execute([$email]);
+            if ((int)$emailTaken->fetchColumn() > 0) continue;
+            $sampleTeachers[] = ['first' => 'Sample', 'last' => ($level === 'shs' ? 'SHS ' : 'College ') . "{$area} Teacher {$n}", 'area' => $area, 'level' => $level, 'email' => $email];
+            $wanted--;
         }
     }
 }
