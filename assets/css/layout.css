@@ -191,35 +191,6 @@ html.has-active-session .app {
   z-index: 100;
   box-shadow: 2px 0 20px rgba(44, 48, 58, 0.03);
 }
-.sidebar-brand {
-  padding: 20px 22px;
-  border-bottom: 1px solid var(--border-subtle);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.sidebar-brand .logo {
-  width: 38px; height: 38px;
-  background: var(--accent-primary);
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-on-accent);
-  font-weight: 800;
-  font-size: 1.071rem;
-  letter-spacing: -0.5px;
-}
-.sidebar-brand h1 {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.25;
-}
-.sidebar-brand span {
-  font-size: 0.857rem;
-  color: var(--text-secondary);
-  font-weight: 400;
-}
-
 .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
 .nav-section {
   margin-bottom: 24px;

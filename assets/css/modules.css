@@ -119,7 +119,6 @@
     border-bottom: 1px solid var(--border-subtle);
     box-shadow: none;
   }
-  .sidebar-brand,
   .nav-section-label,
   .nav-item.active::before,
   .sidebar-footer .user-info { display: none; }
