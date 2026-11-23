@@ -40,7 +40,7 @@ async function executeGenerateBaseline() {
   const { activeSy, activeTerm } = getActiveAcademicContext();
   // Locked classes stay exactly where they are; the rest of the term is placed around them
   const lockedClasses = activeTermClasses().filter(c => c.locked);
-  const newSchedules = generateSmartBaselineSchedules({ seed: lockedClasses });
+  const newSchedules = generateBestSchedules({ seed: lockedClasses });
   clearEditUndo();
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.termId && c.termId !== activeTerm.id).concat(newSchedules);
   renderGrid();
@@ -83,8 +83,12 @@ function renderGenerateSummary() {
   const level = termSchoolLevel(activeTerm.id);
   const idle = FACULTY.filter(f => facultyTeachesLevel(f, level) && !teaching.includes(f)).length;
   const lectureRooms = ROOMS.filter(r => r.type === 'Lecture').map(r => r.code);
-  const lectureMinutes = classes.filter(c => lectureRooms.includes(c.room)).reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
-  const roomUse = lectureRooms.length ? Math.round(100 * lectureMinutes / (lectureRooms.length * 6 * 12 * 60)) : 0;
+  const lectureClasses = classes.filter(c => lectureRooms.includes(c.room));
+  const lectureMinutes = lectureClasses.reduce((sum, c) => sum + timeToMinutes(c.endTime) - timeToMinutes(c.startTime), 0);
+  // Generate fills the rooms it uses before opening another, so how full the used rooms are is what it controls
+  const usedLectureRooms = new Set(lectureClasses.map(c => c.room)).size;
+  const freeLectureRooms = lectureRooms.length - usedLectureRooms;
+  const roomUse = usedLectureRooms ? Math.round(100 * lectureMinutes / (usedLectureRooms * 6 * 12 * 60)) : 0;
   const names = list => list.slice(0, 3).map(f => escapeHtml(f.name)).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '');
   const line = (ok, text) => `<li class="${ok ? 'ok' : 'warn'}"><span aria-hidden="true">${ok ? '✓' : '!'}</span> ${text}</li>`;
   box.innerHTML = `
@@ -97,7 +101,7 @@ function renderGenerateSummary() {
       ${line(over.length === 0, over.length === 0 ? 'No teacher is over their maximum load' : `Over their maximum load: ${names(over)}`)}
       ${line(under.length === 0, under.length === 0 ? 'Every teacher with classes reaches their minimum load' : `Under their minimum load: ${under.length} teacher${under.length === 1 ? '' : 's'} (${names(under)})`)}
       ${idle > 0 ? line(false, `${idle} ${level === 'shs' ? 'SHS' : 'College'} teacher${idle === 1 ? ' has' : 's have'} no classes this term`) : ''}
-      ${line(true, `Lecture rooms are in use ${roomUse}% of the week (Monday to Saturday, 7:00 AM to 7:00 PM)`)}
+      ${line(true, `${usedLectureRooms} of ${lectureRooms.length} lecture rooms are used, each ${roomUse}% full on average (Monday to Saturday, 7:00 AM to 7:00 PM)${freeLectureRooms > 0 ? `; ${freeLectureRooms} ${freeLectureRooms === 1 ? 'is' : 'are'} free all week` : ''}`)}
     </ul>
     <div class="generate-summary-actions">
       <button type="button" class="btn btn-outline" onclick="switchPage('reports')">Open Schedule Overview</button>
@@ -209,9 +213,21 @@ function queueUnassignedBannerRefresh() {
   new ResizeObserver(() => panel.style.setProperty('--timetable-head-top', `${Math.max(0, controls.offsetHeight - 14)}px`)).observe(controls);
 })();
 
+// Packs rooms first, so they fill up and the rest stay free. Packing can leave a class without a time that a
+// spread-out layout would find; when the spread-out layout places more, it is used instead.
+function generateBestSchedules({ seed = [] } = {}) {
+  const packed = generateSmartBaselineSchedules({ seed });
+  if (UNASSIGNED_CLASSES.length === 0) return packed;
+  const packedUnassigned = UNASSIGNED_CLASSES;
+  const spread = generateSmartBaselineSchedules({ seed, packRooms: false });
+  if (UNASSIGNED_CLASSES.length < packedUnassigned.length) return spread;
+  UNASSIGNED_CLASSES = packedUnassigned;
+  return packed;
+}
+
 /* ─── Smart Constraint-Honoring Baseline Schedule Generator ─── */
 // The AI draft passes seed to keep the classes it already placed
-function generateSmartBaselineSchedules({ seed = [] } = {}) {
+function generateSmartBaselineSchedules({ seed = [], packRooms = true } = {}) {
   UNASSIGNED_CLASSES = [];
   const schedules = [...seed];
 
@@ -284,6 +300,34 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
     return false;
   }
 
+  // Always kept, even when no healthy time is left: never more than 6 hours of classes without a free hour.
+  // Classes less than an hour apart (classes of terms running alongside too) count as one stretch.
+  const MAX_STRETCH_MINUTES = 6 * 60;
+  const BREAK_MINUTES = 60;
+  function teacherGetsBreak(teacherName, day, start, end) {
+    const blocks = busy.get(busyKey('teacher', day, teacherName)) || [];
+    let runStart = start, runEnd = end, grew = true;
+    while (grew) {
+      grew = false;
+      for (const [s, e] of blocks) {
+        if (s < runEnd + BREAK_MINUTES && e > runStart - BREAK_MINUTES && (s < runStart || e > runEnd)) {
+          runStart = Math.min(runStart, s);
+          runEnd = Math.max(runEnd, e);
+          grew = true;
+        }
+      }
+    }
+    return runEnd - runStart <= MAX_STRETCH_MINUTES;
+  }
+
+  // How much of a room's day a class would leave empty next to it: 0 when it starts or ends right at another
+  // class, the distance to the nearest class otherwise, and an hour in a room with no class that day yet
+  function roomGap(room, day, start, end) {
+    const blocks = busy.get(busyKey('room', day, room)) || [];
+    if (blocks.length === 0) return 60;
+    return Math.min(...blocks.map(([s, e]) => e <= start ? start - e : s >= end ? s - end : 0));
+  }
+
   function fitsTeacherLoad(teacher, addedUnits) {
     return (loadUnits.get(teacher.name) || 0) + otherUnits(teacher.name) + addedUnits <= facultyMaxUnits(teacher) + 0.001;
   }
@@ -344,6 +388,25 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
     }
     return partTimeRanks[code];
   };
+  // Lab hours go in a lab; lecture hours in a lecture room. Rooms that seat the whole section are used; when none
+  // is big enough, every room of the right type is kept.
+  function roomsFor(sec, subj, part) {
+    let rooms;
+    if (part === 'lab') {
+      rooms = ROOMS.filter(r => isLabRoomFor(r, sec.program));
+    } else if (subj.type === 'pe') {
+      rooms = ROOMS.filter(r => r.code === 'LR-103' || r.type === 'Lecture');
+    } else {
+      rooms = ROOMS.filter(r => r.type === 'Lecture' && r.cap >= sec.studentCount);
+    }
+    // If no room with enough capacity, fallback to largest lecture room
+    if (rooms.length === 0 && part === 'lec') {
+      rooms = ROOMS.filter(r => r.type === 'Lecture');
+    }
+    const roomsThatFit = rooms.filter(r => r.cap >= sec.studentCount);
+    return roomsThatFit.length > 0 ? roomsThatFit : rooms;
+  }
+
   const workItems = [];
   sectionsToSchedule.forEach(sec => {
     // Only the subjects included for this section in the active term
@@ -352,11 +415,20 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       .forEach((subj, subjIdx) => subjectParts(subj).forEach(({ part, minutes }) =>
         workItems.push({ sec, subj, subjIdx, part, partMinutes: minutes, order: workItems.length })));
   });
-  workItems.sort((a, b) => partTimeRank(a.subj) - partTimeRank(b.subj) || a.order - b.order);
+  // Then classes that only a few rooms can hold (such as a large section's lab), before others take those rooms
+  workItems.forEach(item => { item.roomChoices = roomsFor(item.sec, item.subj, item.part).length; });
+  workItems.sort((a, b) => partTimeRank(a.subj) - partTimeRank(b.subj) || a.roomChoices - b.roomChoices || a.order - b.order);
+
+  // Weekly minutes each section needs in lecture rooms and in labs, so a room is shared only while it has time
+  const sectionNeed = {};
+  workItems.forEach(({ sec, part, partMinutes }) => {
+    const need = sectionNeed[sec.code] = sectionNeed[sec.code] || { lec: 0, lab: 0 };
+    need[part === 'lab' ? 'lab' : 'lec'] += partMinutes;
+  });
 
   // Each section keeps one room per room type when it can: its Home Room if one is set, otherwise one picked here
   const autoHomeRooms = {};
-  function homeRoomFor(sec, candidateRooms) {
+  function homeRoomFor(sec, candidateRooms, part) {
     const chosen = candidateRooms.find(r => r.code === sec.homeRoom);
     if (chosen) return chosen;
     const mine = autoHomeRooms[sec.code] = autoHomeRooms[sec.code] || {};
@@ -364,13 +436,34 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       const earlier = candidateRooms.find(r => r.code === mine[type]);
       if (earlier) return earlier;
     }
-    // A room the section already uses (such as from kept classes) comes first, then one no other section calls home
+    // A room the section already uses (such as from kept classes) comes first. Then rooms are shared while they have
+    // time: during this section's shift, a room's home sections already need some of its hours (a section of another
+    // shift only for the hours its shift overlaps this one), and the room that still has time for this section but
+    // the least to spare is picked. Rooms fill up one by one, and the rooms left over stay free all week.
+    const kind = part === 'lab' ? 'lab' : 'lec';
     const usedBySection = code => sectionRoomUses.get(`${sec.code}|${code}`) || 0;
-    const homeOfOthers = code => sectionsToSchedule.filter(s => s.code !== sec.code && s.homeRoom === code).length
-      + Object.entries(autoHomeRooms).filter(([other, rooms]) => other !== sec.code && Object.values(rooms).includes(code)).length;
-    const bookedMinutes = code => roomMinutes.get(code) || 0;
-    const pick = candidateRooms.slice().sort((a, b) => usedBySection(b.code) - usedBySection(a.code)
-      || homeOfOthers(a.code) - homeOfOthers(b.code) || bookedMinutes(a.code) - bookedMinutes(b.code))[0];
+    const homeSections = code => sectionsToSchedule.filter(s => s.code !== sec.code
+      && (s.homeRoom === code || Object.values(autoHomeRooms[s.code] || {}).includes(code)));
+    const shiftHours = shift => { const [from, to] = SHIFT_WINDOWS[shift] || SHIFT_WINDOWS.AM; return [from, Math.min(to, LAST_GENERATED_MINUTE)]; };
+    const [myFrom, myTo] = shiftHours(sec.shift || 'AM');
+    const weekDays = termSchoolLevel(sec.termId) === 'shs' ? 5 : 6;
+    // Some time is left unplanned, since teachers' timetables rarely line up with every free hour of a room
+    const usableMinutes = 0.85 * (myTo - myFrom) * weekDays;
+    const myNeed = (sectionNeed[sec.code] || {})[kind] || 0;
+    const neededByOthers = code => homeSections(code).reduce((sum, s) => {
+      const [from, to] = shiftHours(s.shift || 'AM');
+      const overlap = Math.max(0, Math.min(to, myTo) - Math.max(from, myFrom));
+      return sum + ((sectionNeed[s.code] || {})[kind] || 0) * overlap / Math.max(1, to - from);
+    }, 0);
+    const spare = code => usableMinutes - neededByOthers(code) - myNeed;
+    // The smallest room that seats the section comes first, so larger rooms stay free for larger sections.
+    // Spread out instead: a room no other section calls home, then the least used.
+    const pick = candidateRooms.slice().sort(packRooms
+      ? (a, b) => usedBySection(b.code) - usedBySection(a.code)
+        || (spare(b.code) >= 0) - (spare(a.code) >= 0) || a.cap - b.cap
+        || (spare(a.code) >= 0 ? spare(a.code) - spare(b.code) : spare(b.code) - spare(a.code))
+      : (a, b) => usedBySection(b.code) - usedBySection(a.code)
+        || homeSections(a.code).length - homeSections(b.code).length || (roomMinutes.get(a.code) || 0) - (roomMinutes.get(b.code) || 0))[0];
     if (pick) mine[pick.type] = pick.code;
     return pick || null;
   }
@@ -385,25 +478,7 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       let placed = false;
       const partLabel = subjectPartLabel(subj, part);
 
-      // Lab hours go in a lab; lecture hours in a lecture room
-      let candidateRooms = [];
-      if (part === 'lab') {
-        candidateRooms = ROOMS.filter(r => isLabRoomFor(r, sec.program));
-      } else if (subj.type === 'pe') {
-        candidateRooms = ROOMS.filter(r => r.code === 'LR-103' || r.type === 'Lecture');
-      } else {
-        // Lecture
-        candidateRooms = ROOMS.filter(r => r.type === 'Lecture' && r.cap >= sec.studentCount);
-      }
-
-      // If no room with enough capacity, fallback to largest lecture room
-      if (candidateRooms.length === 0 && part === 'lec') {
-        candidateRooms = ROOMS.filter(r => r.type === 'Lecture');
-      }
-
-      // Prefer rooms that seat the whole section; keep all candidates if none are big enough
-      const roomsThatFit = candidateRooms.filter(r => r.cap >= sec.studentCount);
-      if (roomsThatFit.length > 0) candidateRooms = roomsThatFit;
+      const candidateRooms = roomsFor(sec, subj, part);
 
       // Determine candidate faculty
       // Check faculty qualified/allowable for this subject
@@ -487,51 +562,64 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
         .sort((a, b) => keepsTeacher(a) - keepsTeacher(b) || statusRank(a) - statusRank(b) || underMin(a) - underMin(b)
           || loadBand(a) - loadBand(b) || (b.seasoned ? 1 : 0) - (a.seasoned ? 1 : 0) || usedUnits(a) - usedUnits(b));
 
-      // The section's home room is tried at every in-shift time before another room is used
-      const homeRoom = homeRoomFor(sec, candidateRooms);
+      // The section's home room is tried at every in-shift time before another room is used; other rooms go
+      // smallest first (larger rooms stay free for larger sections), then busiest, so classes gather in rooms already in use
+      const homeRoom = homeRoomFor(sec, candidateRooms, part);
+      const busiestFirst = packRooms
+        ? candidateRooms.slice().sort((a, b) => a.cap - b.cap || (roomMinutes.get(b.code) || 0) - (roomMinutes.get(a.code) || 0))
+        : candidateRooms;
       const passes = homeRoom
-        ? [[inShiftStarts, [homeRoom]], [inShiftStarts, candidateRooms], [otherStarts, [homeRoom]], [otherStarts, candidateRooms]]
-        : [[inShiftStarts, candidateRooms], [otherStarts, candidateRooms]];
+        ? [[inShiftStarts, [homeRoom]], [inShiftStarts, busiestFirst], [otherStarts, [homeRoom]], [otherStarts, busiestFirst]]
+        : [[inShiftStarts, busiestFirst], [otherStarts, busiestFirst]];
 
-      // Healthy teaching days first; any clash-free time only when no healthy one is left
+      // Healthy teaching days first; any clash-free time only when no healthy one is left. The 6-hour break always holds.
+      // On the first days that have room, the time and room that leave the smallest gap in the room's day are used.
       const tryPlace = () => {
         for (const healthyOnly of [true, false]) for (const [starts, rooms] of passes) {
           for (const days of dayPlans) {
+            let best = null;
             for (const start of starts) {
               const meetings = days.map((day, i) => ({ day, start, end: minutesToTime(timeToMinutes(start) + meetingLengths[i]) }));
               if (meetings.some(m => timeToMinutes(m.end) > LAST_GENERATED_MINUTE)) continue;
               for (const roomObj of rooms) {
-                for (const teacherObj of teachersToTry) {
-                  const fits = meetings.every(m =>
-                    !hasOverlap(m.day, m.start, m.end, roomObj.code, teacherObj.name, sec.code)
-                    && !facultyAvailabilityProblem(teacherObj.name, m.day, m.start, m.end)
-                    && (!healthyOnly || healthyTeacherDay(teacherObj.name, m.day, timeToMinutes(m.start), timeToMinutes(m.end))));
-                  if (!fits) continue;
-                  meetings.forEach((m, i) => {
-                    schedCounter++;
-                    const units = Math.round(((subj.units || 3) * meetingLengths[i] / subjectMinutes) * 100) / 100;
-                    const placedClass = {
-                      id: `SCH-${schedCounter}`,
-                      termId: activeTerm.id,
-                      section: sec.code,
-                      program: sec.program,
-                      year: String(sec.year),
-                      subjectCode: subj.code,
-                      subjectTitle: subj.name,
-                      type: subj.type,
-                      units,
-                      room: roomObj.code,
-                      instructor: teacherObj.name,
-                      day: m.day,
-                      startTime: m.start,
-                      endTime: m.end
-                    };
-                    schedules.push(placedClass);
-                    track(placedClass, subjectLoad * meetingLengths[i] / (subjectMinutes || meetingLengths[i]), true);
-                  });
-                  return true;
-                }
+                // Spread out, the first time and room that fit are used
+                const gap = packRooms ? meetings.reduce((sum, m) => sum + roomGap(roomObj.code, m.day, timeToMinutes(m.start), timeToMinutes(m.end)), 0) : 0;
+                if (best && gap >= best.gap) continue;
+                const teacherObj = teachersToTry.find(t => meetings.every(m =>
+                  !hasOverlap(m.day, m.start, m.end, roomObj.code, t.name, sec.code)
+                  && !facultyAvailabilityProblem(t.name, m.day, m.start, m.end)
+                  && teacherGetsBreak(t.name, m.day, timeToMinutes(m.start), timeToMinutes(m.end))
+                  && (!healthyOnly || healthyTeacherDay(t.name, m.day, timeToMinutes(m.start), timeToMinutes(m.end)))));
+                if (teacherObj) best = { gap, meetings, roomObj, teacherObj };
+                if (best && best.gap === 0) break;
               }
+              if (best && best.gap === 0) break;
+            }
+            if (best) {
+              const { meetings, roomObj, teacherObj } = best;
+              meetings.forEach((m, i) => {
+                schedCounter++;
+                const units = Math.round(((subj.units || 3) * meetingLengths[i] / subjectMinutes) * 100) / 100;
+                const placedClass = {
+                  id: `SCH-${schedCounter}`,
+                  termId: activeTerm.id,
+                  section: sec.code,
+                  program: sec.program,
+                  year: String(sec.year),
+                  subjectCode: subj.code,
+                  subjectTitle: subj.name,
+                  type: subj.type,
+                  units,
+                  room: roomObj.code,
+                  instructor: teacherObj.name,
+                  day: m.day,
+                  startTime: m.start,
+                  endTime: m.end
+                };
+                schedules.push(placedClass);
+                track(placedClass, subjectLoad * meetingLengths[i] / (subjectMinutes || meetingLengths[i]), true);
+              });
+              return true;
             }
           }
         }
@@ -560,7 +648,7 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
         if (teachersToTry.every(limitedHours)) {
           return `The qualified teacher${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) ${teachersToTry.length === 1 ? 'is' : 'are'} part-time, and no ${hours}-hour weekly schedule fits inside their available days and shifts without a clash.`;
         }
-        return `No clash-free ${hours}-hour weekly schedule is left. The qualified teacher${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) and the suitable rooms are already booked whenever ${sec.code} is free. Free up time or qualify another teacher.`;
+        return `No clash-free ${hours}-hour weekly schedule is left. The qualified teacher${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) and the suitable rooms are already booked whenever ${sec.code} is free, or would teach more than 6 hours without a 1-hour break. Free up time or qualify another teacher.`;
       };
 
       if (!placed) {

@@ -254,7 +254,7 @@ window.runAiDraft = async function() {
   }
 
   // The normal generator fills anything Gemini missed or got wrong, within teaching limits
-  const schedules = generateSmartBaselineSchedules({ seed: complete });
+  const schedules = generateBestSchedules({ seed: complete });
   aiDraftResult = { schedules, termId: activeTerm.id };
   aiDraftRenderPreview({
     schedules,

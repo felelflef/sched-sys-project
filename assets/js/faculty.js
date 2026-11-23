@@ -97,7 +97,7 @@ function renderFacultyCards() {
       <td>
         ${escapeHtml(fac.status)}
         ${fac.status === 'Part-time' ? `<div class="faculty-availability">${(fac.availableDays || []).length
-          ? `Available: ${escapeHtml(fac.availableDays.join(', '))} · ${escapeHtml(fac.availableShifts.join(', ').replace('MIDSHIFT', 'Midshift'))}`
+          ? `Available: ${escapeHtml(fac.availableDays.join(', '))} · ${escapeHtml(availabilityHoursLabel(fac.availableShifts))}`
           : 'Availability not set: can be scheduled any time'}</div>` : ''}
       </td>
       <td>
@@ -560,20 +560,27 @@ window.deleteDepartment = function(idx) {
 };
 
 const AVAILABILITY_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const AVAILABILITY_SHIFTS = [
-  { value: 'AM', label: 'AM', hours: '7:00 AM – 1:00 PM' },
-  { value: 'MIDSHIFT', label: 'Midshift', hours: '10:00 AM – 4:00 PM' },
-  { value: 'PM', label: 'PM', hours: '1:00 PM onward' }
-];
+// Part-time hours must sit inside the school day (the server checks the same) and last at least an hour
+const AVAILABILITY_EARLIEST = '07:00';
+const AVAILABILITY_LATEST = '20:30';
 
 function renderAvailabilityPicker(prefix, status, days = [], shifts = []) {
   const option = (group, value, text, checked) =>
     `<label class="availability-option"><input type="checkbox" data-group="${prefix}-${group}" value="${value}" ${checked ? 'checked' : ''} /> ${text}</label>`;
+  // Saved hours open as one range; shifts saved before ranges existed (AM, Midshift, PM) open as their hours
+  const windows = shifts.map(availabilityWindow).filter(Boolean);
+  const from = windows.length ? minutesToTime(Math.min(...windows.map(w => w[0]))) : '';
+  const to = windows.length ? minutesToTime(Math.max(...windows.map(w => w[1]))) : '';
+  const timeInput = (id, label, value) =>
+    `<label class="form-label" for="${prefix}${id}">${label}<input type="time" id="${prefix}${id}" class="form-input" value="${value}" min="${AVAILABILITY_EARLIEST}" max="${AVAILABILITY_LATEST}" step="1800" /></label>`;
   document.getElementById(`${prefix}Availability`).innerHTML = `
     <div class="form-label">Available Days</div>
     <div class="availability-options">${AVAILABILITY_DAYS.map(d => option('day', d, d, days.includes(d))).join('')}</div>
-    <div class="form-label" style="margin-top:10px;">Available Shifts</div>
-    <div class="availability-options">${AVAILABILITY_SHIFTS.map(s => option('shift', s.value, `${s.label} <small>${s.hours}</small>`, shifts.includes(s.value))).join('')}</div>
+    <div class="form-label" style="margin-top:10px;">Available Hours</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      ${timeInput('AvailFrom', 'From', from)}
+      ${timeInput('AvailTo', 'To', to)}
+    </div>
   `;
   toggleAvailabilityPicker(prefix, status);
 }
@@ -584,13 +591,18 @@ window.toggleAvailabilityPicker = function(prefix, status) {
 
 function readAvailabilityPicker(prefix) {
   const checked = group => [...document.querySelectorAll(`input[data-group="${prefix}-${group}"]:checked`)].map(i => i.value);
-  return { days: checked('day'), shifts: checked('shift') };
+  const from = (document.getElementById(`${prefix}AvailFrom`) || {}).value || '';
+  const to = (document.getElementById(`${prefix}AvailTo`) || {}).value || '';
+  // Saved as one range, such as "13:00-17:00"
+  return { days: checked('day'), shifts: from && to ? [`${from}-${to}`] : [], from, to };
 }
 
 // Returns an error message, or null if this availability can be saved for the teacher
 function availabilityFormProblem(name, status, picked) {
   if (status !== 'Part-time') return null;
-  if (!picked.days.length || !picked.shifts.length) return 'Choose at least one day and one shift for a part-time teacher.';
+  if (!picked.days.length || !picked.from || !picked.to) return 'Choose at least one day and the available hours (From and To) for a part-time teacher.';
+  if (picked.from < AVAILABILITY_EARLIEST || picked.to > AVAILABILITY_LATEST) return 'Available hours must be between 7:00 AM and 8:30 PM.';
+  if (timeToMinutes(picked.to) - timeToMinutes(picked.from) < 60) return 'The available hours must end at least 1 hour after they start.';
   // Classes outside the new availability are handled by facultyChangeImpact, which asks before unscheduling them
   return null;
 }

@@ -85,7 +85,7 @@ foreach ($db->query("
     $teachers[$row['email']] = [
         'name' => $row['name'],
         'subjects' => $codes,
-        'availability' => $limited ? " [only {$row['available_days']}, shifts {$row['available_shifts']}]" : '',
+        'availability' => $limited ? " [only {$row['available_days']}, " . (preg_match('/^\d\d:\d\d-\d\d:\d\d$/', $row['available_shifts']) ? "hours {$row['available_shifts']}" : "shifts {$row['available_shifts']}") . "]" : '',
         'tags' => implode(', ', array_keys(array_filter(['part-time' => $row['employment_status'] === 'Part-time', 'seasoned' => !empty($row['seasoned'])]))),
     ];
 }
@@ -150,7 +150,7 @@ $prompt = "Create a weekly class timetable.\n\n"
     . "- Use only days Mon, Tue, Wed, Thu, Fri, Sat and times from 07:00 to 19:00 in 24-hour HH:MM format.\n"
     . "- A room, teacher or section can never be in two classes at overlapping times.\n"
     . "- A teacher may only be given subjects listed for them, and must stay within their maximum units. A subject's meetings carry its units in proportion to their hours.\n"
-    . "- A teacher marked [only ...] may only teach on those days and within those shifts: AM is 07:00-13:00, MIDSHIFT is 10:00-16:00, PM is 13:00-19:00.\n"
+    . "- A teacher marked [only ...] may only teach on those days and within those hours (or shifts: AM is 07:00-13:00, MIDSHIFT is 10:00-16:00, PM is 13:00-19:00).\n"
     . "- The room must seat all the section's students. Lecture hours use Lecture rooms. Lab hours use CompLab rooms, except HRS and HTCUA use the Kitchen Lab and BSTM and HTTO use the Tourism Lab. A subject with both gets separate lecture and lab meetings, preferably with the same teacher.\n"
     . "- Keep each section mostly within its shift: AM is morning, MIDSHIFT is midday, PM is afternoon and evening.\n"
     . "- Keep each section in one room per room type as much as possible: use its home room when the room type fits, otherwise reuse the same room for its other classes.\n"
