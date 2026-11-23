@@ -37,27 +37,29 @@ function renderRoomTable() {
   setText('statTotalCapacity', ROOMS.reduce((sum, r) => sum + r.cap, 0));
   setText('roomSummaryText', `${countOf('Lecture')} lecture rooms, ${countOf('CompLab')} computer labs and ${countOf('Special')} specialized labs`);
 
+  const searchVal = (document.getElementById('roomSearchInput')?.value || '').trim().toLowerCase();
   const sortChoice = document.getElementById('roomSortSelect')?.value || 'az';
   sortByChoice(ROOMS, sortChoice, r => r.dbId, r => r.code).forEach(room => {
     const tr = document.createElement('tr');
     let typeBadge = 'badge-lecture';
-    let typeLabel = '📚 Lecture Room';
+    let typeLabel = 'Lecture Room';
 
     if (room.type === 'CompLab' || room.code.startsWith('CL-')) {
       typeBadge = 'badge-lab';
-      typeLabel = '💻 Computer Lab';
+      typeLabel = 'Computer Lab';
     } else if (room.type === 'Special' || room.code.includes('Lab')) {
       typeBadge = 'badge-warning';
-      if (room.code === 'Kitchen Lab') typeLabel = '🍳 Culinary Lab';
-      else if (room.code === 'Tourism Lab') typeLabel = '✈️ Tourism Lab';
-      else typeLabel = '🏛️ Special Facility';
+      if (room.code === 'Kitchen Lab') typeLabel = 'Culinary Lab';
+      else if (room.code === 'Tourism Lab') typeLabel = 'Tourism Lab';
+      else typeLabel = 'Special Facility';
     }
+    if (searchVal && ![room.code, String(room.floor), typeLabel].some(text => text.toLowerCase().includes(searchVal))) return;
 
     const actionButtons = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; margin-right:4px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>
-         <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; margin-right:4px;" onclick="openEditRoomModal(${jsArg(room.code)})">Edit</button>
-         <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteRoom(${jsArg(room.code)})">Remove</button>`
-      : `<button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>`;
+      ? `<button class="btn btn-outline btn-sm" style="margin-right:4px;" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>
+         <button class="btn btn-outline btn-sm" style="margin-right:4px;" onclick="openEditRoomModal(${jsArg(room.code)})">Edit</button>
+         <button class="btn btn-danger btn-sm" onclick="promptDeleteRoom(${jsArg(room.code)})">Delete</button>`
+      : `<button class="btn btn-outline btn-sm" onclick="viewRoomSchedule(${jsArg(room.code)})">View Schedule</button>`;
 
     tr.innerHTML = `
       <td style="font-weight:700;">${escapeHtml(room.code)}</td>
@@ -70,6 +72,9 @@ function renderRoomTable() {
     `;
     tbody.appendChild(tr);
   });
+  if (!tbody.children.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px 16px; color:var(--text-secondary);">No rooms found matching the selected criteria.</td></tr>';
+  }
 }
 
 window.openAddRoomModal = function() {

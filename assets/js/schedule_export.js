@@ -29,7 +29,7 @@ window.addEventListener('afterprint', () => {
   printHiddenElements.splice(0).forEach(el => el.classList.remove('print-hide'));
 });
 
-const PDF_TOOLS_MISSING = "The PDF tool couldn't load. Check your internet connection and reload the page, or use Print instead.";
+const PDF_TOOLS_MISSING = "The PDF tool couldn't load. Check your internet connection and reload the page.";
 let pdfExportBusy = false;
 
 function pdfToolsReady() {
@@ -268,7 +268,7 @@ function drawTimetablePage(pdf, card, classes, mode, isFirstPage) {
 }
 
 // The active term's classes shown on the Master Schedule sheet
-// The classes the Step 7 timetable is showing: a section, a room or a professor
+// The classes the Step 7 timetable is showing: a section, a room or a teacher
 function masterSheetClasses() {
   return gridModeClasses();
 }
@@ -293,7 +293,7 @@ async function saveTimetableSheetPdf(card, label, classes, mode) {
     }
     pdf.save(exportFileName(`${label} Timetable`, 'pdf'));
   } catch (e) {
-    alert('Could not create the PDF. Please try again, or use Print instead.');
+    alert('Could not create the PDF. Please try again.');
   } finally {
     pdfExportBusy = false;
   }
@@ -368,7 +368,7 @@ async function exportAllSectionsBatchPDF() {
     }
     pdf.save(exportFileName('All Section Timetables', 'pdf'));
   } catch (e) {
-    alert('Could not create the PDF. Please try again, or use Print instead.');
+    alert('Could not create the PDF. Please try again.');
   } finally {
     currentSelectedSection = previousSection;
     renderGrid();

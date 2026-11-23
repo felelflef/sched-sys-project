@@ -31,9 +31,9 @@ function renderUserTable() {
     } else if (isAdmin) {
       actionCellHtml = `
         <div style="display:inline-flex; gap:4px; align-items:center;">
-          <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; cursor:pointer;" onclick="window.openEditUserModal(${jsArg(u.email)})">Edit</button>
-          <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; cursor:pointer;" onclick="window.openResetPasswordModal(${jsArg(u.email)})">Reset Password</button>
-          <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; color:var(--danger); border-color:#fadbd8; cursor:pointer;" onclick="window.promptDeleteUser(${jsArg(u.email)})">Remove</button>
+          <button class="btn btn-outline btn-sm" onclick="window.openEditUserModal(${jsArg(u.email)})">Edit</button>
+          <button class="btn btn-outline btn-sm" onclick="window.openResetPasswordModal(${jsArg(u.email)})">Reset Password</button>
+          <button class="btn btn-danger btn-sm" onclick="window.promptDeleteUser(${jsArg(u.email)})">Delete</button>
         </div>
       `;
     } else {
@@ -93,7 +93,7 @@ window.openAddUserModal = function() {
   document.getElementById('addUserModal').style.display = 'flex';
 };
 
-// Employment status and department only apply to Faculty / Professor accounts
+// Employment status and department only apply to Faculty / Teacher accounts
 window.updateNewUserRoleFields = function() {
   const role = document.getElementById('newUserRole').value;
   const isAdmin = role === 'admin';

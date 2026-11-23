@@ -32,6 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const hSub = document.getElementById('headerSubtitle');
         if (hSub) hSub.textContent = info.sub;
       }
+      // The AI Assistant button shows only where the side panel belongs
+      const aiToggle = document.getElementById('aiPanelToggle');
+      if (aiToggle) aiToggle.hidden = !(mod === 'schedule' || mod === 'viewer');
+      if (mod !== 'schedule' && mod !== 'viewer' && typeof closeAiPanel === 'function') closeAiPanel();
       try {
         localStorage.setItem('sti_active_page', mod);
       } catch (e) {}
@@ -43,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (mod === 'faculty') renderFacultyCards();
       if (mod === 'subjects') renderSubjectTable();
-      if (mod === 'schedule') renderGrid();
+      if (mod === 'schedule') { renderGrid(); updateScheduleStats(); }
       if (mod === 'users') renderUserTable();
       if (mod === 'activity') loadActivityLog(true);
       if (mod === 'reports') renderScheduleReports();
@@ -53,8 +57,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Restore saved active page on page load / refresh
   try {
     const savedPage = localStorage.getItem('sti_active_page');
+    // A page that no longer exists, such as the old AI Assistant page, opens the role's home page
     if (savedPage) {
-      window.switchPage(savedPage);
+      window.switchPage(document.querySelector(`.nav-item[data-module="${savedPage}"]`) ? savedPage : homePageForRole(CURRENT_USER && CURRENT_USER.role));
     }
   } catch (e) {}
   syncMobileSection(document.querySelector('.nav-item.active'));

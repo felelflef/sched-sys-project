@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="assets/css/modules.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" defer></script>
   <script>
     try {
       if (localStorage.getItem('sti_auth_user')) {
@@ -94,10 +93,6 @@
             Schedule Overview
           </div>
 
-          <div class="nav-item" data-module="ai">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>
-            AI Assistant
-          </div>
         </div>
 
         <div class="nav-section" data-section="resources">
@@ -182,10 +177,13 @@
           <h2 id="headerTitle">Master Schedule</h2>
           <p id="headerSubtitle">Set up the term and build the weekly timetable</p>
         </div>
+        <div class="page-heading-actions">
+        <button class="btn btn-outline" id="aiPanelToggle" onclick="toggleAiPanel()" aria-controls="aiPanel" aria-expanded="false" hidden>AI Assistant</button>
         <div class="global-search" role="search">
-          <input type="search" id="globalSearchInput" placeholder="Find a section, professor, room or subject" aria-label="Find a section, professor, room or subject"
+          <input type="search" id="globalSearchInput" placeholder="Find a section, teacher, room or subject" aria-label="Find a section, teacher, room or subject"
             autocomplete="off" role="combobox" aria-expanded="false" aria-controls="globalSearchResults" aria-autocomplete="list" />
           <ul id="globalSearchResults" class="global-search-results" role="listbox" hidden></ul>
+        </div>
         </div>
       </div>
 
@@ -238,7 +236,7 @@
               <div class="stepper-step" id="stepBtn-5" onclick="goToScheduleStep(5)">
                 <div class="step-number" id="stepNum-5">5</div>
                 <div class="step-info">
-                  <div class="step-label">Rooms &amp; Instructors</div>
+                  <div class="step-label">Rooms &amp; Teachers</div>
                   <div class="step-sub" id="stepSub-5">Who and where</div>
                 </div>
               </div>
@@ -278,7 +276,7 @@
                     Define academic school years and specify the currently active academic cycle.
                   </div>
                 </div>
-                <button class="btn btn-primary" onclick="openAddSchoolYearModal()" style="font-size:0.857rem; padding:6px 14px;">
+                <button class="btn btn-primary" onclick="openAddSchoolYearModal()">
                   + Add School Year
                 </button>
               </div>
@@ -301,7 +299,7 @@
               </div>
 
               <div style="margin-top:20px; display:flex; justify-content:flex-end;">
-                <button class="btn btn-primary" onclick="goToScheduleStep(2)">Proceed to Step 2: School Term &rarr;</button>
+                <button class="btn btn-primary" onclick="goToScheduleStep(2)">Next: Step 2, School Term &rarr;</button>
               </div>
             </div>
           </div>
@@ -314,7 +312,7 @@
                   <div class="lifecycle-card-title">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     Academic Terms for
-                    <select id="termYearPicker" onchange="changeTermViewYear(this.value)" aria-label="School year to view" style="margin-left:6px; padding:4px 8px; font-size:1rem; font-weight:700; color:var(--accent-primary); border:1px solid var(--border-subtle); border-radius:6px; background:#fff;"></select>
+                    <select id="termYearPicker" onchange="changeTermViewYear(this.value)" aria-label="School year to view" style="margin-left:6px;"></select>
                   </div>
                   <div style="font-size:0.857rem; color:var(--text-secondary); margin-top:3px;">
                     Pick the working term by clicking its box. Add, rename or remove College and SHS terms, and set their dates and statuses (Draft, Active, Closed).
@@ -326,7 +324,7 @@
 
               <div style="margin-top:20px; display:flex; justify-content:space-between;">
                 <button class="btn btn-outline" onclick="goToScheduleStep(1)">&larr; Back to Step 1</button>
-                <button class="btn btn-primary" onclick="goToScheduleStep(3)">Proceed to Step 3: Load Subjects &rarr;</button>
+                <button class="btn btn-primary" onclick="goToScheduleStep(3)">Next: Step 3, Load Subjects &rarr;</button>
               </div>
             </div>
           </div>
@@ -345,10 +343,10 @@
                   </div>
                 </div>
                 <div style="display:flex; gap:8px;">
-                  <button class="btn btn-outline" onclick="toggleAllSubjectInclusion(true)" style="font-size:0.857rem; padding:6px 12px;">Include All</button>
-                  <button class="btn btn-outline" onclick="toggleAllSubjectInclusion(false)" style="font-size:0.857rem; padding:6px 12px;">Exclude All</button>
-                  <button class="btn btn-outline" onclick="openLoadSubjectSetModal()" style="font-size:0.857rem; padding:6px 12px;">Load Saved Subjects</button>
-                  <button class="btn btn-primary" onclick="openAddCurriculumSubjectModal()" style="font-size:0.857rem; padding:6px 14px;">+ Add Subject</button>
+                  <button class="btn btn-outline" onclick="toggleAllSubjectInclusion(true)">Include All</button>
+                  <button class="btn btn-outline" onclick="toggleAllSubjectInclusion(false)">Exclude All</button>
+                  <button class="btn btn-outline" onclick="openLoadSubjectSetModal()">Load Saved Subjects</button>
+                  <button class="btn btn-primary" onclick="openAddCurriculumSubjectModal()">+ Add Subject</button>
                 </div>
               </div>
 
@@ -534,8 +532,8 @@
                   </div>
                 </div>
                 <div style="display:flex; gap:8px;">
-                  <button class="btn btn-outline" onclick="openAutoGenerateSectionsModal()" style="font-size:0.857rem; padding:6px 14px;">Create Several Sections</button>
-                  <button class="btn btn-primary" onclick="openAddSectionModal()" style="font-size:0.857rem; padding:6px 14px;">+ Add Section</button>
+                  <button class="btn btn-outline" onclick="openAutoGenerateSectionsModal()">Create Several Sections</button>
+                  <button class="btn btn-primary" onclick="openAddSectionModal()">+ Add Section</button>
                 </div>
               </div>
 
@@ -566,7 +564,7 @@
 
               <div style="margin-top:20px; display:flex; justify-content:space-between;">
                 <button class="btn btn-outline" onclick="goToScheduleStep(3)">&larr; Back to Step 3</button>
-                <button class="btn btn-primary" onclick="goToScheduleStep(5)">Next: Step 5, Rooms &amp; Instructors &rarr;</button>
+                <button class="btn btn-primary" onclick="goToScheduleStep(5)">Next: Step 5, Rooms &amp; Teachers &rarr;</button>
               </div>
             </div>
           </div>
@@ -578,7 +576,7 @@
                 <div>
                   <div class="lifecycle-card-title">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v17"/><circle cx="15" cy="12" r="1"/></svg>
-                    Rooms &amp; Instructors
+                    Rooms &amp; Teachers
                   </div>
                   <div style="font-size:0.857rem; color:var(--text-secondary); margin-top:3px;">
                     Pick a section, put it in a room and choose who teaches each subject. Anything left on Automatic is picked for you when you generate the timetable.
@@ -628,7 +626,7 @@
               </div>
               <div style="font-size:0.893rem; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
                 <span id="unassignedSummary">These subjects don't have their full weekly hours on the schedule yet:</span>
-                <button type="button" class="btn btn-outline" id="unassignedToggle" aria-controls="unassignedList" aria-expanded="true" onclick="toggleUnassignedList()" style="font-size:0.857rem; padding:3px 10px;">Hide details</button>
+                <button type="button" class="btn btn-outline btn-sm" id="unassignedToggle" aria-controls="unassignedList" aria-expanded="true" onclick="toggleUnassignedList()">Hide details</button>
               </div>
               <ul class="unassigned-list" id="unassignedList">
                 <!-- Populated if any item unassigned -->
@@ -637,11 +635,11 @@
 
             <!-- Grid Controls & Toolbar -->
             <div class="grid-controls">
-              <!-- Show the timetable by section, room or professor; all three can be edited -->
+              <!-- Show the timetable by section, room or teacher; all three can be edited -->
               <div class="grid-mode-switch" role="group" aria-label="Show the timetable by">
-                <button type="button" class="btn btn-primary" data-grid-mode="section" aria-pressed="true" onclick="setGridMode('section')">Section</button>
-                <button type="button" class="btn btn-outline" data-grid-mode="room" aria-pressed="false" onclick="setGridMode('room')">Room</button>
-                <button type="button" class="btn btn-outline" data-grid-mode="teacher" aria-pressed="false" onclick="setGridMode('teacher')">Professor</button>
+                <button type="button" class="btn btn-primary btn-sm" data-grid-mode="section" aria-pressed="true" onclick="setGridMode('section')">Section</button>
+                <button type="button" class="btn btn-outline btn-sm" data-grid-mode="room" aria-pressed="false" onclick="setGridMode('room')">Room</button>
+                <button type="button" class="btn btn-outline btn-sm" data-grid-mode="teacher" aria-pressed="false" onclick="setGridMode('teacher')">Teacher</button>
               </div>
               <div id="filterGroupSection" class="filter-group" style="display:flex;">
                 <span id="gridSectionPickers" class="grid-pickers">
@@ -662,17 +660,17 @@
                   <option value="4">4th Year</option>
                 </select>
                 <label style="margin-left:4px;">Section:</label>
-                <select id="sectionSelect" style="min-width:130px; font-weight:700;">
+                <select id="sectionSelect" style="min-width:130px;">
                   <!-- Populated dynamically -->
                 </select>
-                <input type="search" id="sectionSearchInput" placeholder="Search section..." oninput="handleSectionSearch(this.value)" style="padding:4px 8px; font-size:0.857rem; border:1px solid var(--border-subtle); border-radius:6px; width:130px; margin-left:6px;" />
+                <input type="search" id="sectionSearchInput" placeholder="Search section..." oninput="handleSectionSearch(this.value)" style="width:130px; margin-left:6px;" />
                 </span>
                 <span id="gridOtherPicker" class="grid-pickers" hidden>
                   <label for="gridPickSelect" id="gridPickLabel">Room:</label>
-                  <select id="gridPickSelect" onchange="setGridSelection(this.value)" style="min-width:180px; font-weight:700;"></select>
+                  <select id="gridPickSelect" onchange="setGridSelection(this.value)" style="min-width:180px;"></select>
                 </span>
                 <label style="margin-left:8px; font-weight:700; color:var(--accent-primary);">Academic Year:</label>
-                <select id="masterScheduleSyFilter" style="font-weight:700; background:var(--bg-surface); color:var(--accent-primary); border:1px solid var(--border-subtle); padding:4px 8px; border-radius:6px;" onchange="handleActiveYearFilter(this)">
+                <select id="masterScheduleSyFilter" onchange="handleActiveYearFilter(this)">
                   <!-- Populated dynamically via JS -->
                 </select>
               </div>
@@ -681,7 +679,7 @@
               <!-- Action Buttons -->
               <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
                 <div style="position:relative; display:inline-block;">
-                  <button class="btn btn-outline" id="btnExport" onclick="toggleExportMenu(event)" style="font-size:0.857rem; padding:6px 14px; display:inline-flex; align-items:center; gap:6px;">
+                  <button class="btn btn-outline" id="btnExport" onclick="toggleExportMenu(event)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     Export Timetable &#9662;
                   </button>
@@ -698,14 +696,13 @@
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                       Download All Sections (PDF)
                     </a>
-                    <a href="javascript:void(0)" onclick="exportTermExcel()" style="display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:0.929rem; color:var(--text-primary); text-decoration:none; border-top:1px solid var(--border-subtle);">Export Term to Excel (.xlsx)</a>
                   </div>
                 </div>
 
-                <button class="btn btn-outline" id="btnUndoEdit" onclick="undoLastEdit()" disabled style="font-size:0.857rem; padding:6px 14px;">Undo Last Change</button>
-                <button class="btn btn-outline" id="btnUndoGenerate" onclick="undoLastGenerate()" style="display:none; font-size:0.857rem; padding:6px 14px;">Undo Last Generate</button>
-                <button class="btn btn-outline" id="btnGenerateAi" onclick="openAiDraftModal()" style="font-size:0.857rem; padding:6px 14px;">Generate with AI</button>
-                <button class="btn btn-primary" id="btnGenerate" onclick="openConfirmRegenerateModal()" style="font-size:0.857rem; padding:6px 14px;">
+                <button class="btn btn-outline" id="btnUndoEdit" onclick="undoLastEdit()" disabled>Undo Last Change</button>
+                <button class="btn btn-outline" id="btnUndoGenerate" onclick="undoLastGenerate()" style="display:none;">Undo Last Generate</button>
+                <button class="btn btn-outline" id="btnGenerateAi" onclick="openAiDraftModal()">Generate with AI</button>
+                <button class="btn btn-primary" id="btnGenerate" onclick="openConfirmRegenerateModal()">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                   Generate
                 </button>
@@ -791,16 +788,14 @@
         <div class="module-page" id="page-viewer">
           <div class="viewer-controls">
             <div class="viewer-mode-buttons" role="group" aria-label="View schedule by">
-              <button class="btn btn-primary" data-viewer-mode="section" onclick="setViewerMode('section')">Section</button>
-              <button class="btn btn-outline" data-viewer-mode="teacher" onclick="setViewerMode('teacher')">Professor</button>
-              <button class="btn btn-outline" data-viewer-mode="room" onclick="setViewerMode('room')">Room</button>
+              <button class="btn btn-primary btn-sm" data-viewer-mode="section" onclick="setViewerMode('section')">Section</button>
+              <button class="btn btn-outline btn-sm" data-viewer-mode="teacher" onclick="setViewerMode('teacher')">Teacher</button>
+              <button class="btn btn-outline btn-sm" data-viewer-mode="room" onclick="setViewerMode('room')">Room</button>
             </div>
             <label for="viewerSelect" id="viewerSelectLabel">Section:</label>
             <select id="viewerSelect" onchange="setViewerSelection(this.value)"></select>
             <div class="viewer-export-buttons">
-              <button class="btn btn-outline" onclick="window.print()">Print</button>
               <button class="btn btn-outline" onclick="exportViewerPdf()">Download PDF</button>
-              <button class="btn btn-outline" onclick="exportViewerExcel()">Export to Excel (.xlsx)</button>
             </div>
           </div>
 
@@ -907,6 +902,11 @@
                 <p id="roomSummaryText"></p>
               </div>
               <div class="card-header-tools">
+                <button class="btn btn-primary" id="btnAddRoom" onclick="openAddRoomModal()">+ Add Room</button>
+              </div>
+            </div>
+            <div class="card-body card-filters">
+              <div class="grid-controls">
                 <div class="filter-group">
                   <label for="roomSortSelect">Sort by:</label>
                   <select id="roomSortSelect" onchange="clearTableSort('roomTableBody'); renderRoomTable()">
@@ -916,7 +916,10 @@
                     <option value="recent">Recently Added</option>
                   </select>
                 </div>
-                <button class="btn btn-primary" id="btnAddRoom" onclick="openAddRoomModal()" style="font-size:0.857rem; padding:7px 16px;">+ Add Room</button>
+                <div class="filter-group">
+                  <label for="roomSearchInput">Search:</label>
+                  <input type="search" id="roomSearchInput" class="form-input filter-search" placeholder="Room code, floor or type..." oninput="renderRoomTable()" />
+                </div>
               </div>
             </div>
             <div class="card-body" style="padding:0;">
@@ -944,31 +947,88 @@
              MODULE 4: FACULTY & RESOURCE PROFILING
              ══════════════════════════════════════════════ -->
         <div class="module-page" id="page-faculty">
-          <div class="grid-controls" style="margin-bottom:20px;">
-            <div class="filter-group">
-              <label>Department:</label>
-              <select id="facultyDeptFilter">
-                <option value="all">All Departments</option>
-              </select>
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+              <div><div class="stat-value" id="statTotalFaculty">0</div><div class="stat-label">Total Faculty</div></div>
             </div>
-            <div class="filter-group">
-              <label>Status:</label>
-              <select id="facultyStatusFilter">
-                <option value="all">All Statuses</option>
-                <option value="Full-time">Full-time</option>
-                <option value="Part-time">Part-time</option>
-              </select>
+            <div class="stat-card">
+              <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+              <div><div class="stat-value" id="statFullTimeFaculty">0</div><div class="stat-label">Full-time</div></div>
             </div>
-            <div style="margin-left:auto; display:flex; gap:10px;">
-              <button class="btn btn-outline" id="btnManageDepts" onclick="openDeptModal()" style="font-size:0.857rem; padding:7px 14px;">Manage Departments</button>
-              <button class="btn btn-outline" id="btnManageCerts" onclick="openCertModal()" style="font-size:0.857rem; padding:7px 14px;">🎓 FCC Certificates</button>
-              <button class="btn btn-outline" id="btnDefaultLoads" onclick="openDefaultLoadsModal()" style="font-size:0.857rem; padding:7px 14px;">Default Loads</button>
-              <button class="btn btn-primary" id="btnAddFaculty" onclick="openAddFacultyModal()" style="font-size:0.857rem; padding:7px 16px;">+ Add Faculty</button>
+            <div class="stat-card">
+              <div class="stat-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+              <div><div class="stat-value" id="statPartTimeFaculty">0</div><div class="stat-label">Part-time</div></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg></div>
+              <div><div class="stat-value" id="statFccCertificates">0</div><div class="stat-label">FCC Certificates</div></div>
             </div>
           </div>
 
-          <div class="faculty-grid" id="facultyGrid">
-            <!-- Populated by JS -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3>Faculty Profiles</h3>
+                <p id="facultySummaryText"></p>
+              </div>
+              <div class="card-header-tools">
+                <button class="btn btn-outline" id="btnManageDepts" onclick="openDeptModal()">Manage Departments</button>
+                <button class="btn btn-outline" id="btnManageCerts" onclick="openCertModal()">FCC Certificates</button>
+                <button class="btn btn-outline" id="btnDefaultLoads" onclick="openDefaultLoadsModal()">Default Loads</button>
+                <button class="btn btn-primary" id="btnAddFaculty" onclick="openAddFacultyModal()">+ Add Faculty</button>
+              </div>
+            </div>
+            <div class="card-body card-filters">
+              <div class="grid-controls">
+                <div class="filter-group">
+                  <label for="facultyDeptFilter">Department:</label>
+                  <select id="facultyDeptFilter">
+                    <option value="all">All Departments</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label for="facultyStatusFilter">Status:</label>
+                  <select id="facultyStatusFilter">
+                    <option value="all">All Statuses</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label for="facultySortSelect">Sort by:</label>
+                  <select id="facultySortSelect" onchange="clearTableSort('facultyTableBody'); renderFacultyCards()">
+                    <option value="az">A–Z</option>
+                    <option value="za">Z–A</option>
+                    <option value="first">First Added</option>
+                    <option value="recent">Recently Added</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label for="facultySearchInput">Search:</label>
+                  <input type="search" id="facultySearchInput" class="form-input filter-search" placeholder="Name or email..." oninput="renderFacultyCards()" />
+                </div>
+              </div>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="data-table-wrapper">
+                <table class="data-table" id="facultyTable">
+                  <thead>
+                    <tr>
+                      <th>Teacher</th>
+                      <th style="width:140px;">Department</th>
+                      <th style="width:110px;">Status</th>
+                      <th style="width:110px;">Teaches</th>
+                      <th title="Each certificate lets this teacher teach every catalog subject in its areas">FCC Certificates</th>
+                      <th style="text-align:right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="facultyTableBody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -976,6 +1036,25 @@
              MODULE: SUBJECT CATALOG & CURRICULUM
              ══════════════════════════════════════════════ -->
         <div class="module-page" id="page-subjects">
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
+              <div><div class="stat-value" id="statTotalSubjects">0</div><div class="stat-label">Total Subjects</div></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></div>
+              <div><div class="stat-value" id="statCollegeSubjects">0</div><div class="stat-label">College</div></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V8l7-4 7 4v13"/><path d="M9 21v-6h6v6"/></svg></div>
+              <div><div class="stat-value" id="statShsSubjects">0</div><div class="stat-label">Senior High School</div></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>
+              <div><div class="stat-value" id="statSubjectSets">0</div><div class="stat-label">Saved Subject Sets</div></div>
+            </div>
+          </div>
+
           <!-- Subjects and saved subject sets are tabs, so neither is far down the page -->
           <div role="tablist" aria-label="Subject Catalog sections" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
             <button type="button" role="tab" class="btn btn-primary" id="catalogTabSubjects" aria-selected="true" aria-controls="subjectCatalogCard" onclick="showCatalogTab('subjects')">Subjects</button>
@@ -986,15 +1065,17 @@
           <div class="card" id="subjectCatalogCard" role="tabpanel" aria-labelledby="catalogTabSubjects" style="margin-bottom:20px;">
             <div class="card-header">
               <div>
-                <h3>Subject Catalog & Specialization</h3>
-                <p>Manage curriculum courses, subject areas and credit units</p>
+                <h3>Subject Catalog</h3>
+                <p id="subjectSummaryText"></p>
               </div>
-              <button class="btn btn-primary" id="btnAddSubject" onclick="openAddSubjectModal()" style="font-size:0.857rem; padding:7px 16px;">+ Add Subject</button>
+              <div class="card-header-tools">
+                <button class="btn btn-primary" id="btnAddSubject" onclick="openAddSubjectModal()">+ Add Subject</button>
+              </div>
             </div>
-            <div class="card-body" style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); background:#FAFCFF;">
-              <div class="grid-controls" style="margin-bottom:0;">
+            <div class="card-body card-filters">
+              <div class="grid-controls">
                 <div class="filter-group">
-                  <label>Department:</label>
+                  <label for="subjectDeptFilter">Department:</label>
                   <select id="subjectDeptFilter" onchange="renderSubjectTable()">
                     <option value="all">All Departments & Subjects</option>
                     <!-- Populated dynamically with DEPARTMENTS -->
@@ -1018,8 +1099,8 @@
                   </select>
                 </div>
                 <div class="filter-group">
-                  <label>Search:</label>
-                  <input type="text" id="subjectSearchInput" placeholder="Filter code or title..." oninput="renderSubjectTable()" class="form-input" style="padding:6px 12px; font-size:0.893rem; width:220px;" />
+                  <label for="subjectSearchInput">Search:</label>
+                  <input type="search" id="subjectSearchInput" class="form-input filter-search" placeholder="Code or title..." oninput="renderSubjectTable()" />
                 </div>
               </div>
             </div>
@@ -1052,7 +1133,9 @@
                 <h3>Saved Subject Sets</h3>
                 <p>Reusable subject lists, such as a 1st or 2nd semester curriculum. Load one into a term with Load Saved Subjects in Step 3 of the Schedule Builder.</p>
               </div>
-              <button class="btn btn-primary" id="btnAddSubjectSet" onclick="openSubjectSetModal()" style="font-size:0.857rem; padding:7px 16px;">+ New Set</button>
+              <div class="card-header-tools">
+                <button class="btn btn-primary" id="btnAddSubjectSet" onclick="openSubjectSetModal()">+ New Set</button>
+              </div>
             </div>
             <div class="card-body" style="padding:0;">
               <div class="data-table-wrapper">
@@ -1087,10 +1170,10 @@
                 <h3>Activity Log</h3>
                 <p>Every saved change, with who made it and when. Newest first.</p>
               </div>
-              <button class="btn btn-outline" onclick="loadActivityLog(true)" style="font-size:0.857rem; padding:7px 16px;">Refresh</button>
+              <button class="btn btn-outline" onclick="loadActivityLog(true)">Refresh</button>
             </div>
-            <div class="card-body" style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); background:#FAFCFF;">
-              <div class="grid-controls" style="margin-bottom:0;">
+            <div class="card-body card-filters">
+              <div class="grid-controls">
                 <div class="filter-group">
                   <label for="activityCategoryFilter">Type:</label>
                   <select id="activityCategoryFilter" onchange="loadActivityLog(true)">
@@ -1104,7 +1187,7 @@
                 </div>
                 <div class="filter-group">
                   <label for="activitySearchInput">Search:</label>
-                  <input type="search" id="activitySearchInput" class="form-input" placeholder="Name, subject, section, room..." oninput="queueActivitySearch()" style="padding:6px 12px; font-size:0.893rem; width:240px;" />
+                  <input type="search" id="activitySearchInput" class="form-input filter-search" placeholder="Name, subject, section, room..." oninput="queueActivitySearch()" />
                 </div>
               </div>
             </div>
@@ -1125,7 +1208,7 @@
                 </table>
               </div>
               <div style="padding:12px 22px; text-align:center;">
-                <button class="btn btn-outline" id="activityLoadMore" onclick="loadActivityLog(false)" style="display:none; font-size:0.857rem;">Load older changes</button>
+                <button class="btn btn-outline" id="activityLoadMore" onclick="loadActivityLog(false)" style="display:none;">Load Older Changes</button>
               </div>
             </div>
           </div>
@@ -1146,8 +1229,8 @@
           <!-- Users Table -->
           <div class="card" style="margin-bottom:20px;">
             <div class="card-header">
-              <div><h3>System Users & Faculty Accounts</h3><p>Admin-controlled account provisioning and access management for professors and staff</p></div>
-              <button class="btn btn-primary" id="btnAddAccount" onclick="openAddUserModal()" style="font-size:0.857rem; padding:7px 16px;">+ Add Account</button>
+              <div><h3>System Users & Faculty Accounts</h3><p>Admin-controlled account provisioning and access management for teachers and staff</p></div>
+              <button class="btn btn-primary" id="btnAddAccount" onclick="openAddUserModal()">+ Add Account</button>
             </div>
             <div class="card-body" style="padding:0;">
               <div class="data-table-wrapper">
@@ -1169,48 +1252,55 @@
         <!-- ══════════════════════════════════════════════════════════════
              PAGE: AI SCHEDULE & SPACE OPTIMIZATION
              ══════════════════════════════════════════════════════════════ -->
-        <div class="module-page" id="page-ai">
-          <!-- Interactive Custom Query Prompt Box -->
-          <div class="ai-prompt-container">
-            <div class="ai-prompt-header">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px; height:18px; color:var(--sti-blue);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              Ask the Scheduling AI
-            </div>
-            <div class="ai-prompt-sub">
-              Ask specific questions about classroom availability, section timetables, or room allocation. <em>Responses are strictly restricted to STI College scheduling data.</em>
-            </div>
-            <form class="ai-prompt-form" id="aiPromptForm" onsubmit="handleAiPromptSubmit(event)">
-              <input type="text" class="ai-prompt-input" id="aiQuestionInput" placeholder="e.g. Which computer labs are available on Wednesday afternoon? or How can we rebalance Floor 2 classrooms?" autocomplete="off" />
-              <button type="submit" class="btn btn-primary" id="aiAskBtn" style="white-space:nowrap; padding:0 24px;">Ask Assistant</button>
-            </form>
-          </div>
-
-          <!-- Analysis Output Panel -->
-          <div class="ai-results-panel" id="aiResultsCard" style="display:none;">
-            <div class="ai-results-header">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="ai-dot" style="background:var(--sti-blue);"></span>
-                <strong id="aiQuerySummary" style="font-size:1rem; color:var(--text-primary);">Schedule Analysis</strong>
-              </div>
-              <button class="btn btn-sm btn-secondary" id="aiCopyBtn" onclick="copyAiResponse()" style="display:inline-flex; align-items:center; gap:5px;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                Copy Report
-              </button>
-            </div>
-            <div class="ai-loading-box" id="aiLoadingIndicator" style="display:none;">
-              <div class="ai-spinner"></div>
-              <div style="font-size:0.964rem; font-weight:600; color:var(--text-primary);">Analyzing live campus schedules with Google Gemini...</div>
-              <div style="font-size:0.857rem; color:var(--text-secondary);">Synthesizing classroom inventory, weekly sections, and room logs.</div>
-            </div>
-            <div class="ai-results-body" id="aiResultsContainer">
-              <!-- Rendered markdown results will appear here -->
-            </div>
-          </div>
-        </div>
-
       </div><!-- /content -->
     </div><!-- /main -->
   </div><!-- /app -->
+
+  <!-- ═══ AI ASSISTANT SIDE PANEL (Master Schedule and View Schedule) ═══ -->
+  <aside class="ai-panel" id="aiPanel" role="dialog" aria-labelledby="aiPanelTitle" hidden>
+    <div class="ai-panel-header">
+      <h3 id="aiPanelTitle">AI Assistant</h3>
+      <button class="btn-close" onclick="closeAiPanel()" aria-label="Close">&times;</button>
+    </div>
+    <div class="ai-panel-body">
+      <!-- Interactive Custom Query Prompt Box -->
+      <div class="ai-prompt-container">
+        <div class="ai-prompt-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px; height:18px; color:var(--sti-blue);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Ask the Scheduling AI
+        </div>
+        <div class="ai-prompt-sub">
+          Ask specific questions about classroom availability, section timetables, or room allocation. <em>Responses are strictly restricted to STI College scheduling data.</em>
+        </div>
+        <form class="ai-prompt-form" id="aiPromptForm" onsubmit="handleAiPromptSubmit(event)">
+          <input type="text" class="ai-prompt-input" id="aiQuestionInput" placeholder="e.g. Which computer labs are available on Wednesday afternoon? or How can we rebalance Floor 2 classrooms?" autocomplete="off" />
+          <button type="submit" class="btn btn-primary btn-sm" id="aiAskBtn">Ask Assistant</button>
+        </form>
+      </div>
+
+      <!-- Analysis Output Panel -->
+      <div class="ai-results-panel" id="aiResultsCard" style="display:none;">
+        <div class="ai-results-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="ai-dot" style="background:var(--sti-blue);"></span>
+            <strong id="aiQuerySummary" style="font-size:1rem; color:var(--text-primary);">Schedule Analysis</strong>
+          </div>
+          <button class="btn btn-sm btn-secondary" id="aiCopyBtn" onclick="copyAiResponse()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            Copy Report
+          </button>
+        </div>
+        <div class="ai-loading-box" id="aiLoadingIndicator" style="display:none;">
+          <div class="ai-spinner"></div>
+          <div style="font-size:0.964rem; font-weight:600; color:var(--text-primary);">Analyzing live campus schedules with Google Gemini...</div>
+          <div style="font-size:0.857rem; color:var(--text-secondary);">Synthesizing classroom inventory, weekly sections, and room logs.</div>
+        </div>
+        <div class="ai-results-body" id="aiResultsContainer">
+          <!-- Rendered markdown results will appear here -->
+        </div>
+      </div>
+    </div>
+  </aside>
 
 
   <!-- ═══ DEPARTMENT MANAGEMENT MODAL ═══ -->
@@ -1218,14 +1308,14 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Manage Departments</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeDeptModal()">✕</button>
+        <button class="btn-close" onclick="closeDeptModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <p style="font-size:0.893rem; color:var(--text-secondary); margin-bottom:16px;">Add or remove academic departments. Removing a department will safely reassign affected faculty.</p>
         
         <div style="display:flex; gap:8px; margin-bottom:20px;">
           <input type="text" id="newDeptInput" class="form-input" placeholder="New Department Name (e.g. Multimedia Arts)" style="flex:1;" />
-          <button class="btn btn-primary" onclick="addDepartment()" style="white-space:nowrap;">+ Add</button>
+          <button class="btn btn-primary" onclick="addDepartment()">+ Add</button>
         </div>
 
         <div style="font-size:0.857rem; font-weight:700; color:var(--text-secondary); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Existing Departments</div>
@@ -1245,7 +1335,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:460px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;" role="dialog" aria-labelledby="defaultLoadsTitle">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 id="defaultLoadsTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Default Loads</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeDefaultLoadsModal()" aria-label="Close">✕</button>
+        <button class="btn-close" onclick="closeDefaultLoadsModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <p style="margin:0 0 14px; font-size:0.929rem; color:var(--text-secondary);">The school's usual teaching load per term, in units (SHS classes count 1 unit per teaching hour). New teachers start with these, and you can still change any teacher's own load in Edit Profile.</p>
@@ -1273,8 +1363,8 @@
   <div class="modal-overlay" id="certModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:540px; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
-        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">🎓 FCC Certificates</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeCertModal()" aria-label="Close">✕</button>
+        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">FCC Certificates</h3>
+        <button class="btn-close" onclick="closeCertModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px; overflow-y:auto;">
         <p style="font-size:0.893rem; color:var(--text-secondary); margin:0 0 14px;">A certificate covers one or more subject areas. Teachers holding it may teach every catalog subject in those areas, and certificates are the only way a teacher qualifies. Give them to teachers with + Add on their card or in Edit Profile.</p>
@@ -1304,11 +1394,11 @@
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:460px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Add Faculty Member</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeAddFacultyModal()">✕</button>
+        <button class="btn-close" onclick="closeAddFacultyModal()" aria-label="Close">&times;</button>
       </div>
       <div class="modal-grid" style="padding:20px 24px;">
         <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label">Select Registered User Account (Faculty / Professors)</label>
+          <label class="form-label">Select Registered User Account (Faculty)</label>
           <select id="newFacUserSelect" class="form-input" onchange="handleFacultyUserDropdownChange(this.value)">
             <!-- Populated dynamically from User Management -->
           </select>
@@ -1347,11 +1437,11 @@
           </select>
         </div>
         <div class="form-group" style="margin-bottom:14px;">
-          <label style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:0.893rem; cursor:pointer;"><input type="checkbox" id="newFacSeasoned" /> ⭐ Seasoned teacher</label>
+          <label style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:0.893rem; cursor:pointer;"><input type="checkbox" id="newFacSeasoned" /> Seasoned teacher</label>
           <span style="font-size:0.857rem; color:var(--text-secondary); margin-top:2px; display:block;">Preferred over teachers with a similar load when the generator hands out classes</span>
         </div>
         <div class="form-group modal-full" style="margin:0;">
-          <div class="form-label" style="font-weight:600; font-size:0.893rem;">🎓 FCC Certificates</div>
+          <div class="form-label" style="font-weight:600; font-size:0.893rem;">FCC Certificates</div>
           <div id="newFacCertPicker" class="availability-options"></div>
           <span style="font-size:0.857rem; color:var(--text-secondary); margin-top:2px; display:block;">Lets this teacher teach every catalog subject in the certificate's areas</span>
         </div>
@@ -1368,7 +1458,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 id="roomModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Add Room</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeRoomModal()">✕</button>
+        <button class="btn-close" onclick="closeRoomModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <input type="hidden" id="roomEditOriginalCode" value="" />
@@ -1411,7 +1501,7 @@
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:460px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Create User / Faculty Account</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeAddUserModal()">✕</button>
+        <button class="btn-close" onclick="closeAddUserModal()" aria-label="Close">&times;</button>
       </div>
       <div class="modal-grid" style="padding:20px 24px;">
         <div class="modal-full" id="addUserError" style="display:none; color:var(--danger); font-size:0.857rem; margin-bottom:14px; padding:9px 14px; background:#FFF5F5; border-radius:6px; border:1px solid #FADBD8;"></div>
@@ -1431,7 +1521,7 @@
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Account Role</label>
           <select id="newUserRole" class="form-input" onchange="updateNewUserRoleFields()">
-            <option value="faculty" selected>Faculty / Professor</option>
+            <option value="faculty" selected>Faculty</option>
             <option value="program-head">Program Head</option>
             <option value="admin">System Administrator</option>
           </select>
@@ -1468,12 +1558,12 @@
   <div class="modal-overlay" id="deleteUserModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFF5F5;">
-        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Remove User Account</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeDeleteUserModal()">✕</button>
+        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Delete User Account</h3>
+        <button class="btn-close" onclick="closeDeleteUserModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <input type="hidden" id="deleteUserTargetEmail" value="" />
-        <p style="font-size:0.929rem; color:var(--text-primary); margin-bottom:12px;">Are you sure you want to remove the following account?</p>
+        <p style="font-size:0.929rem; color:var(--text-primary); margin-bottom:12px;">Are you sure you want to delete the following account?</p>
         <div style="background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; padding:12px 16px; margin-bottom:16px;">
           <div id="deleteUserNameDisplay" style="font-weight:700; font-size:1rem; color:var(--text-primary);"></div>
           <div id="deleteUserEmailDisplay" style="font-size:0.857rem; color:var(--text-secondary); margin-top:2px;"></div>
@@ -1482,7 +1572,7 @@
       </div>
       <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
         <button class="btn btn-outline" onclick="closeDeleteUserModal()">Cancel</button>
-        <button class="btn btn-danger" id="confirmDeleteUserBtn" onclick="confirmDeleteUser()" style="background:var(--danger); color:#fff; border:none; padding:7px 16px; border-radius:6px; cursor:pointer;">Confirm Remove</button>
+        <button class="btn btn-danger-solid" id="confirmDeleteUserBtn" onclick="confirmDeleteUser()">Delete Account</button>
       </div>
     </div>
   </div>
@@ -1492,7 +1582,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:400px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 id="passwordModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Change Password</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closePasswordModal()">✕</button>
+        <button class="btn-close" onclick="closePasswordModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <input type="hidden" id="passwordTargetEmail" value="" />
@@ -1522,7 +1612,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Edit User Account</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeEditUserModal()">✕</button>
+        <button class="btn-close" onclick="closeEditUserModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <input type="hidden" id="editUserTargetEmail" value="" />
@@ -1559,7 +1649,7 @@
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Edit Faculty Profile</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeChangeFacultyDeptModal()">✕</button>
+        <button class="btn-close" onclick="closeChangeFacultyDeptModal()" aria-label="Close">&times;</button>
       </div>
       <div class="modal-grid" style="padding:20px 24px;">
         <input type="hidden" id="changeFacultyDeptTargetEmail" value="" />
@@ -1587,7 +1677,7 @@
             <label class="form-label" for="changeFacultyMaxLoad" style="font-weight:600; font-size:0.929rem; margin-bottom:6px; display:block;">Max Load (units)</label>
             <input type="number" id="changeFacultyMaxLoad" class="form-input" min="3" max="40" style="width:100%;" />
           </div>
-          <span style="grid-column:1 / -1; font-size:0.857rem; color:var(--text-secondary);">Usual range: full-time 24–30 units, part-time 15–24. The generator fills professors up to their minimum first.</span>
+          <span style="grid-column:1 / -1; font-size:0.857rem; color:var(--text-secondary);">Usual range: full-time 24–30 units, part-time 15–24. The generator fills teachers up to their minimum first.</span>
         </div>
         <div id="changeFacultyAvailability" class="availability-picker modal-full" style="display:none;"></div>
         <div class="form-group" style="margin-bottom:14px;">
@@ -1600,11 +1690,11 @@
           <span style="font-size:0.857rem; color:var(--text-secondary); display:block; margin-top:4px;">This teacher is only given classes in sections of these levels.</span>
         </div>
         <div class="form-group" style="margin-bottom:14px;">
-          <label style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:0.929rem; cursor:pointer;"><input type="checkbox" id="changeFacultySeasoned" /> ⭐ Seasoned teacher</label>
+          <label style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:0.929rem; cursor:pointer;"><input type="checkbox" id="changeFacultySeasoned" /> Seasoned teacher</label>
           <span style="font-size:0.857rem; color:var(--text-secondary); display:block; margin-top:4px;">Preferred over teachers with a similar load when the generator hands out classes.</span>
         </div>
         <div class="form-group modal-full" style="margin-bottom:14px;">
-          <div class="form-label" style="font-weight:600; font-size:0.929rem; margin-bottom:6px; display:block;">🎓 FCC Certificates</div>
+          <div class="form-label" style="font-weight:600; font-size:0.929rem; margin-bottom:6px; display:block;">FCC Certificates</div>
           <div id="changeFacultyCertPicker" class="availability-options"></div>
           <span style="font-size:0.857rem; color:var(--text-secondary); display:block; margin-top:4px;">Lets this teacher teach every catalog subject in the certificate's areas.</span>
         </div>
@@ -1626,7 +1716,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFF5F5;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Remove Faculty Profile</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeDeleteFacultyModal()">✕</button>
+        <button class="btn-close" onclick="closeDeleteFacultyModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <input type="hidden" id="deleteFacultyTargetEmail" value="" />
@@ -1639,7 +1729,7 @@
       </div>
       <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
         <button class="btn btn-outline" onclick="closeDeleteFacultyModal()">Cancel</button>
-        <button class="btn btn-danger" onclick="confirmDeleteFacultyProfile()" style="background:var(--danger); color:#fff; border:none; padding:7px 16px; border-radius:6px; cursor:pointer;">Confirm Remove</button>
+        <button class="btn btn-danger-solid" onclick="confirmDeleteFacultyProfile()">Remove Profile</button>
       </div>
     </div>
   </div>
@@ -1648,21 +1738,21 @@
   <div class="modal-overlay" id="deleteRoomModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFF5F5;">
-        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Remove Classroom</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeDeleteRoomModal()">✕</button>
+        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Delete Room</h3>
+        <button class="btn-close" onclick="closeDeleteRoomModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <input type="hidden" id="deleteRoomTargetCode" value="" />
-        <p style="font-size:0.929rem; color:var(--text-primary); margin-bottom:12px;">Are you sure you want to remove this classroom?</p>
+        <p style="font-size:0.929rem; color:var(--text-primary); margin-bottom:12px;">Are you sure you want to delete this room?</p>
         <div style="background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; padding:12px 16px; margin-bottom:16px;">
           <div id="deleteRoomCodeDisplay" style="font-weight:700; font-size:1rem; color:var(--text-primary);"></div>
           <div id="deleteRoomDetailsDisplay" style="font-size:0.857rem; color:var(--text-secondary); margin-top:2px;"></div>
         </div>
-        <p style="font-size:0.857rem; color:var(--text-secondary); margin:0;">This room has no scheduled classes and will be removed from Room Information.</p>
+        <p style="font-size:0.857rem; color:var(--text-secondary); margin:0;">This room has no scheduled classes and will be deleted from Room Information.</p>
       </div>
       <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
         <button class="btn btn-outline" onclick="closeDeleteRoomModal()">Cancel</button>
-        <button class="btn btn-danger" onclick="confirmDeleteRoom()" style="background:var(--danger); color:#fff; border:none; padding:7px 16px; border-radius:6px; cursor:pointer;">Confirm Remove</button>
+        <button class="btn btn-danger-solid" onclick="confirmDeleteRoom()">Delete Room</button>
       </div>
     </div>
   </div>
@@ -1672,7 +1762,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 id="subjectModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Add Subject</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeSubjectModal()">✕</button>
+        <button class="btn-close" onclick="closeSubjectModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <input type="hidden" id="subjectEditOriginalCode" value="" />
@@ -1718,21 +1808,21 @@
   <div class="modal-overlay" id="deleteSubjectModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFF5F5;">
-        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Remove Subject</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeDeleteSubjectModal()">✕</button>
+        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--danger);">Delete Subject</h3>
+        <button class="btn-close" onclick="closeDeleteSubjectModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <input type="hidden" id="deleteSubjectTargetCode" value="" />
-        <p style="font-size:0.929rem; color:var(--text-primary); margin-bottom:12px;">Are you sure you want to remove the following subject?</p>
+        <p style="font-size:0.929rem; color:var(--text-primary); margin-bottom:12px;">Are you sure you want to delete the following subject?</p>
         <div style="background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; padding:12px 16px; margin-bottom:16px;">
           <div id="deleteSubjectCodeDisplay" style="font-weight:700; font-size:1rem; color:var(--text-primary);"></div>
           <div id="deleteSubjectTitleDisplay" style="font-size:0.857rem; color:var(--text-secondary); margin-top:2px;"></div>
         </div>
-        <p style="font-size:0.857rem; color:var(--text-secondary); margin:0;">This subject will be removed from the curriculum catalog.</p>
+        <p style="font-size:0.857rem; color:var(--text-secondary); margin:0;">This subject will be deleted from the Subject Catalog.</p>
       </div>
       <div style="padding:14px 24px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; background:#F8FAFD;">
         <button class="btn btn-outline" onclick="closeDeleteSubjectModal()">Cancel</button>
-        <button class="btn btn-danger" onclick="confirmDeleteSubject()" style="background:var(--danger); color:#fff; border:none; padding:7px 16px; border-radius:6px; cursor:pointer;">Confirm Remove</button>
+        <button class="btn btn-danger-solid" onclick="confirmDeleteSubject()">Delete Subject</button>
       </div>
     </div>
   </div>
@@ -1741,8 +1831,8 @@
   <div class="modal-overlay" id="slotModal" style="display:none; z-index:1000;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:450px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
-        <h3 id="slotModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Assign Professor to Slot</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeSlotModal()">✕</button>
+        <h3 id="slotModalTitle" style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Assign Teacher to Slot</h3>
+        <button class="btn-close" onclick="closeSlotModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 24px;">
         <div id="slotModalError" style="display:none; color:var(--danger); font-size:0.857rem; margin-bottom:14px; padding:9px 14px; background:#FFF5F5; border-radius:6px; border:1px solid #FADBD8;"></div>
@@ -1767,11 +1857,11 @@
         </div>
 
         <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label">Professor / Instructor</label>
+          <label class="form-label">Teacher</label>
           <select id="slotFacultySelect" class="form-input">
             <!-- Populated dynamically with registered faculty -->
           </select>
-          <span style="font-size:0.857rem; color:var(--text-secondary); margin-top:4px; display:block;">Only professors registered in User Management & Faculty Profiles are schedulable.</span>
+          <span style="font-size:0.857rem; color:var(--text-secondary); margin-top:4px; display:block;">Only teachers registered in User Management & Faculty Profiles are schedulable.</span>
         </div>
 
         <div class="form-group" style="margin-bottom:14px;">
@@ -1809,13 +1899,13 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="detailModalTitle">Class Schedule Details</h3>
-        <button onclick="closeClassDetailModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeClassDetailModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:22px;" id="detailModalBody">
         <!-- Populated on click -->
       </div>
       <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end;" id="detailModalFooter">
-        <button class="btn btn-secondary" onclick="closeClassDetailModal()" style="padding:6px 16px;">Close</button>
+        <button class="btn btn-secondary" onclick="closeClassDetailModal()">Close</button>
       </div>
     </div>
   </div>
@@ -1825,7 +1915,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="syModalTitle">Add School Year</h3>
-        <button onclick="closeSchoolYearModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeSchoolYearModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:22px;">
         <input type="hidden" id="syEditId" value="" />
@@ -1854,7 +1944,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="termModalTitle">Configure Academic Term</h3>
-        <button onclick="closeTermModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeTermModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:22px;">
         <input type="hidden" id="termEditId" value="" />
@@ -1900,7 +1990,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:660px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="subjectSetModalTitle">New Subject Set</h3>
-        <button onclick="closeSubjectSetModal()" aria-label="Close" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeSubjectSetModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 22px; overflow-y:auto;">
         <div id="subjectSetError" style="display:none; color:var(--danger); font-size:0.857rem; margin-bottom:12px; padding:9px 14px; background:#FFF5F5; border-radius:6px; border:1px solid #FADBD8;"></div>
@@ -1912,7 +2002,7 @@
           <label class="form-label" for="subjectSetCopyTerm" style="font-weight:700; font-size:0.857rem;">Copy From a Term</label>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <select id="subjectSetCopyTerm" class="form-input" style="flex:1 1 220px;"></select>
-            <button type="button" class="btn btn-outline" onclick="copyTermIntoSubjectSet()" style="font-size:0.857rem;">Copy subjects</button>
+            <button type="button" class="btn btn-outline" onclick="copyTermIntoSubjectSet()">Copy Subjects</button>
           </div>
           <span style="font-size:0.857rem; color:var(--text-secondary); display:block; margin-top:4px;">Adds every subject that term offers. Subjects already in the set are skipped.</span>
         </div>
@@ -1935,8 +2025,8 @@
           </div>
           <div id="subjectSetPicker" class="availability-options qual-picker" role="group" aria-label="Catalog subjects" style="margin-bottom:6px;"></div>
           <div style="display:flex; gap:6px; justify-content:flex-end;">
-            <button type="button" class="btn btn-outline" onclick="tickAllSubjectSetPicker()" style="font-size:0.857rem;">Select all</button>
-            <button type="button" class="btn btn-primary" onclick="addCatalogSubjectToSet()" style="font-size:0.857rem;">+ Add selected</button>
+            <button type="button" class="btn btn-outline" onclick="tickAllSubjectSetPicker()">Select All</button>
+            <button type="button" class="btn btn-primary" onclick="addCatalogSubjectToSet()">+ Add Selected</button>
           </div>
         </div>
         <div style="border:1px solid var(--border-subtle); border-radius:8px; overflow:auto; max-height:280px;">
@@ -1968,7 +2058,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:620px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Load Saved Subjects</h3>
-        <button onclick="closeLoadSubjectSetModal()" aria-label="Close" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeLoadSubjectSetModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:20px 22px; overflow-y:auto;">
         <p id="loadSubjectSetTarget" style="font-size:0.893rem; margin:0 0 12px; color:var(--text-primary);"></p>
@@ -1979,18 +2069,18 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin:8px 0 6px; gap:8px; flex-wrap:wrap;">
           <span id="loadSubjectSetSummary" style="font-size:0.857rem; color:var(--text-secondary);"></span>
           <span style="display:inline-flex; gap:6px;">
-            <button type="button" class="btn btn-outline" style="font-size:0.857rem; padding:2px 8px;" onclick="tickAllLoadSubjectSet(true)">Select all</button>
-            <button type="button" class="btn btn-outline" style="font-size:0.857rem; padding:2px 8px;" onclick="tickAllLoadSubjectSet(false)">Clear</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="tickAllLoadSubjectSet(true)">Select All</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="tickAllLoadSubjectSet(false)">Clear</button>
           </span>
         </div>
         <div id="loadSubjectSetPreview" style="border:1px solid var(--border-subtle); border-radius:8px; max-height:300px; overflow-y:auto;"></div>
         <p style="margin:10px 0 0; font-size:0.857rem; color:var(--text-secondary);">Subject sets are made and edited in <a href="#" onclick="closeLoadSubjectSetModal(); switchPage('subjects'); showCatalogTab('sets'); return false;">Subject Catalog</a>.</p>
       </div>
       <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-        <button class="btn btn-outline" id="btnSaveTermAsSet" onclick="saveTermAsSubjectSet()">Save this term as a set</button>
+        <button class="btn btn-outline" id="btnSaveTermAsSet" onclick="saveTermAsSubjectSet()">Save This Term as a Set</button>
         <span style="display:inline-flex; gap:8px; margin-left:auto;">
           <button class="btn btn-outline" onclick="closeLoadSubjectSetModal()">Cancel</button>
-          <button class="btn btn-primary" id="loadSubjectSetSubmit" onclick="submitLoadSubjectSet()">Load subjects</button>
+          <button class="btn btn-primary" id="loadSubjectSetSubmit" onclick="submitLoadSubjectSet()">Load Subjects</button>
         </span>
       </div>
     </div>
@@ -2001,7 +2091,7 @@
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="curricSubjModalTitle">Add Curriculum Subject</h3>
-        <button onclick="closeAddSubjectModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeAddSubjectModal()" aria-label="Close">&times;</button>
       </div>
       <div class="modal-grid" style="padding:22px;">
         <input type="hidden" id="curricSubjEditId" value="" />
@@ -2045,7 +2135,7 @@
           </div>
           <div>
             <label class="form-label" for="curricSubjUnits" style="font-weight:700; font-size:0.857rem;">Total Units</label>
-            <input type="number" id="curricSubjUnits" value="3" readonly tabindex="-1" style="width:100%; background:#F3F4F6;" />
+            <input type="number" id="curricSubjUnits" value="3" readonly tabindex="-1" style="width:100%;" />
           </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:4px;">
@@ -2092,7 +2182,7 @@
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);" id="secModalTitle">Configure Section</h3>
-        <button onclick="closeSectionModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeSectionModal()" aria-label="Close">&times;</button>
       </div>
       <div class="modal-grid" style="padding:22px;">
         <input type="hidden" id="secEditId" value="" />
@@ -2132,7 +2222,7 @@
         </div>
         <div class="form-group" style="margin-bottom:0;">
           <label class="form-label" style="font-weight:700; font-size:0.857rem;">Class Shift</label>
-          <select id="secShiftInput" style="width:100%; padding:8px 10px; border:1px solid var(--border-subtle); border-radius:6px; font-size:0.929rem; background:#fff;">
+          <select id="secShiftInput" style="width:100%;">
             <option value="AM">AM Shift (Morning: 7:00 AM – 12:00 PM)</option>
             <option value="MIDSHIFT">MIDSHIFT (Midday: 10:00 AM – 4:00 PM)</option>
             <option value="PM">PM Shift (Afternoon: 1:00 PM – 7:00 PM)</option>
@@ -2140,12 +2230,12 @@
         </div>
         <div class="form-group" style="margin:12px 0 0;">
           <label class="form-label" for="secHomeRoomInput" style="font-weight:700; font-size:0.857rem;">Home Room</label>
-          <select id="secHomeRoomInput" style="width:100%; padding:8px 10px; border:1px solid var(--border-subtle); border-radius:6px; font-size:0.929rem; background:#fff;"></select>
+          <select id="secHomeRoomInput" style="width:100%;"></select>
           <span style="font-size:0.857rem; color:var(--text-secondary); display:block; margin-top:4px;">The generator keeps this section's classes in this room whenever it is free. Lab classes still go to a lab.</span>
         </div>
         <div class="form-group" style="margin:12px 0 0;">
           <label class="form-label" for="secAdviserInput" style="font-weight:700; font-size:0.857rem;">Adviser</label>
-          <select id="secAdviserInput" style="width:100%; padding:8px 10px; border:1px solid var(--border-subtle); border-radius:6px; font-size:0.929rem; background:#fff;"></select>
+          <select id="secAdviserInput" style="width:100%;"></select>
           <span style="font-size:0.857rem; color:var(--text-secondary); display:block; margin-top:4px;">Lists teachers set to teach this school year's level. The adviser can also teach the section's classes.</span>
         </div>
         <div class="form-group modal-full" style="margin:12px 0 0;">
@@ -2166,7 +2256,7 @@
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:440px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
         <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Split Section</h3>
-        <button onclick="closeSplitSectionModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeSplitSectionModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:22px;">
         <input type="hidden" id="splitTargetSectionId" value="" />
@@ -2199,8 +2289,8 @@
   <div class="modal-overlay" id="aiDraftModal" style="display:none; z-index:1100;">
     <div class="modal" style="background:#fff; border-radius:12px; width:100%; max-width:640px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
-        <h3 style="margin:0; font-size:1.143rem; font-weight:800; color:var(--accent-primary);">Generate with AI</h3>
-        <button class="btn btn-outline" style="padding:4px 10px; font-size:0.857rem;" onclick="closeAiDraftModal()">✕</button>
+        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Generate with AI</h3>
+        <button class="btn-close" onclick="closeAiDraftModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:18px 22px; overflow-y:auto;">
         <div id="aiDraftError" style="display:none; background:#FFF5F5; border:1px solid #FEB2B2; color:#C53030; border-radius:6px; padding:8px 12px; font-size:0.893rem; margin-bottom:12px;"></div>
@@ -2227,9 +2317,9 @@
       <div style="padding:16px 22px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#FFFBEB;">
         <div style="display:flex; align-items:center; gap:8px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <h3 style="margin:0; font-size:1.143rem; font-weight:800; color:#92400E;">Generate the Timetable?</h3>
+          <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Generate the Timetable?</h3>
         </div>
-        <button onclick="closeConfirmRegenerateModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeConfirmRegenerateModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:22px; font-size:0.929rem; color:var(--text-primary); line-height:1.6;">
         <p>This action will auto-assign day, time, room, and teacher per section, honoring room type, capacity, faculty qualification, and zero overlap constraints.</p>
@@ -2237,7 +2327,7 @@
       </div>
       <div style="padding:14px 22px; background:#F8FAFD; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px;">
         <button class="btn btn-outline" onclick="closeConfirmRegenerateModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="executeGenerateBaseline()" style="background:#25447A; border-color:#25447A;">Yes, Generate</button>
+        <button class="btn btn-primary" onclick="executeGenerateBaseline()">Yes, Generate</button>
       </div>
     </div>
   </div>
@@ -2250,7 +2340,7 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Auto-Generate Academic Sections</h3>
         </div>
-        <button onclick="closeAutoGenerateSectionsModal()" style="border:none; background:none; font-size:1.429rem; line-height:1; cursor:pointer; color:var(--text-secondary);">&times;</button>
+        <button class="btn-close" onclick="closeAutoGenerateSectionsModal()" aria-label="Close">&times;</button>
       </div>
       <div style="padding:22px;">
         <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">

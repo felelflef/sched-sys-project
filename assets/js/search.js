@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════════
    SEARCH (page header)
-   One box that finds a section, professor, room or subject and opens it: sections, professors and rooms open
+   One box that finds a section, teacher, room or subject and opens it: sections, teachers and rooms open
    their timetable in View Schedule; subjects open in the Subject Catalog.
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -15,13 +15,13 @@ function searchCandidates() {
     kind: 'section', label: s.code, value: s.code, termId: s.termId,
     detail: s.termId === activeTerm.id ? s.name : `${s.name} · ${termWithLevel(s.termId)}`
   }));
-  const teachers = FACULTY.map(f => ({ kind: 'teacher', label: f.name, detail: f.dept || 'Professor', value: f.name }));
+  const teachers = FACULTY.map(f => ({ kind: 'teacher', label: f.name, detail: f.dept || 'Teacher', value: f.name }));
   const rooms = ROOMS.map(r => ({ kind: 'room', label: r.code, detail: `${r.type}, ${r.cap} seats`, value: r.code }));
   const subjects = SUBJECTS.map(s => ({ kind: 'subject', label: s.code, detail: s.title || s.name || '', value: s.code }));
   return [...sections, ...teachers, ...rooms, ...subjects];
 }
 
-const SEARCH_KIND_LABELS = { section: 'Section', teacher: 'Professor', room: 'Room', subject: 'Subject' };
+const SEARCH_KIND_LABELS = { section: 'Section', teacher: 'Teacher', room: 'Room', subject: 'Subject' };
 
 function renderSearchResults() {
   const list = document.getElementById('globalSearchResults');
@@ -48,7 +48,7 @@ function renderSearchResults() {
     ? searchResults.map((r, i) => `<li role="option" id="globalSearchOption${i}" class="global-search-option${i === searchActiveIndex ? ' active' : ''}" aria-selected="${i === searchActiveIndex}"
         onmousedown="event.preventDefault(); openSearchResult(${i})"><span class="global-search-kind">${SEARCH_KIND_LABELS[r.kind]}</span>
         <strong>${escapeHtml(r.label)}</strong> <span class="global-search-detail">${escapeHtml(r.detail)}</span></li>`).join('')
-    : '<li class="global-search-empty">No section, professor, room or subject matches.</li>';
+    : '<li class="global-search-empty">No section, teacher, room or subject matches.</li>';
   list.hidden = false;
   input.setAttribute('aria-expanded', 'true');
   input.setAttribute('aria-activedescendant', searchActiveIndex >= 0 ? `globalSearchOption${searchActiveIndex}` : '');

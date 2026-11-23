@@ -104,8 +104,8 @@ function renderSubjectOfferingTable() {
         <td>${yearLevelLabel(subj.year)}</td>
         <td style="text-align:right;">
           <div style="display:inline-flex; gap:6px;">
-            <button class="btn btn-outline" onclick="openEditCurriculumSubjectModal(${subj.id})" style="font-size:0.857rem; padding:3px 7px;">Edit</button>
-            <button class="btn btn-outline" onclick="deleteSubjectOffering(${subj.id})" style="font-size:0.857rem; padding:3px 7px; color:#DC2626; border-color:#FCA5A5;">Delete</button>
+            <button class="btn btn-outline btn-sm" onclick="openEditCurriculumSubjectModal(${subj.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSubjectOffering(${subj.id})">Remove</button>
           </div>
         </td>
       </tr>
@@ -144,7 +144,7 @@ async function toggleSubjectInclusion(id, isIncluded) {
   const subj = CURRICULUM_SUBJECTS.find(s => s.id === id);
   if (subj) {
     const scheduled = isIncluded ? [] : curriculumSubjectClasses(subj);
-    if (scheduled.length > 0 && !(await askConfirm(`${subj.code} has ${scheduledClassesNote(scheduled)}. Excluding it also takes ${scheduled.length === 1 ? 'that class' : 'those classes'} off the schedule.`, { title: 'Exclude this subject?', confirmLabel: 'Exclude and unschedule', danger: true }))) {
+    if (scheduled.length > 0 && !(await askConfirm(`${subj.code} has ${scheduledClassesNote(scheduled)}. Excluding it also takes ${scheduled.length === 1 ? 'that class' : 'those classes'} off the schedule.`, { title: 'Exclude this subject?', confirmLabel: 'Exclude and Unschedule', danger: true }))) {
       renderSubjectOfferingTable();
       return;
     }
@@ -162,7 +162,7 @@ async function toggleAllSubjectInclusion(status) {
   const listed = filteredCurriculumSubjects();
   if (listed.length === 0) return;
   const scheduled = status ? [] : [...new Set(listed.flatMap(curriculumSubjectClasses))];
-  if (scheduled.length > 0 && !(await askConfirm(`The listed subjects have ${scheduledClassesNote(scheduled)}. Excluding them also takes those classes off the schedule.`, { title: `Exclude ${listed.length} subject${listed.length === 1 ? '' : 's'}?`, confirmLabel: 'Exclude and unschedule', danger: true }))) return;
+  if (scheduled.length > 0 && !(await askConfirm(`The listed subjects have ${scheduledClassesNote(scheduled)}. Excluding them also takes those classes off the schedule.`, { title: `Exclude ${listed.length} subject${listed.length === 1 ? '' : 's'}?`, confirmLabel: 'Exclude and Unschedule', danger: true }))) return;
   removeClassesAndSave(scheduled);
   listed.forEach(s => s.isIncluded = status);
   saveStateToStorage();
@@ -433,7 +433,7 @@ async function deleteSubjectOffering(id) {
   const message = scheduled.length > 0
     ? `The subject will no longer be offered in this term, and its ${scheduledClassesNote(scheduled)} will be taken off the schedule.`
     : 'The subject will no longer be offered in this term.';
-  if (!(await askConfirm(message, { title: 'Remove this subject from the term?', confirmLabel: scheduled.length > 0 ? 'Remove and unschedule' : 'Remove subject', danger: true }))) return;
+  if (!(await askConfirm(message, { title: 'Remove this subject from the term?', confirmLabel: scheduled.length > 0 ? 'Remove and Unschedule' : 'Remove Subject', danger: true }))) return;
   removeClassesAndSave(scheduled);
   CURRICULUM_SUBJECTS = CURRICULUM_SUBJECTS.filter(s => s.id !== id);
   saveStateToStorage();

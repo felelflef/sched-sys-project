@@ -62,6 +62,16 @@ function renderSubjectTable() {
     return matchDept && matchSearch && (levelFilter === 'all' || catalogFitsLevel(s, levelFilter));
   });
 
+  // A subject for both levels counts under College and under Senior High School
+  const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  setText('statTotalSubjects', SUBJECTS.length);
+  setText('statCollegeSubjects', SUBJECTS.filter(s => catalogFitsLevel(s, 'tertiary')).length);
+  setText('statShsSubjects', SUBJECTS.filter(s => catalogFitsLevel(s, 'shs')).length);
+  setText('statSubjectSets', SUBJECT_SETS.length);
+  setText('subjectSummaryText', filtered.length === SUBJECTS.length
+    ? `${SUBJECTS.length} subjects with their subject areas, FCC certificates and units`
+    : `Showing ${filtered.length} of ${SUBJECTS.length} subjects`);
+
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
@@ -78,8 +88,8 @@ function renderSubjectTable() {
     const tr = document.createElement('tr');
 
     const actionButtons = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; margin-right:4px;" onclick="openEditSubjectModal(${jsArg(subj.code)})">Edit</button>
-         <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteSubject(${jsArg(subj.code)})">Remove</button>`
+      ? `<button class="btn btn-outline btn-sm" style="margin-right:4px;" onclick="openEditSubjectModal(${jsArg(subj.code)})">Edit</button>
+         <button class="btn btn-danger btn-sm" onclick="promptDeleteSubject(${jsArg(subj.code)})">Delete</button>`
       : `<span style="font-size:0.857rem; color:var(--text-secondary);">&mdash;</span>`;
 
     tr.innerHTML = `
@@ -106,10 +116,10 @@ function certificateHolderCount(cert) {
 }
 function subjectCertificatesHtml(area) {
   const certs = certificatesCoveringArea(area);
-  if (certs.length === 0) return '<span style="font-size:0.857rem; color:var(--danger); font-weight:600;">⚠ No certificate covers this area</span>';
+  if (certs.length === 0) return '<span style="font-size:0.857rem; color:var(--danger); font-weight:600;">No certificate covers this area</span>';
   return `<div class="qual-tags">${certs.map(c => {
     const holders = certificateHolderCount(c);
-    return `<span class="qual-tag locked" style="background:#F5F3FF; color:#6D28D9; border:1px solid #DDD6FE; font-weight:600;" title="${holders} teacher${holders === 1 ? '' : 's'} hold this certificate">🎓 ${escapeHtml(c.name)}</span>`;
+    return `<span class="qual-tag locked" style="background:#F5F3FF; color:#6D28D9; border:1px solid #DDD6FE; font-weight:600;" title="${holders} teacher${holders === 1 ? '' : 's'} hold this certificate">${escapeHtml(c.name)}</span>`;
   }).join('')}</div>`;
 }
 // The line under Subject Area in the subject form
@@ -119,8 +129,8 @@ function renderSubjectCertLink() {
   if (!box) return;
   const certs = certificatesCoveringArea(area);
   box.innerHTML = certs.length === 0
-    ? `<span style="color:var(--danger); font-weight:600;">⚠ No FCC certificate covers ${escapeHtml(area)} yet, so no one can teach this subject. Create one with the FCC Certificates button in Faculty Profiles.</span>`
-    : `<span style="color:#6D28D9;">🎓 Covered by: ${certs.map(c => {
+    ? `<span style="color:var(--danger); font-weight:600;">No FCC certificate covers ${escapeHtml(area)} yet, so no one can teach this subject. Create one with the FCC Certificates button in Faculty Profiles.</span>`
+    : `<span style="color:#6D28D9;">Covered by: ${certs.map(c => {
         const holders = certificateHolderCount(c);
         return `<strong>${escapeHtml(c.name)}</strong> · ${holders} teacher${holders === 1 ? '' : 's'} hold${holders === 1 ? 's' : ''} it`;
       }).join('; ')}</span>`;
@@ -371,6 +381,8 @@ function renderSubjectSetTable() {
   if (!tbody) return;
   const countBadge = document.getElementById('catalogSetCount');
   if (countBadge) countBadge.textContent = String(SUBJECT_SETS.length);
+  const setsTile = document.getElementById('statSubjectSets');
+  if (setsTile) setsTile.textContent = String(SUBJECT_SETS.length);
   const canManage = canManageSubjectSets();
   const btn = document.getElementById('btnAddSubjectSet');
   if (btn) btn.style.display = canManage ? 'inline-flex' : 'none';
@@ -383,8 +395,8 @@ function renderSubjectSetTable() {
   tbody.innerHTML = SUBJECT_SETS.slice().sort((a, b) => a.name.localeCompare(b.name)).map(set => {
     const programs = [...new Set(set.items.map(i => i.program))].sort();
     const actions = canManage
-      ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; margin-right:4px;" onclick="openSubjectSetModal(${Number(set.id)})">Edit</button>
-         <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; color:var(--danger); border-color:#fadbd8;" onclick="deleteSubjectSet(${Number(set.id)})">Remove</button>`
+      ? `<button class="btn btn-outline btn-sm" style="margin-right:4px;" onclick="openSubjectSetModal(${Number(set.id)})">Edit</button>
+         <button class="btn btn-danger btn-sm" onclick="deleteSubjectSet(${Number(set.id)})">Delete</button>`
       : '<span style="font-size:0.857rem; color:var(--text-secondary);">&mdash;</span>';
     return `
       <tr>
@@ -439,7 +451,7 @@ function renderSubjectSetItems() {
         <td>${escapeHtml(item.program)}</td>
         <td>${yearLevelLabel(item.year)}</td>
         <td>${Number(item.units)}</td>
-        <td style="text-align:right;"><button type="button" class="btn btn-outline" style="font-size:0.857rem; padding:2px 7px; color:var(--danger); border-color:#fadbd8;" onclick="removeSubjectSetItem(${index})" aria-label="Remove ${escapeHtml(item.code)} for ${escapeHtml(item.program)} ${yearLevelLabel(item.year)}">&times;</button></td>
+        <td style="text-align:right;"><button type="button" class="btn btn-danger btn-sm" onclick="removeSubjectSetItem(${index})" aria-label="Remove ${escapeHtml(item.code)} for ${escapeHtml(item.program)} ${yearLevelLabel(item.year)}">&times;</button></td>
       </tr>
     `).join('');
   document.getElementById('subjectSetCount').textContent = `${items.length} subject${items.length === 1 ? '' : 's'} in this set`;
@@ -580,7 +592,7 @@ async function deleteSubjectSet(id) {
   if (!canManageSubjectSets()) return;
   const set = SUBJECT_SETS.find(s => s.id === id);
   if (!set) return;
-  if (!(await askConfirm(`"${set.name}" will be removed. Subjects already loaded into a term stay in that term.`, { title: 'Remove this subject set?', confirmLabel: 'Remove set', danger: true }))) return;
+  if (!(await askConfirm(`"${set.name}" will be deleted. Subjects already loaded into a term stay in that term.`, { title: 'Delete this subject set?', confirmLabel: 'Delete Set', danger: true }))) return;
   SUBJECT_SETS = SUBJECT_SETS.filter(s => s.id !== id);
   saveStateToStorage();
   renderSubjectSetTable();

@@ -17,9 +17,9 @@ function renderDeptFilterOptions() {
 }
 
 function renderFacultyCards() {
-  const grid = document.getElementById('facultyGrid');
-  if (!grid) return;
-  grid.innerHTML = '';
+  const tbody = document.getElementById('facultyTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
 
   const isAdmin = canManageData();
   const btnAddFac = document.getElementById('btnAddFaculty');
@@ -40,19 +40,29 @@ function renderFacultyCards() {
   const deptFilter = document.getElementById('facultyDeptFilter')?.value || 'all';
   const statusFilter = document.getElementById('facultyStatusFilter')?.value || 'all';
 
-  const filtered = FACULTY.filter(fac => {
+  const searchVal = (document.getElementById('facultySearchInput')?.value || '').trim().toLowerCase();
+  const sortChoice = document.getElementById('facultySortSelect')?.value || 'az';
+
+  const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  const fullTime = FACULTY.filter(f => f.status !== 'Part-time').length;
+  setText('statTotalFaculty', FACULTY.length);
+  setText('statFullTimeFaculty', fullTime);
+  setText('statPartTimeFaculty', FACULTY.length - fullTime);
+  setText('statFccCertificates', FCC_CERTIFICATES.length);
+
+  // Sorted A–Z by name unless another order is picked; First Added follows the list's own order
+  const filtered = sortByChoice(FACULTY.filter(fac => {
     const matchDept = deptFilter === 'all' || fac.dept === deptFilter;
     const matchStatus = statusFilter === 'all' || fac.status === statusFilter;
-    return matchDept && matchStatus;
-  });
+    const matchSearch = !searchVal || fac.name.toLowerCase().includes(searchVal) || (fac.email || '').toLowerCase().includes(searchVal);
+    return matchDept && matchStatus && matchSearch;
+  }), sortChoice, fac => FACULTY.indexOf(fac), fac => fac.name);
+  setText('facultySummaryText', filtered.length === FACULTY.length
+    ? `${FACULTY.length} teachers, their subjects and their loads`
+    : `Showing ${filtered.length} of ${FACULTY.length} teachers`);
 
   if (filtered.length === 0) {
-    grid.innerHTML = `
-      <div style="grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: var(--text-secondary); background: white; border-radius: var(--radius-md); border: 1px dashed var(--border-subtle);">
-        <div style="font-size: 1.071rem; font-weight: 600; margin-bottom: 4px;">No faculty profiles found</div>
-        <div style="font-size: 0.893rem;">No faculty members match the selected department and status filter criteria.</div>
-      </div>
-    `;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px 16px; color:var(--text-secondary);">No faculty members match the selected filters or search.</td></tr>';
     return;
   }
 
@@ -62,49 +72,54 @@ function renderFacultyCards() {
     const safeEmailId = fac.email.replace(/[^a-zA-Z0-9]/g, '_');
 
     const certsHtml = facultyCertificates(fac).map(c => {
-      const removeBtn = isAdmin ? `<span onclick="removeFacultyCertificate(${jsArg(fac.email)}, ${c.id}, event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(c.name)}">✕</span>` : '';
-      return `<span class="qual-tag locked" style="background:#F5F3FF; color:#6D28D9; border:1px solid #DDD6FE; font-weight:600; display:inline-flex; align-items:center;" title="Can teach every ${escapeHtml(c.areas.join(', '))} subject in the catalog">🎓 ${escapeHtml(c.name)}<span style="font-weight:500; opacity:0.75; margin-left:4px;">(${escapeHtml(c.areas.join(', '))})</span>${removeBtn}</span>`;
+      const removeBtn = isAdmin ? `<span onclick="removeFacultyCertificate(${jsArg(fac.email)}, ${c.id}, event)" style="margin-left:5px; cursor:pointer; font-weight:800; opacity:0.6;" title="Remove ${escapeHtml(c.name)}">&times;</span>` : '';
+      return `<span class="qual-tag locked" style="background:#F5F3FF; color:#6D28D9; border:1px solid #DDD6FE; font-weight:600; display:inline-flex; align-items:center;" title="Can teach every ${escapeHtml(c.areas.join(', '))} subject in the catalog">${escapeHtml(c.name)}<span style="font-weight:500; opacity:0.75; margin-left:4px;">(${escapeHtml(c.areas.join(', '))})</span>${removeBtn}</span>`;
     }).join('') || `<span style="font-size:0.857rem; color:var(--danger); font-style:italic;">None: cannot be assigned any classes</span>`;
 
     const facultyActionBtns = isAdmin
-      ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:1px 6px; border-radius:4px;" onclick="openChangeFacultyDeptModal(${jsArg(fac.email)})">Edit Profile</button>
-         <button class="btn btn-outline" style="font-size:0.857rem; padding:1px 6px; border-radius:4px; color:var(--danger); border-color:#fadbd8;" onclick="promptDeleteFaculty(${jsArg(fac.email)})">Remove</button>`
+      ? `<button class="btn btn-outline btn-sm" style="margin-right:4px;" onclick="openChangeFacultyDeptModal(${jsArg(fac.email)})">Edit Profile</button>
+         <button class="btn btn-danger btn-sm" onclick="promptDeleteFaculty(${jsArg(fac.email)})">Remove</button>`
       : ``;
 
-    const card = document.createElement('div');
-    card.className = 'faculty-card';
-    card.innerHTML = `
-      <div class="faculty-card-header">
-        <div class="faculty-avatar" style="background:${escapeHtml(fac.bg)};">${escapeHtml(initials)}</div>
-        <div style="flex:1;">
-          <div class="faculty-name">${escapeHtml(fac.name)}</div>
-          <div class="faculty-dept" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-            <span>${escapeHtml(fac.dept)} · ${escapeHtml(fac.status)}</span>
-            <span class="badge" style="${facultyTeachingLevel(fac) === 'shs' ? 'background:#F3E8FF; color:#6B21A8;' : facultyTeachingLevel(fac) === 'mixed' ? 'background:#FEF3C7; color:#92400E;' : 'background:#DBEAFE; color:#1E40AF;'} font-size:0.857rem; padding:1px 6px;" title="Levels this teacher may teach">Teaches: ${escapeHtml(TEACHING_LEVEL_NAMES[facultyTeachingLevel(fac)])}</span>
-            ${fac.seasoned ? '<span class="badge" style="background:#FEF9C3; color:#854D0E; font-size:0.857rem; padding:1px 6px;" title="Preferred when the generator hands out classes">⭐ Seasoned</span>' : ''}
-            <span class="badge badge-success" style="font-size:0.857rem; padding:1px 6px;">✓ Account: ${escapeHtml(fac.email)}</span>
-            ${fac.status === 'Part-time' ? `<div class="faculty-availability">${(fac.availableDays || []).length
-              ? `Available: ${escapeHtml(fac.availableDays.join(', '))} · ${escapeHtml(fac.availableShifts.join(', ').replace('MIDSHIFT', 'Midshift'))}`
-              : 'Availability not set: can be scheduled any time'}</div>` : ''}
-            <div class="faculty-card-actions">${facultyActionBtns}</div>
+    const level = facultyTeachingLevel(fac);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <div class="faculty-cell">
+          <div class="faculty-avatar" style="background:${escapeHtml(fac.bg)};">${escapeHtml(initials)}</div>
+          <div>
+            <div class="faculty-name">${escapeHtml(fac.name)}</div>
+            <div class="faculty-email">${escapeHtml(fac.email)}</div>
           </div>
         </div>
-      </div>
-      <div class="faculty-body">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; margin-bottom:4px;">
-          <span class="faculty-meta-label" style="margin:0; font-weight:700; color:#7C3AED;">🎓 FCC Certificates</span>
-          ${isAdmin ? `<button class="btn btn-outline" style="font-size:0.857rem; padding:1px 7px; border-radius:4px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px; color:#6D28D9; border-color:#DDD6FE;" onclick="toggleAddCertDropdown(${jsArg(fac.email)}, event)" title="Add an FCC certificate">+ Add</button>` : ''}
+      </td>
+      <td>${escapeHtml(fac.dept)}</td>
+      <td>
+        ${escapeHtml(fac.status)}
+        ${fac.status === 'Part-time' ? `<div class="faculty-availability">${(fac.availableDays || []).length
+          ? `Available: ${escapeHtml(fac.availableDays.join(', '))} · ${escapeHtml(fac.availableShifts.join(', ').replace('MIDSHIFT', 'Midshift'))}`
+          : 'Availability not set: can be scheduled any time'}</div>` : ''}
+      </td>
+      <td>
+        <div class="faculty-badges">
+          <span class="badge" style="${level === 'shs' ? 'background:#F3E8FF; color:#6B21A8;' : level === 'mixed' ? 'background:#FEF3C7; color:#92400E;' : 'background:#DBEAFE; color:#1E40AF;'}" title="Levels this teacher may teach">${escapeHtml(TEACHING_LEVEL_NAMES[level])}</span>
+          ${fac.seasoned ? '<span class="badge" style="background:#FEF9C3; color:#854D0E;" title="Preferred when the generator hands out classes">Seasoned</span>' : ''}
         </div>
-        <div id="addCertContainer-${safeEmailId}" style="display:none; margin-bottom:8px;"></div>
-        <div class="qual-tags">${certsHtml}</div>
-        <div style="font-size:0.857rem; color:var(--text-secondary); margin-top:6px;">Each certificate lets this teacher teach every catalog subject in its areas</div>
-      </div>
+      </td>
+      <td>
+        <div class="faculty-certs">
+          <div class="qual-tags">${certsHtml}</div>
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleAddCertDropdown(${jsArg(fac.email)}, event)" title="Add an FCC certificate">+ Add</button>` : ''}
+        </div>
+        <div id="addCertContainer-${safeEmailId}" style="display:none; margin-top:6px;"></div>
+      </td>
+      <td style="text-align:right;">${facultyActionBtns}</td>
     `;
-    grid.appendChild(card);
+    tbody.appendChild(tr);
   });
 }
 
-// Asks before removing qualifications a professor still teaches this term. If the user agrees,
+// Asks before removing qualifications a teacher still teaches this term. If the user agrees,
 // those classes come off the schedule with the qualification, so Generate can reassign them.
 // Returns null if cancelled, otherwise whether classes were removed.
 async function confirmClassRemoval(affected) {
@@ -113,13 +128,13 @@ async function confirmClassRemoval(affected) {
   const teachers = teacherNames.join(', ');
   const codes = [...new Set(affected.map(c => c.subjectCode))].join(', ');
   const count = affected.length;
-  const ok = await askConfirm(`${teachers} ${teacherNames.length === 1 ? 'teaches' : 'teach'} ${count} ${codes} class${count === 1 ? '' : 'es'} this term.\n\nRemoving the qualification also takes ${count === 1 ? 'that class' : 'those classes'} off the schedule. You can then run Generate to give ${count === 1 ? 'it' : 'them'} to another qualified professor.`, { title: 'Remove the qualification?', confirmLabel: `Remove and unschedule ${count === 1 ? 'class' : 'classes'}`, danger: true });
+  const ok = await askConfirm(`${teachers} ${teacherNames.length === 1 ? 'teaches' : 'teach'} ${count} ${codes} class${count === 1 ? '' : 'es'} this term.\n\nRemoving the qualification also takes ${count === 1 ? 'that class' : 'those classes'} off the schedule. You can then run Generate to give ${count === 1 ? 'it' : 'them'} to another qualified teacher.`, { title: 'Remove the qualification?', confirmLabel: `Remove and Unschedule ${count === 1 ? 'Class' : 'Classes'}`, danger: true });
   if (!ok) return null;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !affected.includes(c));
   return { removeClasses: true };
 }
 
-// Checks a profile change against the professor's scheduled classes.
+// Checks a profile change against the teacher's scheduled classes.
 // A lowered max load below what they already teach is refused; classes outside new availability are returned.
 function facultyChangeImpact(fac, status, days, shifts, maxLoad) {
   const theirs = MASTER_SCHEDULE_DATA.filter(c => c.instructor === fac.name);
@@ -138,7 +153,7 @@ function facultyChangeImpact(fac, status, days, shifts, maxLoad) {
       const units = unitsIn(termId) + otherUnits;
       if (units > maxLoad + 0.001) {
         const term = SCHOOL_TERMS.find(t => t.id === termId);
-        return { refuse: `${fac.name} already teaches ${formatUnits(units)} units${term ? ` in ${term.termName}` : ''}${otherUnits > 0 ? ', counting the overlapping College or SHS term' : ''}, so the max load can't be set to ${maxLoad}. Move some of their classes to another professor first.` };
+        return { refuse: `${fac.name} already teaches ${formatUnits(units)} units${term ? ` in ${term.termName}` : ''}${otherUnits > 0 ? ', counting the overlapping College or SHS term' : ''}, so the max load can't be set to ${maxLoad}. Move some of their classes to another teacher first.` };
       }
     }
   }
@@ -293,13 +308,13 @@ function renderCertList() {
     const subjects = SUBJECTS.filter(s => c.areas.includes(s.dept)).length;
     return `<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#F8FAFD; border:1px solid var(--border-subtle); border-radius:8px; gap:8px;">
       <div style="flex:1; min-width:0;">
-        <div style="font-weight:600; font-size:0.929rem; color:var(--text-primary);">🎓 ${escapeHtml(c.name)}</div>
+        <div style="font-weight:600; font-size:0.929rem; color:var(--text-primary);">${escapeHtml(c.name)}</div>
         <div style="font-size:0.857rem; color:var(--text-secondary);">Covers ${escapeHtml(c.areas.join(', '))} · ${subjects} catalog subject${subjects === 1 ? '' : 's'}</div>
         <div style="font-size:0.857rem; color:var(--text-secondary);">${holders.length ? `Held by ${escapeHtml(holders.join(', '))}` : 'No holders yet: give it to teachers in Edit Profile'}</div>
       </div>
       <div style="display:flex; gap:6px;">
-        <button class="btn btn-outline" style="padding:4px 8px; font-size:0.857rem;" onclick="editCertificate(${c.id})">Edit</button>
-        <button class="btn btn-outline" style="padding:4px 8px; font-size:0.857rem; color:var(--danger); border-color:#fadbd8;" onclick="deleteCertificate(${c.id})">Delete</button>
+        <button class="btn btn-outline btn-sm" onclick="editCertificate(${c.id})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCertificate(${c.id})">Delete</button>
       </div>
     </div>`;
   }).join('') || '<div style="font-size:0.857rem; color:var(--text-secondary);">No certificates yet.</div>';
@@ -375,7 +390,7 @@ window.deleteCertificate = async function(id) {
   const holders = FACULTY.filter(f => (f.certificates || []).includes(id));
   const ok = lost.length > 0
     ? await askToUnscheduleBroken(lost, `Delete ${cert.name}?`, `Teachers rely on ${cert.name} for some of their classes this term.`)
-    : await askConfirm(`${cert.name} will be deleted${holders.length ? ` and taken away from ${holders.map(f => f.name).join(', ')}` : ''}.`, { title: 'Delete this certificate?', confirmLabel: 'Delete certificate', danger: true });
+    : await askConfirm(`${cert.name} will be deleted${holders.length ? ` and taken away from ${holders.map(f => f.name).join(', ')}` : ''}.`, { title: 'Delete this certificate?', confirmLabel: 'Delete Certificate', danger: true });
   if (!ok) return;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !lost.includes(c));
   FCC_CERTIFICATES = remaining;
@@ -404,8 +419,8 @@ window.toggleAddCertDropdown = function(email, event) {
           ${available.map(c => `<label class="availability-option" title="Covers ${escapeHtml(c.areas.join(', '))}"><input type="checkbox" value="${c.id}" /> ${escapeHtml(c.name)}</label>`).join('')}
         </div>
         <div style="display:flex; gap:6px; justify-content:flex-end;">
-          <button class="btn btn-outline" style="font-size:0.857rem; padding:3px 8px; height:28px; line-height:1;" onclick="toggleAddCertDropdown(${jsArg(fac.email)})">Cancel</button>
-          <button class="btn btn-primary" style="font-size:0.857rem; padding:3px 10px; height:28px; line-height:1;" onclick="confirmAddFacultyCert(${jsArg(fac.email)})">Add selected</button>
+          <button class="btn btn-outline btn-sm" onclick="toggleAddCertDropdown(${jsArg(fac.email)})">Cancel</button>
+          <button class="btn btn-primary btn-sm" onclick="confirmAddFacultyCert(${jsArg(fac.email)})">Add selected</button>
         </div>
       </div>`;
   container.style.display = 'block';
@@ -476,7 +491,7 @@ function renderDeptList() {
         <div style="font-size:0.857rem; color:var(--text-secondary);">${facultyCount} faculty assigned</div>
       </div>
       <div style="display:flex; gap:6px;">
-        <button class="btn btn-outline" style="padding:4px 8px; font-size:0.857rem; color:var(--danger); border-color:#fadbd8;" onclick="deleteDepartment(${idx})">Delete</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteDepartment(${idx})">Delete</button>
       </div>
     `;
     container.appendChild(row);
@@ -572,10 +587,10 @@ function readAvailabilityPicker(prefix) {
   return { days: checked('day'), shifts: checked('shift') };
 }
 
-// Returns an error message, or null if this availability can be saved for the professor
+// Returns an error message, or null if this availability can be saved for the teacher
 function availabilityFormProblem(name, status, picked) {
   if (status !== 'Part-time') return null;
-  if (!picked.days.length || !picked.shifts.length) return 'Choose at least one day and one shift for a part-time professor.';
+  if (!picked.days.length || !picked.shifts.length) return 'Choose at least one day and one shift for a part-time teacher.';
   // Classes outside the new availability are handled by facultyChangeImpact, which asks before unscheduling them
   return null;
 }
@@ -711,7 +726,7 @@ window.submitChangeFacultyDept = async function() {
 
   // 4. Update assigned timetable slots if name changed
 
-  // A renamed professor keeps their classes
+  // A renamed teacher keeps their classes
   if (typeof MASTER_SCHEDULE_DATA !== 'undefined' && Array.isArray(MASTER_SCHEDULE_DATA)) {
     MASTER_SCHEDULE_DATA.forEach(c => {
       if (c.instructor === oldName) {
@@ -986,7 +1001,7 @@ window.confirmDeleteFacultyProfile = async function() {
     closeDeleteFacultyModal();
     const count = theirClasses.length;
     const ok = await askConfirm(`${facName} still teaches ${classesByTermText(theirClasses)}.\n\nReassign ${count === 1 ? 'it' : 'them'} first, or take ${count === 1 ? 'it' : 'them'} off the timetable now and remove this profile. You can then run Generate in ${new Set(theirClasses.map(c => c.termId)).size === 1 ? 'that term' : 'each term'} to give the classes to other teachers.`,
-      { title: 'This teacher still has classes', confirmLabel: `Take off ${count} class${count === 1 ? '' : 'es'} and remove`, danger: true });
+      { title: 'This teacher still has classes', confirmLabel: `Take Off ${count} Class${count === 1 ? '' : 'es'} and Remove`, danger: true });
     if (!ok) return;
     // Every affected term is saved, and all must succeed, before the certificates go: the server refuses to take
     // certificates from a teacher who still has classes

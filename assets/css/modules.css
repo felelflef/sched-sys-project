@@ -42,25 +42,6 @@
 /* ═════════════════════════════════════
    MODULE 4 — FACULTY PROFILING
    ═════════════════════════════════════ */
-.faculty-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-}
-.faculty-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-float);
-  overflow: hidden;
-  transition: all var(--transition);
-}
-.faculty-card:hover { transform: translateY(-3px); box-shadow: 0 14px 40px rgba(44,48,58,0.08); }
-.faculty-card-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 18px;
-  border-bottom: 1px solid var(--border-subtle);
-}
 .faculty-avatar {
   width: 42px; height: 42px;
   border-radius: 50%;
@@ -69,9 +50,6 @@
   color: var(--text-on-accent);
 }
 .faculty-name { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
-.faculty-dept { font-size: 0.857rem; color: var(--text-secondary); }
-.faculty-body { padding: 16px 18px; }
-.faculty-meta-label { font-size: 0.857rem; color: var(--text-secondary); }
 .qual-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
 .qual-tag {
   padding: 3px 9px;
@@ -300,8 +278,7 @@ select:focus, input:focus { box-shadow: 0 0 0 3px rgba(37, 68, 122, 0.1); }
 
 /* Only things you can click should react to the pointer */
 .card:hover { box-shadow: var(--shadow-float); }
-.stat-card:hover,
-.faculty-card:hover {
+.stat-card:hover {
   transform: none;
   box-shadow: var(--shadow-float);
 }
@@ -354,10 +331,16 @@ select:focus, input:focus { box-shadow: 0 0 0 3px rgba(37, 68, 122, 0.1); }
 #sectionsTableBody td:nth-child(6),
 #sectionsTableBody td:nth-child(7) { white-space: nowrap; }
 
-/* Faculty cards */
-.faculty-card-actions { display: flex; flex-basis: 100%; gap: 6px; margin-top: 4px; }
-.faculty-card-actions:empty { display: none; }
-.faculty-availability { flex-basis: 100%; font-weight: 600; color: var(--warning); }
+/* Faculty Profiles table */
+.faculty-cell { display: flex; align-items: center; gap: 10px; }
+.faculty-cell .faculty-avatar { width: 36px; height: 36px; flex-shrink: 0; font-size: 0.929rem; }
+.faculty-email { font-size: 0.857rem; color: var(--text-secondary); word-break: break-all; }
+.faculty-availability { margin-top: 2px; font-size: 0.857rem; font-weight: 600; color: var(--warning); }
+.faculty-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.faculty-certs { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.faculty-certs .qual-tag { white-space: normal; flex-wrap: wrap; }
+.faculty-certs .qual-tags { margin-top: 0; }
+#page-faculty .data-table td:last-child { white-space: nowrap; }
 
 /* Part-time availability picker */
 .availability-picker {
@@ -650,3 +633,59 @@ th[data-sorted="desc"]::after { content: ' \25BC'; font-size: 0.857rem; }
 .select-search-option.is-disabled { color: var(--text-secondary); opacity: 0.6; cursor: default; }
 .select-search-group { padding: 6px 10px 2px; font-size: 0.786rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; }
 .select-search-empty { padding: 8px 10px; font-size: 0.929rem; color: var(--text-secondary); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ONE LOOK THROUGHOUT: buttons, close buttons, headings, tables, cards and fields
+   ══════════════════════════════════════════════════════════════════════════ */
+/* Buttons: one regular size, and one small size for actions inside tables, lists and boxes */
+.btn { padding: 8px 16px; font-size: 0.893rem; font-weight: 600; }
+.btn-sm { padding: 4px 10px; font-size: 0.857rem; min-height: 2.25rem; }
+/* Delete and remove actions; .btn-danger-solid is the final confirm inside a dialog */
+.btn-danger { background: transparent; color: var(--danger); border: 1.5px solid #FADBD8; }
+.btn-danger:hover { border-color: var(--danger); background: var(--danger-bg); }
+/* Every dialog's close button */
+.btn-close { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 2.25rem; height: 2.25rem; padding: 0; border: none; border-radius: var(--radius-sm); background: none; color: var(--text-secondary); font-size: 1.429rem; line-height: 1; cursor: pointer; }
+.btn-close:hover { background: #F3F4F6; color: var(--text-primary); }
+@media (pointer: coarse) {
+  .btn-sm { min-height: 2.75rem; }
+  .btn-close { width: 2.75rem; height: 2.75rem; }
+}
+/* Card headings: the Master Schedule steps use the same heading as every other page */
+.lifecycle-card-title { font-size: 1.036rem; font-weight: 700; color: var(--text-primary); }
+.lifecycle-card-title svg { color: var(--accent-primary); }
+.lifecycle-card { background: var(--bg-secondary); border-radius: var(--radius); }
+/* Tables: Master Schedule tables read like the tables on the other pages */
+.lifecycle-table th { text-transform: none; letter-spacing: 0; }
+.lifecycle-table td { color: var(--text-primary); }
+.lifecycle-table tbody tr:hover,
+.data-table tbody tr:hover { background: #FAFBFC; }
+/* Fields: the same border, corners and text size everywhere */
+.room-plan-select { border-width: 1.5px; border-radius: var(--radius-sm); font-size: 0.929rem; background: var(--bg-secondary); }
+
+/* AI Assistant side panel: opened from Master Schedule and View Schedule, above the page and below pop-ups */
+.btn[hidden] { display: none; }
+.page-heading-actions { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; flex-wrap: wrap; }
+@media (max-width: 760px) { .page-heading-actions { flex-basis: 100%; } .page-heading-actions .global-search { flex: 1 1 200px; } }
+.ai-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 950; width: min(420px, 100vw); display: flex; flex-direction: column; background: var(--bg-primary, #F4F6FA); border-left: 1px solid var(--border-subtle); box-shadow: -12px 0 32px rgba(0, 0, 0, 0.12); }
+.ai-panel[hidden] { display: none; }
+.ai-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle); }
+.ai-panel-header h3 { margin: 0; font-size: 1.143rem; font-weight: 700; color: var(--accent-primary); }
+.ai-panel-body { flex: 1; overflow-y: auto; padding: 16px; }
+.ai-panel .ai-prompt-container { padding: 16px; margin-bottom: 16px; }
+.ai-panel .ai-prompt-form { flex-direction: column; }
+.ai-panel .ai-results-header { padding: 12px 16px; }
+.ai-panel .ai-results-body { padding: 16px; }
+@media print { .ai-panel { display: none !important; } }
+
+/* One layout for Room Information, Faculty Profiles, Subject Catalog and the Activity Log:
+   a card whose header holds the title, a live count and the buttons, then this shaded filter bar */
+.card-filters { padding: 16px 22px; border-bottom: 1px solid var(--border-subtle); background: #FAFCFF; }
+.card-filters .grid-controls { margin-bottom: 0; }
+.filter-search { padding: 6px 12px; font-size: 0.893rem; width: 220px; }
+@media (max-width: 760px) {
+  .card-filters { padding: 12px 16px; }
+  .card-header:has(.card-header-tools) { flex-wrap: wrap; }
+  .card-header:has(.card-header-tools) > div:first-child { flex: 1 1 100%; }
+  .card-filters .filter-group { flex: 1 1 100%; }
+  .card-filters .filter-group select, .card-filters .filter-search { flex: 1; width: auto; min-width: 0; }
+}
