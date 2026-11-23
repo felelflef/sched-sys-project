@@ -284,25 +284,43 @@ function loadAvailability(PDO $db): array {
     return $map;
 }
 
-/** Times are HH:MM:SS. Selected shifts that touch or overlap count as one continuous window. */
+/** An availability entry is a time range such as "13:00-17:00", or a shift name (AM, MIDSHIFT, PM) saved before
+ *  ranges existed. Returns [start, end] as HH:MM:SS, or null when the entry is neither. */
+function availabilityWindow($entry): ?array {
+    if (!is_string($entry)) {
+        return null;
+    }
+    if (isset(SHIFT_WINDOWS[$entry])) {
+        return SHIFT_WINDOWS[$entry];
+    }
+    if (preg_match('/^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/', $entry, $m)) {
+        return ["{$m[1]}:{$m[2]}:00", "{$m[3]}:{$m[4]}:00"];
+    }
+    return null;
+}
+
+/** Times are HH:MM:SS. Available hours that touch or overlap count as one continuous window. */
 function isWithinAvailability(array $availability, string $day, string $start, string $end): bool {
     if (!in_array($day, $availability['days'], true)) {
         return false;
     }
+    $windows = array_values(array_filter(array_map('availabilityWindow', $availability['shifts'])));
+    usort($windows, fn($a, $b) => strcmp($a[0], $b[0]));
     $from = null;
     $to = null;
-    foreach (SHIFT_WINDOWS as $shift => [$shiftStart, $shiftEnd]) {
-        if (!in_array($shift, $availability['shifts'], true)) {
-            continue;
-        }
-        if ($from !== null && $shiftStart > $to) {
+    foreach ($windows as [$windowStart, $windowEnd]) {
+        if ($from !== null && $windowStart > $to) {
             if ($start >= $from && $end <= $to) {
                 return true;
             }
             $from = null;
         }
-        $from = $from ?? $shiftStart;
-        $to = $shiftEnd;
+        if ($from === null) {
+            $from = $windowStart;
+            $to = $windowEnd;
+        } else {
+            $to = max($to, $windowEnd);
+        }
     }
     return $from !== null && $start >= $from && $end <= $to;
 }
@@ -687,15 +705,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $sentDays = is_array($input['days'] ?? null) ? $input['days'] : [];
         $sentShifts = is_array($input['shifts'] ?? null) ? $input['shifts'] : [];
         $days = array_values(array_intersect(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], $sentDays));
-        $shifts = array_values(array_intersect(array_keys(SHIFT_WINDOWS), $sentShifts));
-        if (count($days) !== count($sentDays) || count($shifts) !== count($sentShifts)) {
-            rejectInput('Please choose valid days and shifts.');
+        // Available hours: a time range within the school day, at least an hour long (or a shift name saved before ranges)
+        $shifts = array_values(array_filter($sentShifts, function ($entry) {
+            $window = availabilityWindow($entry);
+            return $window !== null && $window[0] >= SCHOOL_DAY_START && $window[1] <= SCHOOL_DAY_END
+                && strtotime("1970-01-01 {$window[1]}") - strtotime("1970-01-01 {$window[0]}") >= 3600;
+        }));
+        if (count($days) !== count($sentDays) || count($shifts) !== count($sentShifts) || strlen(implode(',', $shifts)) > 30) {
+            rejectInput('Please choose valid days and available hours (between 7:00 AM and 8:30 PM, at least 1 hour).');
         }
         if ($status === 'Full-time') {
             $days = [];
             $shifts = [];
         } elseif ((bool)$days !== (bool)$shifts) {
-            rejectInput('Choose at least one day and one shift.');
+            rejectInput('Choose at least one day and the available hours.');
         }
 
         $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ? AND role IN ('faculty', 'program-head')");

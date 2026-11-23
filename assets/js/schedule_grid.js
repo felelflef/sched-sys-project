@@ -186,21 +186,39 @@ function applyScheduleRole() {
   document.body.classList.toggle('role-program-head', !!(CURRENT_USER && CURRENT_USER.role === 'program-head'));
 }
 
-// Selected shifts that touch or overlap count as one continuous window
+// A part-time teacher's available hours are a time range such as "13:00-17:00", or a shift name (AM, MIDSHIFT, PM)
+// saved before ranges existed. Returns [start, end] in minutes, or null when the entry is neither.
+function availabilityWindow(entry) {
+  if (SHIFT_WINDOWS[entry]) return SHIFT_WINDOWS[entry];
+  const m = /^(\d\d):(\d\d)-(\d\d):(\d\d)$/.exec(entry || '');
+  return m ? [Number(m[1]) * 60 + Number(m[2]), Number(m[3]) * 60 + Number(m[4])] : null;
+}
+
+// Available hours as people read them, such as "1:00 PM–5:00 PM"
+function availabilityHoursLabel(shifts) {
+  return (shifts || []).map(availabilityWindow).filter(Boolean)
+    .map(([s, e]) => `${formatTime12(minutesToTime(s))}–${formatTime12(minutesToTime(e))}`).join(', ');
+}
+
+// Available hours that touch or overlap count as one continuous window
 function isWithinAvailability(days, shifts, day, startTime, endTime) {
   if (!days.includes(day)) return false;
   const start = timeToMinutes(startTime);
   const end = timeToMinutes(endTime);
+  const windows = shifts.map(availabilityWindow).filter(Boolean).sort((a, b) => a[0] - b[0]);
   let from = null;
   let to = null;
-  for (const [shift, [shiftStart, shiftEnd]] of Object.entries(SHIFT_WINDOWS)) {
-    if (!shifts.includes(shift)) continue;
-    if (from !== null && shiftStart > to) {
+  for (const [windowStart, windowEnd] of windows) {
+    if (from !== null && windowStart > to) {
       if (start >= from && end <= to) return true;
       from = null;
     }
-    if (from === null) from = shiftStart;
-    to = shiftEnd;
+    if (from === null) {
+      from = windowStart;
+      to = windowEnd;
+    } else {
+      to = Math.max(to, windowEnd);
+    }
   }
   return from !== null && start >= from && end <= to;
 }
@@ -309,7 +327,7 @@ function facultyAvailabilityProblem(instructorName, day, startTime, endTime) {
   const fac = FACULTY.find(f => f.name && f.name.toLowerCase() === (instructorName || '').toLowerCase());
   if (!fac || fac.status !== 'Part-time' || !(fac.availableDays || []).length || !(fac.availableShifts || []).length) return null;
   if (isWithinAvailability(fac.availableDays, fac.availableShifts, day, startTime, endTime)) return null;
-  return `Not Available: ${fac.name} only teaches ${fac.availableDays.join(', ')} during ${fac.availableShifts.join(', ')} shift`;
+  return `Not Available: ${fac.name} only teaches ${fac.availableDays.join(', ')}, ${availabilityHoursLabel(fac.availableShifts)}`;
 }
 
 function checkFacultySubjectConflict(instructorName, subjectCode, sectionCode) {
