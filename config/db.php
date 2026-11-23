@@ -7,18 +7,18 @@ ini_set('log_errors', '1');
 // ─────────────────────────────────────────────────────────
 // DATABASE CREDENTIALS
 // Reads from environment variables (set in the Render dashboard).
-// Aiven MySQL provides: host, port, dbname, user, password,
-// and requires SSL (sslmode=required).
+// Aiven PostgreSQL provides: host, port, dbname (defaultdb), user (avnadmin), password,
+// and requires SSL (sslmode=require).
 // ─────────────────────────────────────────────────────────
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_PORT', getenv('DB_PORT') ?: '3306');
+define('DB_PORT', getenv('DB_PORT') ?: '5432');
 define('DB_NAME', getenv('DB_NAME') ?: 'sti_classroom_system');
 define('DB_USER', getenv('DB_USER') ?: 'root');
 define('DB_PASS', getenv('DB_PASS') ?: '');
 
 // Aiven requires SSL. Set DB_SSL=true in Render's environment variables.
 // Raise this whenever a new database column or table is added
-define('SCHEMA_VERSION', '2026-11-20.1');
+define('SCHEMA_VERSION', '2026-11-23.pg1');
 define('DB_SSL', filter_var(getenv('DB_SSL') ?: 'false', FILTER_VALIDATE_BOOLEAN));
 
 // Gemini API
@@ -40,12 +40,21 @@ final class DatabaseSessionHandler implements SessionHandlerInterface {
         return (string)($find->fetchColumn() ?: '');
     }
     public function write(string $id, string $data): bool {
-        getDB()->prepare("REPLACE INTO app_sessions (session_id, data, updated_at) VALUES (?, ?, ?)")->execute([$id, $data, time()]);
+        self::dbOutsideTransaction()->prepare("INSERT INTO app_sessions (session_id, data, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT (session_id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at")->execute([$id, $data, time()]);
         return true;
     }
     public function destroy(string $id): bool {
-        getDB()->prepare("DELETE FROM app_sessions WHERE session_id = ?")->execute([$id]);
+        self::dbOutsideTransaction()->prepare("DELETE FROM app_sessions WHERE session_id = ?")->execute([$id]);
         return true;
+    }
+    // The sign-in is saved as the request ends. A request that stopped part-way through a transaction, such as after
+    // an error, left it unfinished; its changes are discarded here (the same happened on MySQL when the connection
+    // closed), because PostgreSQL refuses every further statement in a failed transaction.
+    private static function dbOutsideTransaction(): PDO {
+        $db = getDB();
+        if ($db->inTransaction()) $db->rollBack();
+        return $db;
     }
     public function gc(int $maxLifetime): int|false {
         $old = getDB()->prepare("DELETE FROM app_sessions WHERE updated_at < ?");
@@ -78,24 +87,28 @@ if (session_status() === PHP_SESSION_NONE) {
     }
 }
 
+// Creates any missing table from sql/schema_pg.sql. Every statement there is safe to run again.
+function ensureSchema(PDO $pdo): void {
+    $pdo->exec((string)file_get_contents(__DIR__ . '/../sql/schema_pg.sql'));
+}
+
 function getDB(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+        $dsn = "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME;
+
+        // Aiven PostgreSQL requires SSL connections. Set DB_SSL_CA to the CA certificate file from the Aiven
+        // console to also check the server's certificate and name; without it the connection is still encrypted.
+        if (DB_SSL) {
+            $sslCa = getenv('DB_SSL_CA') ?: '';
+            $dsn .= $sslCa !== '' ? ";sslmode=verify-full;sslrootcert=" . $sslCa : ";sslmode=require";
+        }
 
         $options = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
         ];
-
-        // Aiven MySQL requires SSL connections
-        if (DB_SSL) {
-            // Set DB_SSL_CA to the provider's CA file path to verify the server certificate.
-            $sslCa = getenv('DB_SSL_CA') ?: '';
-            $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = $sslCa !== '';
-            $options[PDO::MYSQL_ATTR_SSL_CA] = $sslCa;
-        }
 
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
@@ -113,70 +126,12 @@ function getDB(): PDO {
 
             if (($stamps['schema_core'] ?? '') !== SCHEMA_VERSION) {
                 try {
-                    // Sign-ins (see DatabaseSessionHandler) and the Lock flag on classes
-                    $pdo->exec("CREATE TABLE IF NOT EXISTS app_sessions (session_id VARCHAR(128) PRIMARY KEY, data MEDIUMTEXT NOT NULL, updated_at INT NOT NULL, INDEX idx_sessions_updated (updated_at))");
-                    if ($pdo->query("SHOW TABLES LIKE 'schedules'")->fetch() && !$pdo->query("SHOW COLUMNS FROM schedules LIKE 'is_locked'")->fetch()) {
-                        $pdo->exec("ALTER TABLE schedules ADD COLUMN is_locked TINYINT(1) NOT NULL DEFAULT 0");
-                    }
-                    $checkUsers = $pdo->query("SHOW COLUMNS FROM users LIKE 'subject_role'")->fetch();
-                    if (!$checkUsers) {
-                        $pdo->exec("ALTER TABLE users ADD COLUMN subject_role VARCHAR(50) DEFAULT 'IT'");
-                    }
-                    $checkSchedules = $pdo->query("SHOW COLUMNS FROM schedules LIKE 'subject_category'")->fetch();
-                    if (!$checkSchedules) {
-                        $pdo->exec("ALTER TABLE schedules ADD COLUMN subject_category VARCHAR(50) DEFAULT 'IT'");
-                    }
-                    $checkTerm = $pdo->query("SHOW COLUMNS FROM schedules LIKE 'term_id'")->fetch();
-                    if (!$checkTerm) {
-                        $pdo->exec("ALTER TABLE schedules ADD COLUMN term_id INT NULL, ADD INDEX idx_schedules_term_day (term_id, day_of_week)");
-                    }
-                    $checkAiFlag = $pdo->query("SHOW COLUMNS FROM schedules LIKE 'ai_generated'")->fetch();
-                    if (!$checkAiFlag) {
-                        $pdo->exec("ALTER TABLE schedules ADD COLUMN ai_generated TINYINT(1) NOT NULL DEFAULT 0");
-                    }
-                    $checkAvailability = $pdo->query("SHOW COLUMNS FROM users LIKE 'employment_status'")->fetch();
-                    if (!$checkAvailability) {
-                        $pdo->exec("ALTER TABLE users ADD COLUMN employment_status VARCHAR(20) NOT NULL DEFAULT 'Full-time', ADD COLUMN available_days VARCHAR(30) NOT NULL DEFAULT '', ADD COLUMN available_shifts VARCHAR(30) NOT NULL DEFAULT ''");
-                    }
-                    // Roles: System Administrator, Program Head and Faculty / Professor.
-                    // Former Academic Head accounts keep their classes and become faculty.
-                    $checkRole = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
-                    if ($checkRole && (strpos($checkRole['Type'], 'academic-head') !== false || strpos($checkRole['Type'], 'program-head') === false)) {
-                        // Every old value fits during the change, whichever list the column had
-                        $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'academic-head', 'program-head', 'faculty') NOT NULL");
-                        $pdo->exec("UPDATE users SET role = 'faculty' WHERE role = 'academic-head'");
-                        $pdo->exec("UPDATE users SET subject_role = 'IT' WHERE subject_role IN ('Academic Leadership', 'Program Leadership')");
-                        $pdo->exec("UPDATE users SET first_name = 'Prof.', last_name = 'IT Instructor' WHERE email = 'acah@sti.edu' AND first_name = 'Academic' AND last_name = 'Head'");
-                        $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'program-head', 'faculty') NOT NULL");
-                    }
-                    $checkSession = $pdo->query("SHOW COLUMNS FROM users LIKE 'active_session_token'")->fetch();
-                    if (!$checkSession) {
-                        $pdo->exec("ALTER TABLE users ADD COLUMN active_session_token VARCHAR(255) DEFAULT NULL");
-                    }
-                    $checkMaxLoad = $pdo->query("SHOW COLUMNS FROM users LIKE 'max_load'")->fetch();
-                    if (!$checkMaxLoad) {
-                        $pdo->exec("ALTER TABLE users ADD COLUMN max_load INT NOT NULL DEFAULT 24");
-                    }
-                    // Which levels a teacher may teach: college (tertiary), Senior High School, or both (mixed)
-                    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'teaching_level'")->fetch()) {
-                        $pdo->exec("ALTER TABLE users ADD COLUMN teaching_level VARCHAR(10) NOT NULL DEFAULT 'tertiary'");
-                    }
-                    // Loads are counted in units from here on: a minimum and a maximum per teacher. Saved maximums
-                    // were hours (usually 24 full-time, 15 part-time), so they are raised once to the unit defaults.
-                    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'min_load'")->fetch()) {
-                        $pdo->exec("ALTER TABLE users ADD COLUMN min_load INT DEFAULT NULL");
-                        $pdo->exec("UPDATE users SET max_load = GREATEST(max_load, 24) WHERE employment_status = 'Part-time'");
-                        $pdo->exec("UPDATE users SET max_load = GREATEST(max_load, 30) WHERE employment_status <> 'Part-time' OR employment_status IS NULL");
-                    }
-                    // Seasoned teachers are preferred when the generator hands out classes
-                    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'seasoned'")->fetch()) {
-                        $pdo->exec("ALTER TABLE users ADD COLUMN seasoned TINYINT(1) NOT NULL DEFAULT 0");
-                    }
-                    // Change history (the statement is repeated in includes/activity.php for a database that lacks it)
-                    $pdo->exec("CREATE TABLE IF NOT EXISTS activity_log (log_id INT AUTO_INCREMENT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, user_email VARCHAR(100) NOT NULL, user_name VARCHAR(101) NOT NULL, user_role VARCHAR(20) NOT NULL, category VARCHAR(20) NOT NULL, summary VARCHAR(500) NOT NULL, INDEX idx_activity_time (created_at))");
-                    $pdo->prepare("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('schema_core', ?)")->execute([SCHEMA_VERSION]);
+                    ensureSchema($pdo);
+                    $pdo->prepare("INSERT INTO app_settings (setting_key, setting_value) VALUES ('schema_core', ?)
+                        ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value")->execute([SCHEMA_VERSION]);
                 } catch (\Throwable $migErr) {
-                    // Silently ignore schema check errors to avoid blocking execution if restricted
+                    // The app keeps running on the tables it has; the reason goes to the server log
+                    error_log('Schema setup failed: ' . $migErr->getMessage());
                 }
             }
         } catch (PDOException $e) {

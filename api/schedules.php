@@ -374,7 +374,8 @@ function saveScheduleSnapshot(PDO $db, int $termId): void {
     $find->execute([$termId]);
     $rows = $find->fetchAll();
     if ($rows) {
-        $db->prepare("REPLACE INTO schedule_snapshots (term_id, saved_at, schedule_json) VALUES (?, NOW(), ?)")->execute([$termId, json_encode($rows)]);
+        $db->prepare("INSERT INTO schedule_snapshots (term_id, saved_at, schedule_json) VALUES (?, NOW(), ?)
+            ON CONFLICT (term_id) DO UPDATE SET saved_at = EXCLUDED.saved_at, schedule_json = EXCLUDED.schedule_json")->execute([$termId, json_encode($rows)]);
     }
 }
 
@@ -525,7 +526,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 $db->exec("DELETE FROM {$table}");
             }
 
-            $insDept = $db->prepare("INSERT IGNORE INTO departments (department_name) VALUES (?)");
+            $insDept = $db->prepare("INSERT INTO departments (department_name) VALUES (?) ON CONFLICT DO NOTHING");
             foreach ($departments as $d) {
                 $insDept->execute([$d]);
             }
@@ -562,21 +563,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 $db->exec("DELETE FROM fcc_certificates");
             }
             $insCert = $db->prepare("INSERT INTO fcc_certificates (cert_id, cert_name, areas_json) VALUES (?, ?, ?)");
-            $insHolder = $db->prepare("INSERT IGNORE INTO faculty_certificates (user_id, cert_id) SELECT user_id, ? FROM users WHERE email = ?");
+            $insNewCert = $db->prepare("INSERT INTO fcc_certificates (cert_name, areas_json) VALUES (?, ?)");
+            $insHolder = $db->prepare("INSERT INTO faculty_certificates (user_id, cert_id) SELECT user_id, CAST(? AS INT) FROM users WHERE email = ? ON CONFLICT DO NOTHING");
             $seenCertNames = [];
             foreach ($certificates as $cert) {
                 $certName = trim((string)($cert['name'] ?? ''));
                 if ($certName === '' || mb_strlen($certName) > 60 || isset($seenCertNames[strtolower($certName)])) continue;
                 $seenCertNames[strtolower($certName)] = true;
-                $insCert->execute([(int)($cert['id'] ?? 0) ?: null, $certName, json_encode(array_values(array_map('strval', (array)($cert['areas'] ?? []))))]);
-                $newCertId = (int)($cert['id'] ?? 0) ?: (int)$db->lastInsertId();
+                $certAreas = json_encode(array_values(array_map('strval', (array)($cert['areas'] ?? []))));
+                if ((int)($cert['id'] ?? 0)) {
+                    $insCert->execute([(int)$cert['id'], $certName, $certAreas]);
+                    $newCertId = (int)$cert['id'];
+                } else {
+                    $insNewCert->execute([$certName, $certAreas]);
+                    $newCertId = (int)$db->lastInsertId();
+                }
                 foreach ((array)($cert['holders'] ?? []) as $email) {
                     $insHolder->execute([$newCertId, (string)$email]);
                 }
             }
-            $insSet = $db->prepare("INSERT INTO subject_sets (set_name, items_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE items_json = VALUES(items_json)");
+            $insSet = $db->prepare("INSERT INTO subject_sets (set_name, items_json) VALUES (?, ?) ON CONFLICT (set_name) DO UPDATE SET items_json = EXCLUDED.items_json");
             foreach ($subjectSets as $setName => $setItems) {
                 $insSet->execute([$setName, json_encode($setItems)]);
+            }
+            foreach (['school_years' => 'year_id', 'school_terms' => 'term_id', 'term_subjects' => 'subject_id', 'academic_sections' => 'section_id', 'fcc_certificates' => 'cert_id'] as $table => $idColumn) {
+                $db->exec("SELECT setval(pg_get_serial_sequence('{$table}', '{$idColumn}'), COALESCE(MAX({$idColumn}), 0) + 1, false) FROM {$table}");
             }
             $db->exec("INSERT INTO app_settings (setting_key, setting_value) VALUES ('state_published', '1')");
             $db->commit();
@@ -739,8 +750,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $level = in_array($input['level'] ?? '', ['tertiary', 'shs', 'both'], true) ? $input['level'] : null;
         $stmt = $db->prepare("
             INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units, level) VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE subject_title = VALUES(subject_title), department = VALUES(department), it_only = VALUES(it_only), units = VALUES(units),
-                level = IF(? IS NULL, level, VALUES(level))
+            ON CONFLICT (subject_code) DO UPDATE SET subject_title = EXCLUDED.subject_title, department = EXCLUDED.department, it_only = EXCLUDED.it_only, units = EXCLUDED.units,
+                level = CASE WHEN CAST(? AS TEXT) IS NULL THEN subject_catalog.level ELSE EXCLUDED.level END
         ");
         $stmt->execute([$code, $title, $department, !empty($input['it_only']) ? 1 : 0, (int)($input['units'] ?? 3), $level ?? 'both', $level]);
         jsonResponse(['success' => true, 'message' => 'Subject saved']);
@@ -797,7 +808,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 // No certificate table yet
             }
         }
-        $add = $db->prepare("INSERT IGNORE INTO departments (department_name) VALUES (?)");
+        $add = $db->prepare("INSERT INTO departments (department_name) VALUES (?) ON CONFLICT DO NOTHING");
         foreach ($names as $name) {
             $add->execute([$name]);
         }
@@ -948,7 +959,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $stmt->execute([$year_id]);
         // The year's first term becomes the working term, matching the frontend
         $db->exec("UPDATE school_terms SET is_active = 0");
-        $stmt = $db->prepare("UPDATE school_terms SET is_active = 1 WHERE year_id = ? ORDER BY start_date, term_id LIMIT 1");
+        $stmt = $db->prepare("UPDATE school_terms SET is_active = 1 WHERE term_id = (SELECT term_id FROM school_terms WHERE year_id = ? ORDER BY start_date, term_id LIMIT 1)");
         $stmt->execute([$year_id]);
         $db->commit();
         jsonResponse(['success' => true, 'message' => 'Active school year updated']);
@@ -1188,7 +1199,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             }
             $loads[$status] = ['min' => $min, 'max' => $max];
         }
-        $db->prepare("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('default_loads', ?)")->execute([json_encode($loads)]);
+        $db->prepare("INSERT INTO app_settings (setting_key, setting_value) VALUES ('default_loads', ?)
+            ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value")->execute([json_encode($loads)]);
         jsonResponse(['success' => true, 'message' => 'Default loads saved']);
     }
 

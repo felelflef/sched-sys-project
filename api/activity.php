@@ -29,14 +29,15 @@ if (in_array($category, ['Schedule', 'Setup', 'Resources', 'Accounts', 'Sign-in'
 }
 if ($search !== '') {
     $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_substr($search, 0, 100)) . '%';
-    $where[] = '(summary LIKE ? OR user_name LIKE ? OR user_email LIKE ?)';
+    // ILIKE ignores capital letters, as the search did on MySQL
+    $where[] = '(summary ILIKE ? OR user_name ILIKE ? OR user_email ILIKE ?)';
     array_push($params, $like, $like, $like);
 }
 
 try {
-    // UNIX_TIMESTAMP gives the moment itself, so the browser shows it in the viewer's own time
+    // Seconds since 1970 give the moment itself, so the browser shows it in the viewer's own time
     $stmt = getDB()->prepare(
-        "SELECT log_id, UNIX_TIMESTAMP(created_at) AS at, user_email, user_name, user_role, category, summary FROM activity_log"
+        "SELECT log_id, CAST(EXTRACT(EPOCH FROM created_at) AS BIGINT) AS at, user_email, user_name, user_role, category, summary FROM activity_log"
         . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
         . " ORDER BY log_id DESC LIMIT {$limit}"
     );
@@ -44,7 +45,7 @@ try {
     jsonResponse(['success' => true, 'data' => $stmt->fetchAll()]);
 } catch (PDOException $e) {
     // Before the first change is recorded the table may not exist yet
-    if (($e->errorInfo[1] ?? 0) === 1146) {
+    if (($e->errorInfo[0] ?? '') === '42P01') { // undefined_table
         jsonResponse(['success' => true, 'data' => []]);
     }
     error_log('activity.php: ' . $e->getMessage());

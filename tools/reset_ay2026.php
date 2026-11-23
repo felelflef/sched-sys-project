@@ -56,8 +56,8 @@ if (is_file("{$projectDir}/.env")) {
     }
 }
 $cfg = fn(string $key, string $default = '') => getenv($key) !== false && getenv($key) !== '' ? getenv($key) : ($env[$key] ?? $default);
-if (!extension_loaded('pdo_mysql')) {
-    fwrite(STDERR, "PHP's MySQL driver (pdo_mysql) is not turned on. Run with: php -d extension=pdo_mysql tools/reset_ay2026.php\n");
+if (!extension_loaded('pdo_pgsql')) {
+    fwrite(STDERR, "PHP's PostgreSQL driver (pdo_pgsql) is not turned on. Run with: php -d extension=pdo_pgsql tools/reset_ay2026.php\n");
     exit(1);
 }
 $host = $cfg('DB_HOST');
@@ -66,14 +66,14 @@ if ($host === '') {
     exit(1);
 }
 $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false];
+$dbName = $cfg('DB_NAME', 'sti_classroom_system');
+$dsn = "pgsql:host={$host};port={$cfg('DB_PORT', '5432')};dbname={$dbName}";
 if (filter_var($cfg('DB_SSL', 'false'), FILTER_VALIDATE_BOOLEAN)) {
     $ca = $cfg('DB_SSL_CA');
-    $options[PDO::MYSQL_ATTR_SSL_CA] = $ca;
-    $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = $ca !== '';
+    $dsn .= $ca !== '' ? ";sslmode=verify-full;sslrootcert={$ca}" : ';sslmode=require';
 }
-$dbName = $cfg('DB_NAME', 'sti_classroom_system');
 try {
-    $db = new PDO("mysql:host={$host};port={$cfg('DB_PORT', '3306')};dbname={$dbName};charset=utf8mb4", $cfg('DB_USER', 'root'), $cfg('DB_PASS'), $options);
+    $db = new PDO($dsn, $cfg('DB_USER', 'avnadmin'), $cfg('DB_PASS'), $options);
 } catch (PDOException $e) {
     fwrite(STDERR, "Could not connect to {$host}: {$e->getMessage()}\n");
     exit(1);
@@ -86,8 +86,10 @@ $schemaVersion = $m[1] ?? '';
 $stamp = $db->query("SELECT setting_value FROM app_settings WHERE setting_key = 'schema_lifecycle'")->fetchColumn();
 $needed = ['school_terms' => 'level', 'academic_sections' => 'subject_teachers', 'subject_catalog' => 'level', 'term_subjects' => 'lab_units', 'users' => 'teaching_level'];
 $missing = [];
+$hasColumn = $db->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?");
 foreach ($needed as $table => $column) {
-    if (!$db->query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'")->fetch()) $missing[] = "{$table}.{$column}";
+    $hasColumn->execute([$table, $column]);
+    if (!$hasColumn->fetch()) $missing[] = "{$table}.{$column}";
 }
 if ($missing || $stamp !== $schemaVersion) {
     fwrite(STDERR, "This database isn't on this version of the app yet (it is on " . ($stamp ?: 'an unknown version') . ", this script needs {$schemaVersion}"
@@ -357,7 +359,7 @@ $oldSamples = (int)$db->query("SELECT COUNT(*) FROM users u WHERE {$SAMPLE_RECOR
 $replaceSamples = $addTeachers && !$addOnly && $oldSamples > 0;
 if ($addOnly) $oldSamples = 0;
 $teachers = $db->query("
-    SELECT u.user_id, u.email, u.max_load, u.teaching_level, GROUP_CONCAT(c.areas_json SEPARATOR '|') AS areas
+    SELECT u.user_id, u.email, u.max_load, u.teaching_level, STRING_AGG(c.areas_json, '|') AS areas
     FROM users u LEFT JOIN faculty_certificates fc ON fc.user_id = u.user_id LEFT JOIN fcc_certificates c ON c.cert_id = fc.cert_id
     WHERE u.role IN ('faculty', 'program-head')" . ($replaceSamples ? " AND NOT ({$SAMPLE_RECORD})" : '') . " GROUP BY u.user_id")->fetchAll();
 $teacherAreas = function (array $t): array {
@@ -417,7 +419,7 @@ foreach ($AREAS as $area) {
 /* ───────────── Report ───────────── */
 $tables = ['schedules', 'schedule_snapshots', 'academic_sections', 'term_subjects', 'school_terms', 'school_years', 'subject_sets', 'subject_catalog', 'classrooms', 'faculty_qualifications', 'activity_log'];
 echo $addOnly ? "ADD ONLY: nothing is deleted. Keeps everything below and adds only what is missing:\n" : "WILL DELETE (a backup is saved first):\n";
-foreach ($tables as $t) printf("  %-22s %6d rows\n", $t, $db->query("SELECT COUNT(*) FROM `{$t}`")->fetchColumn());
+foreach ($tables as $t) printf("  %-22s %6d rows\n", $t, $db->query("SELECT COUNT(*) FROM {$t}")->fetchColumn());
 echo "\nKEEPS: " . $db->query("SELECT COUNT(*) FROM users")->fetchColumn() . " user accounts (logins and passwords unchanged), "
     . $db->query("SELECT COUNT(*) FROM fcc_certificates")->fetchColumn() . " FCC certificates and who holds them, departments, app settings.\n";
 $termCount = count($TERMS['tertiary']) + count($TERMS['shs']);
@@ -466,7 +468,7 @@ $backupDir = __DIR__ . '/backups';
 if (!is_dir($backupDir)) mkdir($backupDir, 0700, true);
 $backup = ['database' => $dbName, 'host' => $host, 'saved_at' => date('c'), 'tables' => []];
 foreach (array_merge($tables, ['fcc_certificates', 'faculty_certificates', 'departments', 'app_settings']) as $t) {
-    $backup['tables'][$t] = $db->query("SELECT * FROM `{$t}`")->fetchAll();
+    $backup['tables'][$t] = $db->query("SELECT * FROM {$t}")->fetchAll();
 }
 // The sample teaching records this run replaces (they have no password)
 if ($addTeachers) $backup['tables']['users (sample teaching records)'] = $db->query("SELECT * FROM users u WHERE {$SAMPLE_RECORD}")->fetchAll();
@@ -480,7 +482,7 @@ echo "Backup saved: {$backupFile}\n";
 /* ───────────── Reset, in one transaction ───────────── */
 $db->beginTransaction();
 try {
-    if (!$addOnly) foreach ($tables as $t) $db->exec("DELETE FROM `{$t}`");
+    if (!$addOnly) foreach ($tables as $t) $db->exec("DELETE FROM {$t}");
     // With --add-only, a row that is already there is kept and not added again
     $exists = function (string $sql, array $params) use ($db, $addOnly): bool {
         if (!$addOnly) return false;
@@ -490,8 +492,8 @@ try {
     };
     $added = ['rooms' => 0, 'terms' => 0, 'curriculum entries' => 0, 'subject sets' => 0, 'sections' => 0];
 
-    $insDept = $db->prepare("INSERT IGNORE INTO departments (department_name) VALUES (?)");
-    $insCert = $db->prepare("INSERT IGNORE INTO fcc_certificates (cert_name, areas_json) VALUES (?, ?)");
+    $insDept = $db->prepare("INSERT INTO departments (department_name) VALUES (?) ON CONFLICT DO NOTHING");
+    $insCert = $db->prepare("INSERT INTO fcc_certificates (cert_name, areas_json) VALUES (?, ?) ON CONFLICT DO NOTHING");
     $findCert = $db->prepare("SELECT cert_id FROM fcc_certificates WHERE cert_name = ?");
     $certOf = [];
     foreach ($AREAS as $area) {
@@ -500,7 +502,7 @@ try {
         $findCert->execute(["FCC - {$area}"]);
         $certOf[$area] = (int)$findCert->fetchColumn();
     }
-    $insCat = $db->prepare("INSERT IGNORE INTO subject_catalog (subject_code, subject_title, department, it_only, units, level) VALUES (?, ?, ?, 0, ?, ?)");
+    $insCat = $db->prepare("INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units, level) VALUES (?, ?, ?, 0, ?, ?) ON CONFLICT DO NOTHING");
     foreach ($CATALOG as [$code, $title, $area, $units]) $insCat->execute([$code, $title, $area, $units, $catalogLevel($code)]);
 
     $insRoom = $db->prepare("INSERT INTO classrooms (room_name_number, room_type, capacity, floor_level, current_status) VALUES (?, ?, ?, ?, 'Vacant')");
@@ -566,14 +568,14 @@ try {
     }
 
     if ($replaceSamples) {
-        $db->exec("DELETE fc FROM faculty_certificates fc JOIN users u ON u.user_id = fc.user_id WHERE {$SAMPLE_RECORD}");
-        $db->exec("DELETE u FROM users u WHERE {$SAMPLE_RECORD}");
+        $db->exec("DELETE FROM faculty_certificates fc USING users u WHERE u.user_id = fc.user_id AND {$SAMPLE_RECORD}");
+        $db->exec("DELETE FROM users u WHERE {$SAMPLE_RECORD}");
     }
     if ($addTeachers && $sampleTeachers) {
-        $insUser = $db->prepare("INSERT IGNORE INTO users (first_name, last_name, email, password_hash, role, subject_role, employment_status, max_load, min_load, teaching_level)
-            VALUES (?, ?, ?, '!', 'faculty', ?, 'Full-time', ?, 24, ?)");
+        $insUser = $db->prepare("INSERT INTO users (first_name, last_name, email, password_hash, role, subject_role, employment_status, max_load, min_load, teaching_level)
+            VALUES (?, ?, ?, '!', 'faculty', ?, 'Full-time', ?, 24, ?) ON CONFLICT DO NOTHING");
         $findUser = $db->prepare("SELECT user_id FROM users WHERE email = ?");
-        $giveCert = $db->prepare("INSERT IGNORE INTO faculty_certificates (user_id, cert_id) VALUES (?, ?)");
+        $giveCert = $db->prepare("INSERT INTO faculty_certificates (user_id, cert_id) VALUES (?, ?) ON CONFLICT DO NOTHING");
         foreach ($sampleTeachers as $t) {
             $insUser->execute([$t['first'], mb_substr($t['last'], 0, 50), $t['email'], $t['area'], SAMPLE_MAX_LOAD, $t['level']]);
             $findUser->execute([$t['email']]);
@@ -582,7 +584,7 @@ try {
     }
 
     // Keeps a browser's old local copy from being published over this data
-    $db->exec("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('state_published', '1')");
+    $db->exec("INSERT INTO app_settings (setting_key, setting_value) VALUES ('state_published', '1') ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value");
     $db->prepare("INSERT INTO activity_log (user_email, user_name, user_role, category, summary) VALUES ('system', 'Database reset', 'admin', 'Schedule', ?)")
         ->execute([($addOnly ? "Added the missing {$YEAR_CODE} scheduling data for College and SHS" : "Reset the scheduling data to a fresh {$YEAR_CODE} for College and SHS") . ($addTeachers && $sampleTeachers ? ' (added ' . count($sampleTeachers) . ' teaching records)' : '')]);
     $db->commit();
