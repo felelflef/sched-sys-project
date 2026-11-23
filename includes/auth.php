@@ -70,9 +70,9 @@ function recordFailedAttempt(PDO $db, string $key): void {
     $expired = $now - LOGIN_ATTEMPT_WINDOW;
     $stmt = $db->prepare("
         INSERT INTO login_attempts (attempt_key, attempts, window_start) VALUES (?, 1, ?)
-        ON DUPLICATE KEY UPDATE
-            attempts = IF(window_start < ?, 1, attempts + 1),
-            window_start = IF(window_start < ?, ?, window_start)
+        ON CONFLICT (attempt_key) DO UPDATE SET
+            attempts = CASE WHEN login_attempts.window_start < CAST(? AS INT) THEN 1 ELSE login_attempts.attempts + 1 END,
+            window_start = CASE WHEN login_attempts.window_start < CAST(? AS INT) THEN CAST(? AS INT) ELSE login_attempts.window_start END
     ");
     $stmt->execute([$key, $now, $expired, $expired, $now]);
 }
