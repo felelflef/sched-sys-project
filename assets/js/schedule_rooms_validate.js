@@ -9,7 +9,7 @@ const STEP_HELP = {
   2: ['Choose the term', 'Pick the college or Senior High term you are planning. Its terms were made for you with the school year. Then press Next.'],
   3: ['Load the subjects', 'Add the subjects each program and year takes this term. Every section of that program and year gets these subjects.'],
   4: ['Create the sections', 'Add each section with its number of students and adviser. Open "subjects" in a row to see what that section takes.'],
-  5: ['Pick rooms and instructors', 'For each section, choose its room and who teaches each subject. Leave anything on Automatic and the system picks for you.'],
+  5: ['Pick rooms and teachers', 'For each section, choose its room and who teaches each subject. Leave anything on Automatic and the system picks for you.'],
   6: ['Check that there is enough', 'This step checks there are enough teachers and rooms. Fix anything marked red, then press Next.'],
   7: ['Build the timetable', 'Press Generate to fill the week, or click an empty box to add a class yourself. Click a class to change it.']
 };
@@ -27,10 +27,10 @@ function renderStepHelp(stepNumber) {
 // One section shows at a time, picked from a list that says what each section already has set.
 const roomPlanSelection = {};   // the section shown, for each term
 
-// "CS101M (BSCS 1A) · room LR-104 · 2 of 6 instructors chosen"
+// "CS101M (BSCS 1A) · room LR-104 · 2 of 6 teachers chosen"
 function roomPlanSectionLabel(sec) {
   const chosen = Object.keys(sec.subjectTeachers || {}).length;
-  const status = [sec.homeRoom ? `room ${sec.homeRoom}` : '', chosen ? `${chosen} of ${sectionSubjects(sec).length} instructors chosen` : ''].filter(Boolean);
+  const status = [sec.homeRoom ? `room ${sec.homeRoom}` : '', chosen ? `${chosen} of ${sectionSubjects(sec).length} teachers chosen` : ''].filter(Boolean);
   return `${sec.code} (${sec.name})${status.length ? ` · ${status.join(' · ')}` : ' · all Automatic'}`;
 }
 
@@ -98,7 +98,7 @@ function renderRoomPlan() {
       return `<tr>
         <td><strong>${escapeHtml(subj.code)}</strong> ${escapeHtml(subj.name)}</td>
         <td>${subj.units} units · ${subjectHoursText(subj)}</td>
-        <td><select class="room-plan-select" aria-label="Instructor for ${escapeHtml(subj.code)}, ${escapeHtml(sec.code)}" ${canEdit ? '' : 'disabled'}
+        <td><select class="room-plan-select" aria-label="Teacher for ${escapeHtml(subj.code)}, ${escapeHtml(sec.code)}" ${canEdit ? '' : 'disabled'}
           onchange="setSectionTeacher(${sec.id}, ${jsArg(code)}, this.value)">${options}</select>
           ${teachers.length === 0 ? '<div class="room-plan-warning">No qualified teacher for this level. Give someone the FCC certificate for its area.</div>' : ''}
           ${stale ? '<div class="room-plan-warning">This teacher can no longer teach it. Choose another or Automatic.</div>' : ''}</td>
@@ -111,7 +111,7 @@ function renderRoomPlan() {
         <label class="room-plan-room">Room
           <select class="room-plan-select" ${canEdit ? '' : 'disabled'} onchange="setSectionRoom(${sec.id}, this.value)">${roomOptions}</select></label>
       </div>
-      ${subjects.length ? `<table class="lifecycle-table room-plan-table"><thead><tr><th>Subject</th><th>Units and hours</th><th>Instructor</th></tr></thead><tbody>${rows}</tbody></table>`
+      ${subjects.length ? `<table class="lifecycle-table room-plan-table"><thead><tr><th>Subject</th><th>Units and hours</th><th>Teacher</th></tr></thead><tbody>${rows}</tbody></table>`
         : '<p class="room-plan-warning">No subjects for this section yet. Add them in Step 3.</p>'}
     </div>`;
   }).join('');
@@ -232,9 +232,9 @@ function evaluateResourceReadiness() {
     checks.push({
       status: 'critical',
       title: 'No Teaching Faculty Configured',
-      desc: 'Zero active instructors found in the system. Add faculty in the Faculty module.'
+      desc: 'No teachers found. Add them in Faculty Profiles.'
     });
-    criticalReasons.push('Zero active professors configured in the faculty directory.');
+    criticalReasons.push('No teachers in Faculty Profiles.');
   } else if (unqualifiedSubjects.length > 0) {
     const uniqueUnqualifiedCodes = [...new Set(unqualifiedSubjects.map(s => s.code))];
     checks.push({
@@ -242,19 +242,19 @@ function evaluateResourceReadiness() {
       title: 'Subjects with No Qualified Faculty',
       desc: `No faculty member has an FCC certificate covering these ${uniqueUnqualifiedCodes.length} subject(s): ${uniqueUnqualifiedCodes.join(', ')}.`
     });
-    criticalReasons.push(`Insufficient professors: ${uniqueUnqualifiedCodes.length} course(s) lack qualified faculty (${uniqueUnqualifiedCodes.join(', ')}).`);
+    criticalReasons.push(`Not enough teachers: ${uniqueUnqualifiedCodes.length} course(s) lack qualified faculty (${uniqueUnqualifiedCodes.join(', ')}).`);
   } else if (totalMaxLoad < totalRequiredUnits) {
     checks.push({
       status: 'critical',
       title: 'Insufficient Total Teaching Capacity',
-      desc: `Professors can take up to ${totalMaxLoad} units in total, but this term's sections need ${totalRequiredUnits} units. Please assign more professors.`
+      desc: `Teachers can take up to ${totalMaxLoad} units in total, but this term's sections need ${totalRequiredUnits} units. Please assign more teachers.`
     });
     criticalReasons.push(`Insufficient faculty capacity: ${totalRequiredUnits} units needed vs ${totalMaxLoad} units total max faculty capacity.`);
   } else if (overloadedTeachers.length > 0) {
     checks.push({
       status: 'warning',
       title: 'Faculty Max Load Warning',
-      desc: `${overloadedTeachers.length} instructor(s) exceed maximum teaching load: ${overloadedTeachers.map(f => f.name).join(', ')}.`
+      desc: `${overloadedTeachers.length} teacher(s) over their maximum load: ${overloadedTeachers.map(f => f.name).join(', ')}.`
     });
   } else {
     checks.push({
@@ -403,10 +403,10 @@ function renderResourceValidation() {
     btnStep5.disabled = readiness.hasCritical;
     btnStep5.style.opacity = readiness.hasCritical ? '0.5' : '1';
     btnStep5.style.cursor = readiness.hasCritical ? 'not-allowed' : 'pointer';
-    btnStep5.title = readiness.hasCritical ? 'Blocked: Resolve critical professor and room shortages to proceed.' : '';
+    btnStep5.title = readiness.hasCritical ? 'Blocked: Resolve critical teacher and room shortages to proceed.' : '';
     btnStep5.onclick = function() {
       if (readiness.hasCritical) {
-        alert('Cannot go to Step 7 (Timetable) yet:\n\nPlease resolve the critical professor/room shortages listed in the readiness checklist above.');
+        alert('Cannot go to Step 7 (Timetable) yet:\n\nPlease resolve the critical teacher/room shortages listed in the readiness checklist above.');
       } else {
         goToScheduleStep(7);
       }

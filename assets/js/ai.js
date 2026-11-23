@@ -216,3 +216,36 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', handleAiPromptSubmit);
   }
 });
+
+/* ─── Side panel on Master Schedule and View Schedule ─── */
+function setAiPanelOpen(open) {
+  const panel = document.getElementById('aiPanel');
+  const toggle = document.getElementById('aiPanelToggle');
+  if (!panel) return;
+  if (panel.hidden === !open) return;
+  panel.hidden = !open;
+  if (toggle) toggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    const input = document.getElementById('aiQuestionInput');
+    if (input) input.focus();
+  } else if (toggle && panel.contains(document.activeElement)) {
+    toggle.focus();
+  }
+}
+
+function toggleAiPanel() {
+  const panel = document.getElementById('aiPanel');
+  setAiPanelOpen(!!(panel && panel.hidden));
+}
+
+function closeAiPanel() {
+  setAiPanelOpen(false);
+}
+
+// Esc closes the panel, unless a dialog opened above it is taking the key
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const panel = document.getElementById('aiPanel');
+  if (!panel || panel.hidden || document.querySelector('.confirm-dialog-overlay')) return;
+  closeAiPanel();
+});

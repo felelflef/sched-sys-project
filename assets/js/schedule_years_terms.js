@@ -25,8 +25,8 @@ function renderSchoolYearTable() {
       : `<span class="badge" style="background:#F3F4F6; color:#4B5563; font-weight:600; font-size:0.857rem;">Inactive</span>`;
 
     const activeBtn = sy.isActive
-      ? `<button class="btn btn-outline" disabled style="font-size:0.857rem; padding:3px 8px; opacity:0.6;">Current Active</button>`
-      : `<button class="btn btn-outline" onclick="setActiveSchoolYear(${sy.id})" style="font-size:0.857rem; padding:3px 8px;">Set as Active</button>`;
+      ? `<button class="btn btn-outline btn-sm" disabled style="opacity:0.6;">Current Active</button>`
+      : `<button class="btn btn-outline btn-sm" onclick="setActiveSchoolYear(${sy.id})">Set as Active</button>`;
 
     return `
       <tr>
@@ -37,8 +37,8 @@ function renderSchoolYearTable() {
         <td style="text-align:right;">
           <div style="display:inline-flex; gap:6px; align-items:center;">
             ${activeBtn}
-            <button class="btn btn-outline" onclick="openEditSchoolYearModal(${sy.id})" style="font-size:0.857rem; padding:3px 8px;">Edit</button>
-            <button class="btn btn-outline" onclick="deleteSchoolYear(${sy.id})" style="font-size:0.857rem; padding:3px 8px; color:#DC2626; border-color:#FCA5A5;">Delete</button>
+            <button class="btn btn-outline btn-sm" onclick="openEditSchoolYearModal(${sy.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSchoolYear(${sy.id})">Delete</button>
           </div>
         </td>
       </tr>
@@ -216,7 +216,7 @@ async function submitSchoolYearModal() {
   // Making a year active changes it for everyone, so ask first, as the year dropdown does
   const editedYear = idVal ? SCHOOL_YEARS.find(y => String(y.id) === idVal) : null;
   if (isActiveVal && SCHOOL_YEARS.length > 0 && !(editedYear && editedYear.isActive)
-    && !(await askConfirm(`This makes ${codeVal} the active school year for all users, not just this view.`, { title: 'Make this the active school year?', confirmLabel: 'Make active' }))) return;
+    && !(await askConfirm(`This makes ${codeVal} the active school year for all users, not just this view.`, { title: 'Make this the active school year?', confirmLabel: 'Make Active' }))) return;
 
   if (isActiveVal) {
     SCHOOL_YEARS.forEach(y => y.isActive = false);
@@ -315,7 +315,7 @@ async function deleteSchoolYear(id) {
     alert('At least one school year must remain in the system.');
     return;
   }
-  if (!(await askConfirm('This school year will be removed from the system.', { title: 'Delete this school year?', confirmLabel: 'Delete school year', danger: true }))) return;
+  if (!(await askConfirm('This school year will be removed from the system.', { title: 'Delete this school year?', confirmLabel: 'Delete School Year', danger: true }))) return;
   SCHOOL_YEARS = SCHOOL_YEARS.filter(y => y.id !== id);
   if (!SCHOOL_YEARS.some(y => y.isActive)) SCHOOL_YEARS[0].isActive = true;
   saveStateToStorage();
@@ -386,16 +386,16 @@ function renderSchoolTermTable() {
         <div class="term-box-dates">${escapeHtml(term.startDate || '')} – ${escapeHtml(term.endDate || '')}</div>
         <div class="term-box-current">${term.id === activeTerm.id ? '✓ You are working on this term' : 'Click to work on this term'}</div>
         ${term.isActive ? '<div class="term-box-school">School\'s current term</div>'
-          : `<button type="button" class="btn btn-outline term-box-make-current" onclick="event.stopPropagation(); setActiveSchoolTerm(${term.id})"
-              title="Faculty and new sign-ins open this term">Make current for everyone</button>`}
+          : `<button type="button" class="btn btn-outline btn-sm term-box-make-current" onclick="event.stopPropagation(); setActiveSchoolTerm(${term.id})"
+              title="Faculty and new sign-ins open this term">Make Current for Everyone</button>`}
         <div class="term-box-actions" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()">
           <select onchange="updateTermStatusDirectly(${term.id}, this.value)" aria-label="Status of ${escapeHtml(term.termName)}">
             <option value="draft" ${term.status === 'draft' ? 'selected' : ''}>Draft</option>
             <option value="active" ${term.status === 'active' ? 'selected' : ''}>Active</option>
             <option value="closed" ${term.status === 'closed' ? 'selected' : ''}>Closed</option>
           </select>
-          <button class="btn btn-outline" onclick="openEditTermModal(${term.id})">Edit</button>
-          <button class="btn btn-outline term-box-delete" onclick="deleteSchoolTerm(${term.id})">Delete</button>
+          <button class="btn btn-outline btn-sm" onclick="openEditTermModal(${term.id})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSchoolTerm(${term.id})">Delete</button>
         </div>
       </div>`).join('');
     return `
@@ -429,7 +429,7 @@ async function setActiveSchoolTerm(termId) {
   const changesYear = targetYear && !targetYear.isActive;
   const termLabel = `${targetTerm.termName}${targetYear ? ` ${targetYear.yearCode}` : ''}`;
   if (!(await askConfirm(`This makes ${termLabel} the school's current term for everyone: faculty and anyone signing in will see it. To only work on a term yourself, click its box instead.${changesYear ? ` The school's current year also changes to ${targetYear.yearCode}.` : ''}`,
-    { title: 'Make this the current term for everyone?', confirmLabel: 'Make current' }))) return;
+    { title: 'Make this the current term for everyone?', confirmLabel: 'Make Current' }))) return;
 
   // Make sure parent year is active
   SCHOOL_YEARS.forEach(y => y.isActive = (y.id === targetTerm.yearId));
@@ -515,7 +515,7 @@ async function deleteSchoolTerm(termId) {
   }
   const subjects = CURRICULUM_SUBJECTS.filter(s => s.termId === termId).length;
   if (!(await askConfirm(`${term.termName} will be removed${subjects ? `, along with the ${subjects} subject${subjects === 1 ? '' : 's'} loaded into it in Step 3` : ''}.`,
-    { title: 'Delete this term?', confirmLabel: 'Delete term', danger: true }))) return;
+    { title: 'Delete this term?', confirmLabel: 'Delete Term', danger: true }))) return;
 
   SCHOOL_TERMS = SCHOOL_TERMS.filter(t => t.id !== termId);
   CURRICULUM_SUBJECTS = CURRICULUM_SUBJECTS.filter(s => s.termId !== termId);

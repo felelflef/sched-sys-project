@@ -15,15 +15,15 @@ function closeConfirmRegenerateModal() {
 
 async function executeGenerateBaseline() {
   closeConfirmRegenerateModal();
-  // A term that has already started stays editable class by class (for example when a professor is away);
+  // A term that has already started stays editable class by class (for example when a teacher is away);
   // replacing its whole timetable is asked about first
   const { activeTerm: termToGenerate } = getActiveAcademicContext();
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   if (termToGenerate.startDate && termToGenerate.startDate <= today && activeTermClasses().length > 0) {
     const started = new Date(`${termToGenerate.startDate}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const ok = await askConfirm(`${termToGenerate.termName} started on ${started}, so teachers and students may already be following its timetable. Generate replaces all of its classes (locked classes stay where they are).\n\nTo change only some classes, for example when a professor is away, open those classes and edit them instead.`,
-      { title: 'Replace the timetable of a term that has started?', confirmLabel: 'Replace the timetable', danger: true });
+    const ok = await askConfirm(`${termToGenerate.termName} started on ${started}, so teachers and students may already be following its timetable. Generate replaces all of its classes (locked classes stay where they are).\n\nTo change only some classes, for example when a teacher is away, open those classes and edit them instead.`,
+      { title: 'Replace the timetable of a term that has started?', confirmLabel: 'Replace the Timetable', danger: true });
     if (!ok) return;
   }
   // Teachers, qualifications and rooms come fresh from the database, as the server will check them
@@ -101,7 +101,7 @@ function renderGenerateSummary() {
     </ul>
     <div class="generate-summary-actions">
       <button type="button" class="btn btn-outline" onclick="switchPage('reports')">Open Schedule Overview</button>
-      <button type="button" class="btn btn-outline" onclick="switchPage('viewer')">View timetables</button>
+      <button type="button" class="btn btn-outline" onclick="switchPage('viewer')">View Timetables</button>
     </div>`;
   box.dataset.termId = String(activeTerm.id);
   box.hidden = false;
@@ -118,7 +118,7 @@ function updateUndoButton() {
 
 window.undoLastGenerate = async function() {
   const { activeTerm } = getActiveAcademicContext();
-  if (!(await askConfirm(`The current ${activeTerm.termName} schedule will be replaced with the one saved before the last generate. You can undo this too.`, { title: 'Undo the last generate?', confirmLabel: 'Restore schedule' }))) return;
+  if (!(await askConfirm(`The current ${activeTerm.termName} schedule will be replaced with the one saved before the last generate. You can undo this too.`, { title: 'Undo the last generate?', confirmLabel: 'Restore Schedule' }))) return;
   const res = await fetch('api/schedules.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -187,7 +187,7 @@ function applyUnassignedListOpen() {
   const toggle = document.getElementById('unassignedToggle');
   if (!list || !toggle) return;
   list.hidden = !unassignedListOpen;
-  toggle.textContent = unassignedListOpen ? 'Hide details' : 'Show details';
+  toggle.textContent = unassignedListOpen ? 'Hide Details' : 'Show Details';
   toggle.setAttribute('aria-expanded', String(unassignedListOpen));
 }
 function toggleUnassignedList() {
@@ -466,8 +466,8 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       const inShiftStarts = startsFor(shiftSlots, shiftFrom, Math.min(shiftTo, LAST_GENERATED_MINUTE));
       const otherStarts = startsFor(slotGroups[1], 7 * 60, LAST_GENERATED_MINUTE).filter(s => !inShiftStarts.includes(s));
 
-      // Part-time professors go first, since their time slots are limited. Then professors still under their
-      // minimum units, then the least-loaded, so classes spread out; between professors within about 3 units
+      // Part-time teachers go first, since their time slots are limited. Then teachers still under their
+      // minimum units, then the least-loaded, so classes spread out; between teachers within about 3 units
       // of each other, a seasoned one goes first.
       const subjectLoad = subjectLoadUnits(subj, activeTerm.id);
       const partUnits = subjectLoad * weeklyMinutes / (subjectMinutes || weeklyMinutes);
@@ -478,7 +478,7 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
       // The teacher of the subject's other part (lecture or lab) is tried first, so one teacher has both
       const otherPartTeacher = (schedules.find(c => c.section === sec.code && c.subjectCode === subj.code) || {}).instructor;
       const keepsTeacher = t => t.name === otherPartTeacher ? 0 : 1;
-      // An instructor chosen in Rooms & Instructors teaches this subject for this section; one who is no longer
+      // An instructor chosen in Rooms & Teachers teaches this subject for this section; one who is no longer
       // qualified for it (or this level) is ignored, and the generator picks as usual
       const chosenTeacher = sectionChosenTeacher(sec, targetSubjCode);
       const usesChoice = !!chosenTeacher && candidateTeachers.includes(chosenTeacher);
@@ -550,17 +550,17 @@ function generateSmartBaselineSchedules({ seed = [] } = {}) {
         const names = list => list.map(t => t.name).join(', ');
         if (usesChoice) {
           return teachersToTry.length === 0
-            ? `${chosenTeacher.name}, chosen for ${partLabel} in Rooms & Instructors, would go over their max load (${formatUnits(usedUnits(chosenTeacher) + otherUnits(chosenTeacher.name))} of ${facultyMaxUnits(chosenTeacher)} units). Choose another instructor or Automatic.`
-            : `${chosenTeacher.name}, chosen for ${partLabel} in Rooms & Instructors, has no free ${hours}-hour weekly time that fits ${sec.code} and a suitable room. Choose another instructor or Automatic.`;
+            ? `${chosenTeacher.name}, chosen for ${partLabel} in Rooms & Teachers, would go over their max load (${formatUnits(usedUnits(chosenTeacher) + otherUnits(chosenTeacher.name))} of ${facultyMaxUnits(chosenTeacher)} units). Choose another instructor or Automatic.`
+            : `${chosenTeacher.name}, chosen for ${partLabel} in Rooms & Teachers, has no free ${hours}-hour weekly time that fits ${sec.code} and a suitable room. Choose another instructor or Automatic.`;
         }
         if (teachersToTry.length === 0) {
           const loads = candidateTeachers.map(t => `${t.name} has ${formatUnits(usedUnits(t) + otherUnits(t.name))} of ${facultyMaxUnits(t)} units${otherUnits(t.name) > 0 ? ', counting overlapping terms' : ''}`).join('; ');
-          return `${partLabel} adds ${formatUnits(partUnits)} units, which would put every qualified professor over their max load (${loads}). Raise a max load or qualify another professor.`;
+          return `${partLabel} adds ${formatUnits(partUnits)} units, which would put every qualified teacher over their max load (${loads}). Raise a max load or qualify another teacher.`;
         }
         if (teachersToTry.every(limitedHours)) {
-          return `The qualified professor${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) ${teachersToTry.length === 1 ? 'is' : 'are'} part-time, and no ${hours}-hour weekly schedule fits inside their available days and shifts without a clash.`;
+          return `The qualified teacher${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) ${teachersToTry.length === 1 ? 'is' : 'are'} part-time, and no ${hours}-hour weekly schedule fits inside their available days and shifts without a clash.`;
         }
-        return `No clash-free ${hours}-hour weekly schedule is left. The qualified professor${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) and the suitable rooms are already booked whenever ${sec.code} is free. Free up time or qualify another professor.`;
+        return `No clash-free ${hours}-hour weekly schedule is left. The qualified teacher${teachersToTry.length === 1 ? '' : 's'} (${names(teachersToTry)}) and the suitable rooms are already booked whenever ${sec.code} is free. Free up time or qualify another teacher.`;
       };
 
       if (!placed) {

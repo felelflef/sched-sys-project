@@ -9,6 +9,9 @@
  *   add --year=2027-2028                       Builds that school year instead (the term dates move with it)
  *   add --add-teachers                         Replaces the sample teaching records (no login) an earlier run added with
  *                                              the fewest new ones that cover the shortfall, Mixed (College and SHS) where possible
+ *   add --add-only                             Deletes nothing: keeps the school year, terms, rooms, catalog, subject sets,
+ *                                              sections, timetables, activity log and teachers, and only adds what is
+ *                                              missing (with --add-teachers, only the teachers still needed)
  *
  * Connection: the same variables the live site uses (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS, DB_SSL,
  * optional DB_SSL_CA), read from the environment or from a .env file in the project folder.
@@ -27,13 +30,14 @@ if (PHP_SAPI !== 'cli') {
 $args = array_slice($argv, 1);
 $apply = in_array('--apply', $args, true);
 $addTeachers = in_array('--add-teachers', $args, true);
+$addOnly = in_array('--add-only', $args, true);
 $yearArg = null;
 foreach ($args as $a) {
     if (preg_match('/^--year=(\d{4})-(\d{4})$/', $a, $m) && (int)$m[2] === (int)$m[1] + 1) {
         $yearArg = [(int)$m[1], (int)$m[2]];
         continue;
     }
-    if (!in_array($a, ['--apply', '--add-teachers'], true)) {
+    if (!in_array($a, ['--apply', '--add-teachers', '--add-only'], true)) {
         fwrite(STDERR, str_starts_with($a, '--year') ? "Write the school year like --year=2027-2028.\n" : "Unknown option: {$a}\n");
         exit(2);
     }
@@ -349,10 +353,13 @@ foreach ($windows as [$collegeTerm, $shsTerms]) {
 // Sample teaching records (no login) made by an earlier reset with --add-teachers are replaced by a fresh set
 $SAMPLE_RECORD = "u.email LIKE 'sample.%@sti.edu' AND u.password_hash = '!'";
 $oldSamples = (int)$db->query("SELECT COUNT(*) FROM users u WHERE {$SAMPLE_RECORD}")->fetchColumn();
+// With --add-only the earlier sample records stay and count as teachers; otherwise they are replaced
+$replaceSamples = $addTeachers && !$addOnly && $oldSamples > 0;
+if ($addOnly) $oldSamples = 0;
 $teachers = $db->query("
     SELECT u.user_id, u.email, u.max_load, u.teaching_level, GROUP_CONCAT(c.areas_json SEPARATOR '|') AS areas
     FROM users u LEFT JOIN faculty_certificates fc ON fc.user_id = u.user_id LEFT JOIN fcc_certificates c ON c.cert_id = fc.cert_id
-    WHERE u.role IN ('faculty', 'program-head')" . ($addTeachers ? " AND NOT ({$SAMPLE_RECORD})" : '') . " GROUP BY u.user_id")->fetchAll();
+    WHERE u.role IN ('faculty', 'program-head')" . ($replaceSamples ? " AND NOT ({$SAMPLE_RECORD})" : '') . " GROUP BY u.user_id")->fetchAll();
 $teacherAreas = function (array $t): array {
     $areas = [];
     foreach (explode('|', (string)$t['areas']) as $json) foreach (json_decode($json, true) ?: [] as $a) $areas[$a] = true;
@@ -384,7 +391,7 @@ function shortages(array $teachers, array $demand, callable $teacherAreas): arra
 $left = shortages($teachers, $demand, $teacherAreas);
 $sampleTeachers = [];
 // Old sample records are replaced, so only a real account's email counts as taken
-$emailTaken = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.email = ?" . ($addTeachers ? " AND NOT ({$SAMPLE_RECORD})" : ''));
+$emailTaken = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.email = ?" . ($replaceSamples ? " AND NOT ({$SAMPLE_RECORD})" : ''));
 $slug =fn(string $area) => trim(preg_replace('/[^a-z]+/', '-', strtolower(explode(' ', $area)[0])), '-');
 // As few new teachers as cover the shortfall: Mixed (College and SHS) wherever the area has both levels' classes
 foreach ($AREAS as $area) {
@@ -409,7 +416,7 @@ foreach ($AREAS as $area) {
 
 /* ───────────── Report ───────────── */
 $tables = ['schedules', 'schedule_snapshots', 'academic_sections', 'term_subjects', 'school_terms', 'school_years', 'subject_sets', 'subject_catalog', 'classrooms', 'faculty_qualifications', 'activity_log'];
-echo "WILL DELETE (a backup is saved first):\n";
+echo $addOnly ? "ADD ONLY: nothing is deleted. Keeps everything below and adds only what is missing:\n" : "WILL DELETE (a backup is saved first):\n";
 foreach ($tables as $t) printf("  %-22s %6d rows\n", $t, $db->query("SELECT COUNT(*) FROM `{$t}`")->fetchColumn());
 echo "\nKEEPS: " . $db->query("SELECT COUNT(*) FROM users")->fetchColumn() . " user accounts (logins and passwords unchanged), "
     . $db->query("SELECT COUNT(*) FROM fcc_certificates")->fetchColumn() . " FCC certificates and who holds them, departments, app settings.\n";
@@ -445,8 +452,11 @@ if (!$apply) {
     exit(0);
 }
 
-echo "\nThis permanently replaces the scheduling data in {$dbName} on {$host}.\nClose every open tab of the app first. Type RESET to continue: ";
-if (trim((string)fgets(STDIN)) !== 'RESET') {
+$confirmWord = $addOnly ? 'ADD' : 'RESET';
+echo $addOnly
+    ? "\nThis adds the missing data to {$dbName} on {$host} and deletes nothing.\nType ADD to continue: "
+    : "\nThis permanently replaces the scheduling data in {$dbName} on {$host}.\nClose every open tab of the app first. Type RESET to continue: ";
+if (trim((string)fgets(STDIN)) !== $confirmWord) {
     echo "Cancelled. Nothing was changed.\n";
     exit(0);
 }
@@ -470,7 +480,15 @@ echo "Backup saved: {$backupFile}\n";
 /* ───────────── Reset, in one transaction ───────────── */
 $db->beginTransaction();
 try {
-    foreach ($tables as $t) $db->exec("DELETE FROM `{$t}`");
+    if (!$addOnly) foreach ($tables as $t) $db->exec("DELETE FROM `{$t}`");
+    // With --add-only, a row that is already there is kept and not added again
+    $exists = function (string $sql, array $params) use ($db, $addOnly): bool {
+        if (!$addOnly) return false;
+        $q = $db->prepare($sql);
+        $q->execute($params);
+        return (bool)$q->fetchColumn();
+    };
+    $added = ['rooms' => 0, 'terms' => 0, 'curriculum entries' => 0, 'subject sets' => 0, 'sections' => 0];
 
     $insDept = $db->prepare("INSERT IGNORE INTO departments (department_name) VALUES (?)");
     $insCert = $db->prepare("INSERT IGNORE INTO fcc_certificates (cert_name, areas_json) VALUES (?, ?)");
@@ -482,14 +500,28 @@ try {
         $findCert->execute(["FCC - {$area}"]);
         $certOf[$area] = (int)$findCert->fetchColumn();
     }
-    $insCat = $db->prepare("INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units, level) VALUES (?, ?, ?, 0, ?, ?)");
+    $insCat = $db->prepare("INSERT IGNORE INTO subject_catalog (subject_code, subject_title, department, it_only, units, level) VALUES (?, ?, ?, 0, ?, ?)");
     foreach ($CATALOG as [$code, $title, $area, $units]) $insCat->execute([$code, $title, $area, $units, $catalogLevel($code)]);
 
     $insRoom = $db->prepare("INSERT INTO classrooms (room_name_number, room_type, capacity, floor_level, current_status) VALUES (?, ?, ?, ?, 'Vacant')");
-    foreach ($ROOMS as $r) $insRoom->execute($r);
+    foreach ($ROOMS as $r) {
+        if ($exists("SELECT COUNT(*) FROM classrooms WHERE room_name_number = ?", [$r[0]])) continue;
+        $insRoom->execute($r);
+        $added['rooms']++;
+    }
 
-    $db->prepare("INSERT INTO school_years (year_code, is_active) VALUES (?, 1)")->execute([$YEAR_CODE]);
-    $yearId = (int)$db->lastInsertId();
+    $yearId = 0;
+    if ($addOnly) {
+        $findYear = $db->prepare("SELECT year_id FROM school_years WHERE year_code = ?");
+        $findYear->execute([$YEAR_CODE]);
+        $yearId = (int)$findYear->fetchColumn();
+    }
+    if (!$yearId) {
+        // A new year added beside existing ones does not take over as the active year
+        $db->prepare("INSERT INTO school_years (year_code, is_active) VALUES (?, ?)")->execute([$YEAR_CODE, $addOnly ? 0 : 1]);
+        $yearId = (int)$db->lastInsertId();
+    }
+    $findTerm = $db->prepare("SELECT term_id FROM school_terms WHERE year_id = ? AND term_name = ? AND level = ?");
     $insTerm = $db->prepare("INSERT INTO school_terms (year_id, term_name, level, start_date, end_date, status, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)");
     $insSection = $db->prepare("INSERT INTO academic_sections (term_id, section_code, section_name, program, year_level, student_count, adviser, shift) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)");
     $insSubject = $db->prepare("INSERT INTO term_subjects (term_id, subject_code, subject_name, units, lab_units, lecture_hours, lab_hours, subject_type, program, year_level, curriculum, is_included) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
@@ -497,8 +529,13 @@ try {
     foreach ($TERMS as $level => $list) {
         foreach ($list as [$termName, $start, $end]) {
             $first = $termName === '1st Sem' || $termName === '1st Term';
-            $insTerm->execute([$yearId, $termName, $level, $start, $end, $first ? 'active' : 'draft', $termName === '1st Sem' ? 1 : 0]);
-            $termId = (int)$db->lastInsertId();
+            $findTerm->execute([$yearId, $termName, $level]);
+            $termId = $addOnly ? (int)$findTerm->fetchColumn() : 0;
+            if (!$termId) {
+                $insTerm->execute([$yearId, $termName, $level, $start, $end, $first ? 'active' : 'draft', $termName === '1st Sem' && !$addOnly ? 1 : 0]);
+                $termId = (int)$db->lastInsertId();
+                $added['terms']++;
+            }
             foreach ($CURRICULUM as $program => $years) {
                 if ($PROGRAM_LEVEL[$program] !== $level) continue;
                 foreach ($years as $year => $terms) {
@@ -506,21 +543,29 @@ try {
                     $items = [];
                     foreach ($terms[$termName] as $code) {
                         [$units, $labUnits, $lec, $lab, $type] = subjectHours($code);
-                        $insSubject->execute([$termId, $code, $catalogByCode[$code]['title'], $units, $labUnits ?: null, $lec, $lab, $type, $program, $year, $level === 'shs' ? 'K to 12' : '2024 Revised']);
+                        if (!$exists("SELECT COUNT(*) FROM term_subjects WHERE term_id = ? AND program = ? AND year_level = ? AND subject_code = ?", [$termId, $program, $year, $code])) {
+                            $insSubject->execute([$termId, $code, $catalogByCode[$code]['title'], $units, $labUnits ?: null, $lec, $lab, $type, $program, $year, $level === 'shs' ? 'K to 12' : '2024 Revised']);
+                            $added['curriculum entries']++;
+                        }
                         $items[] = ['code' => $code, 'name' => $catalogByCode[$code]['title'], 'units' => $units, 'labUnits' => $labUnits ?: null, 'lecHours' => $lec, 'labHours' => $lab, 'type' => $type, 'program' => $program, 'year' => $year];
                     }
-                    if ($termName !== 'Summer') {
-                        $insSet->execute([mb_substr("{$program} " . ($year >= 11 ? "Grade {$year}" : "Year {$year}") . " · {$termName}", 0, 60), json_encode($items)]);
+                    $setName = mb_substr("{$program} " . ($year >= 11 ? "Grade {$year}" : "Year {$year}") . " · {$termName}", 0, 60);
+                    if ($termName !== 'Summer' && !$exists("SELECT COUNT(*) FROM subject_sets WHERE set_name = ?", [$setName])) {
+                        $insSet->execute([$setName, json_encode($items)]);
+                        $added['subject sets']++;
                     }
                     foreach ($sections as [$sp, $sy, $code, $name, $students, $shift]) {
-                        if ($sp === $program && $sy === $year) $insSection->execute([$termId, $code, $name, $program, $year, $students, $shift]);
+                        if ($sp !== $program || $sy !== $year) continue;
+                        if ($exists("SELECT COUNT(*) FROM academic_sections WHERE term_id = ? AND section_code = ?", [$termId, $code])) continue;
+                        $insSection->execute([$termId, $code, $name, $program, $year, $students, $shift]);
+                        $added['sections']++;
                     }
                 }
             }
         }
     }
 
-    if ($addTeachers && $oldSamples) {
+    if ($replaceSamples) {
         $db->exec("DELETE fc FROM faculty_certificates fc JOIN users u ON u.user_id = fc.user_id WHERE {$SAMPLE_RECORD}");
         $db->exec("DELETE u FROM users u WHERE {$SAMPLE_RECORD}");
     }
@@ -539,13 +584,17 @@ try {
     // Keeps a browser's old local copy from being published over this data
     $db->exec("REPLACE INTO app_settings (setting_key, setting_value) VALUES ('state_published', '1')");
     $db->prepare("INSERT INTO activity_log (user_email, user_name, user_role, category, summary) VALUES ('system', 'Database reset', 'admin', 'Schedule', ?)")
-        ->execute(["Reset the scheduling data to a fresh {$YEAR_CODE} for College and SHS" . ($addTeachers && $sampleTeachers ? ' (added ' . count($sampleTeachers) . ' teaching records)' : '')]);
+        ->execute([($addOnly ? "Added the missing {$YEAR_CODE} scheduling data for College and SHS" : "Reset the scheduling data to a fresh {$YEAR_CODE} for College and SHS") . ($addTeachers && $sampleTeachers ? ' (added ' . count($sampleTeachers) . ' teaching records)' : '')]);
     $db->commit();
 } catch (Throwable $e) {
     $db->rollBack();
     fwrite(STDERR, "The reset failed and was rolled back, so nothing was changed: {$e->getMessage()}\n");
     exit(1);
 }
-echo "\nDONE: the database now holds a fresh {$YEAR_CODE}. Everyone should reload the app.\n"
+if ($addOnly) {
+    echo "\nADDED (nothing was deleted): " . implode(', ', array_map(fn($what, $n) => "{$n} {$what}", array_keys($added), $added))
+        . ($addTeachers ? ', ' . count($sampleTeachers) . ' teaching records' : '') . ".\n";
+}
+echo "\nDONE: the database now holds " . ($addOnly ? "a complete {$YEAR_CODE}" : "a fresh {$YEAR_CODE}") . ". Everyone should reload the app.\n"
     . "Next, in Master Schedule: check Step 5 (Rooms & Instructors), Step 6 (Validate Resources), then Generate in Step 7\n"
     . "for College 1st Sem and for SHS 1st Term.\n";

@@ -108,7 +108,7 @@ function overlappingTermClash(cls) {
   return null;
 }
 
-// The instructor chosen for a section's subject in Rooms & Instructors, or null for Automatic
+// The instructor chosen for a section's subject in Rooms & Teachers, or null for Automatic
 function sectionChosenTeacher(sec, subjectCode) {
   const email = (sec && sec.subjectTeachers || {})[String(subjectCode || '').toUpperCase()];
   return email ? FACULTY.find(f => (f.email || '').toLowerCase() === String(email).toLowerCase()) || null : null;
@@ -205,7 +205,7 @@ function isWithinAvailability(days, shifts, day, startTime, endTime) {
   return from !== null && start >= from && end <= to;
 }
 
-// A part-time professor with no days or shifts set has no limit yet
+// A part-time teacher with no days or shifts set has no limit yet
 const CLASS_DAY_START = 7 * 60;
 const CLASS_DAY_END = 20 * 60 + 30;
 
@@ -265,7 +265,7 @@ function askToUnscheduleBroken(affected, title, reason) {
   const more = affected.length > 6 ? `, and ${affected.length - 6} more` : '';
   const them = affected.length === 1 ? 'it' : 'them';
   return askConfirm(`${reason}\n\nThis affects ${scheduledClassesNote(affected)}: ${listed}${more}.\n\nSaving takes ${them} off the schedule, so ${affected.length === 1 ? 'it shows' : 'they show'} as missing hours and can be placed again.`,
-    { title, confirmLabel: 'Save and unschedule', danger: true });
+    { title, confirmLabel: 'Save and Unschedule', danger: true });
 }
 
 // Rules for a class placed by hand, on top of clash, qualification and availability checks
@@ -314,7 +314,7 @@ function facultyAvailabilityProblem(instructorName, day, startTime, endTime) {
 
 function checkFacultySubjectConflict(instructorName, subjectCode, sectionCode) {
   if (!instructorName || instructorName === 'TBA' || instructorName === 'Unassigned') {
-    return 'Instructor Unassigned';
+    return 'Teacher Unassigned';
   }
 
   // Check the faculty profile
@@ -338,11 +338,11 @@ function checkFacultySubjectConflict(instructorName, subjectCode, sectionCode) {
 }
 
 /* ─── Main Timetable Grid Renderer ─── */
-// Step 7 shows one section, room or professor at a time. Room and professor views also show the classes of the
+// Step 7 shows one section, room or teacher at a time. Room and teacher views also show the classes of the
 // term running alongside (College with SHS), read-only, because those hold the same rooms and teachers.
 let gridMode = 'section';
 const gridSelection = { room: '', teacher: '' };
-const GRID_MODE_LABELS = { section: 'Section', room: 'Room', teacher: 'Professor' };
+const GRID_MODE_LABELS = { section: 'Section', room: 'Room', teacher: 'Teacher' };
 
 // Only the open term's classes are shown. Terms running alongside still hold their rooms and teachers: every
 // check (Generate, edits, moves, the server) keeps them from being double-booked.
@@ -392,7 +392,7 @@ function renderRoomOrTeacherGrid(tbody) {
   } else {
     const fac = FACULTY.find(f => f.name === selected);
     const load = fac ? facultyLoadUnits(fac.name) + concurrentLoadUnits(fac.name, activeTerm.id) : 0;
-    document.getElementById('sheetProgramYear').textContent = `Professor timetable • ${activeTerm.termName} ${activeSy.yearCode}`;
+    document.getElementById('sheetProgramYear').textContent = `Teacher timetable • ${activeTerm.termName} ${activeSy.yearCode}`;
     [['Teaching Load', fac ? `${formatUnits(load)} of ${facultyMinUnits(fac)}–${facultyMaxUnits(fac)} units` : '—'], ['Weekly Teaching', `${weeklyHours.toFixed(1)} hrs`], ['Department', (fac && fac.dept) || '—']]
       .forEach(([label, value], i) => setSheetStat(i, label, value));
   }
@@ -668,15 +668,15 @@ function showClassDetails(classId) {
   if (footer) {
     footer.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-        <button class="btn btn-outline" style="color:var(--danger); border-color:#FCA5A5; font-size:0.857rem; padding:6px 12px;" onclick="deleteClassSchedule('${escapeHtml(item.id)}')">
-          🗑️ Remove
+        <button class="btn btn-danger" onclick="deleteClassSchedule('${escapeHtml(item.id)}')">
+          Remove
         </button>
         <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-          <button class="btn btn-outline" style="font-size:0.857rem; padding:6px 14px;" onclick="toggleClassLock('${escapeHtml(item.id)}')"
+          <button class="btn btn-outline" onclick="toggleClassLock('${escapeHtml(item.id)}')"
             title="${item.locked ? 'Let Generate move this class again' : 'Generate keeps a locked class at this day, time, room and teacher'}">${item.locked ? 'Unlock' : 'Lock'}</button>
-          <button class="btn btn-secondary" style="font-size:0.857rem; padding:6px 14px;" onclick="closeClassDetailModal()">Close</button>
-          <button class="btn btn-primary" style="font-size:0.857rem; padding:6px 16px; font-weight:700;" onclick="openEditClassScheduleModal('${escapeHtml(item.id)}')">
-            ✏️ Edit Schedule
+          <button class="btn btn-secondary" onclick="closeClassDetailModal()">Close</button>
+          <button class="btn btn-primary" onclick="openEditClassScheduleModal('${escapeHtml(item.id)}')">
+            Edit Schedule
           </button>
         </div>
       </div>
@@ -689,9 +689,9 @@ function showClassDetails(classId) {
   let qualBadge = '';
   if (instFac) {
     if (isFacultyQualified(instFac, itemSubjCode)) {
-      qualBadge = `<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:0.857rem; padding:1px 6px; margin-left:6px; font-weight:700;">🎓 Certified</span>`;
+      qualBadge = `<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:0.857rem; padding:1px 6px; margin-left:6px; font-weight:700;">Certified</span>`;
     } else {
-      qualBadge = `<span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; font-size:0.857rem; padding:1px 6px; margin-left:6px; font-weight:700;">⚠️ Not Qualified</span>`;
+      qualBadge = `<span class="badge" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; font-size:0.857rem; padding:1px 6px; margin-left:6px; font-weight:700;">Not Qualified</span>`;
     }
   }
 
@@ -719,13 +719,13 @@ function showClassDetails(classId) {
         <div style="color:var(--text-secondary); font-size:0.857rem; font-weight:700; text-transform:uppercase;">Classroom</div>
         <div style="font-weight:700; color:var(--text-primary); margin-top:2px; display:flex; align-items:center; gap:6px;">
           <span>${escapeHtml(item.room)}</span>
-          <button class="btn btn-outline" style="font-size:0.857rem; padding:2px 7px; display:inline-flex; align-items:center; gap:3px; font-weight:600;" onclick="viewRoomSchedule(${jsArg(item.room)})">
-            📅 Schedule ↗
+          <button class="btn btn-outline btn-sm" onclick="viewRoomSchedule(${jsArg(item.room)})">
+            View Schedule
           </button>
         </div>
       </div>
       <div>
-        <div style="color:var(--text-secondary); font-size:0.857rem; font-weight:700; text-transform:uppercase;">Instructor</div>
+        <div style="color:var(--text-secondary); font-size:0.857rem; font-weight:700; text-transform:uppercase;">Teacher</div>
         <div style="font-weight:700; color:var(--text-primary); margin-top:2px; display:flex; align-items:center; flex-wrap:wrap;"><span>${escapeHtml(item.instructor)}</span>${qualBadge}</div>
       </div>
       <div style="grid-column: span 2;">
@@ -812,10 +812,10 @@ function openEditClassScheduleModal(classId) {
         </select>
       </div>
       <div class="form-group" style="margin-bottom:0;">
-        <label class="form-label" style="font-weight:700; font-size:0.857rem;">Instructor / Faculty</label>
+        <label class="form-label" style="font-weight:700; font-size:0.857rem;">Teacher</label>
         <select id="editScheduleInstructor" class="form-input" style="width:100%;">
           ${FACULTY.map(f => {
-            const qualTag = !facultyTeachesLevel(f, sectionSchoolLevel(item.section)) ? ' [⚠️ Wrong Level]' : isFacultyQualified(f, item.subjectCode) ? ' [🎓 Certified]' : ' [⚠️ Not Qualified]';
+            const qualTag = !facultyTeachesLevel(f, sectionSchoolLevel(item.section)) ? ' (Wrong Level)' : isFacultyQualified(f, item.subjectCode) ? ' (Certified)' : ' (Not Qualified)';
             return `<option value="${escapeHtml(f.name)}" ${f.name === item.instructor ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.dept || 'Faculty')})${qualTag}</option>`;
           }).join('')}
         </select>
@@ -831,12 +831,12 @@ function openEditClassScheduleModal(classId) {
   if (footer) {
     footer.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-        <button class="btn btn-outline" style="color:var(--danger); border-color:#FCA5A5; font-size:0.893rem; padding:6px 14px;" onclick="deleteClassSchedule('${escapeHtml(item.id)}')">
-          🗑️ Remove
+        <button class="btn btn-danger" onclick="deleteClassSchedule('${escapeHtml(item.id)}')">
+          Remove
         </button>
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-secondary" style="font-size:0.893rem; padding:6px 14px;" onclick="showClassDetails('${escapeHtml(item.id)}')">Cancel</button>
-          <button class="btn btn-primary" style="font-size:0.893rem; padding:6px 16px; font-weight:700;" onclick="submitEditClassSchedule()">Save Changes</button>
+          <button class="btn btn-secondary" onclick="showClassDetails('${escapeHtml(item.id)}')">Cancel</button>
+          <button class="btn btn-primary" onclick="submitEditClassSchedule()">Save Changes</button>
         </div>
       </div>
     `;
@@ -854,7 +854,7 @@ function handleEditSubjectChange(code) {
     const curVal = instSelect.value;
     const targetCode = (code || '').toUpperCase();
     instSelect.innerHTML = FACULTY.map(f => {
-      const qualTag = !facultyTeachesLevel(f, activeSchoolLevel()) ? ' [⚠️ Wrong Level]' : isFacultyQualified(f, targetCode) ? ' [🎓 Certified]' : ' [⚠️ Not Qualified]';
+      const qualTag = !facultyTeachesLevel(f, activeSchoolLevel()) ? ' (Wrong Level)' : isFacultyQualified(f, targetCode) ? ' (Certified)' : ' (Not Qualified)';
       return `<option value="${escapeHtml(f.name)}" ${f.name === curVal ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.dept || 'Faculty')})${qualTag}</option>`;
     }).join('');
   }
@@ -965,7 +965,7 @@ function submitEditClassSchedule() {
 }
 
 async function deleteClassSchedule(classId) {
-  if (!(await askConfirm('The class will be taken off the schedule.', { title: 'Remove this class?', confirmLabel: 'Remove class', danger: true }))) return;
+  if (!(await askConfirm('The class will be taken off the schedule.', { title: 'Remove this class?', confirmLabel: 'Remove Class', danger: true }))) return;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => c.id !== classId);
   queueScheduleSave();
   saveStateToStorage();
@@ -1157,7 +1157,7 @@ function openManualSlotModal(day, timeStr) {
 
   if (errDiv) errDiv.style.display = 'none';
 
-  // Target Section (in room and professor views the section is typed in)
+  // Target Section (in room and teacher views the section is typed in)
   let targetSection = gridMode === 'section' ? (currentSelectedSection || '') : '';
   if (secInput) secInput.value = targetSection;
 
@@ -1388,7 +1388,7 @@ function updateScheduleStats() {
   if (statAssigned) statAssigned.textContent = String(fullyScheduledSections);
 
   const headerSub = document.getElementById('headerSubtitle');
-  if (headerSub) {
+  if (headerSub && document.getElementById('page-schedule')?.classList.contains('active')) {
     headerSub.textContent = `${activeTerm.termName} ${activeSy.yearCode} · ${totalSections} sections across ${totalRooms} rooms`
       + (schoolTerm && schoolTerm.id !== activeTerm.id ? ` · You're working on this term; the school's current term is ${schoolTerm.termName}` : '');
   }
@@ -1407,7 +1407,7 @@ function updateScheduleStats() {
 
   const sub4 = document.getElementById('stepSub-4');
   if (sub4) sub4.textContent = `${totalSections} Sections`;
-  // Rooms & Instructors is optional (anything left on Automatic is picked when generating): how many sections have a room set
+  // Rooms & Teachers is optional (anything left on Automatic is picked when generating): how many sections have a room set
   const sub5 = document.getElementById('stepSub-5');
   if (sub5) {
     const withRoom = ACADEMIC_SECTIONS.filter(s => s.termId === activeTerm.id && s.homeRoom).length;

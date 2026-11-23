@@ -32,9 +32,9 @@ function renderSectionsTable() {
         <td>${sectionSubjectsHtml(sec, attachedCount)}</td>
         <td style="text-align:right;">
           <div style="display:inline-flex; gap:6px;">
-            <button class="btn btn-outline" onclick="openEditSectionModal(${sec.id})" style="font-size:0.857rem; padding:3px 7px;">Edit</button>
-            <button class="btn btn-outline" onclick="openSplitSectionModal(${sec.id})" style="font-size:0.857rem; padding:3px 7px;">Split</button>
-            <button class="btn btn-outline" onclick="deleteSectionItem(${sec.id})" style="font-size:0.857rem; padding:3px 7px; color:#DC2626; border-color:#FCA5A5;">Delete</button>
+            <button class="btn btn-outline btn-sm" onclick="openEditSectionModal(${sec.id})">Edit</button>
+            <button class="btn btn-outline btn-sm" onclick="openSplitSectionModal(${sec.id})">Split</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSectionItem(${sec.id})">Delete</button>
           </div>
         </td>
       </tr>
@@ -501,7 +501,7 @@ async function deleteSectionItem(id) {
   const warning = classCount > 0
     ? `Its ${classCount} scheduled class${classCount === 1 ? '' : 'es'} will be deleted too. This can't be undone.`
     : 'This section will be removed from the term.';
-  if (!(await askConfirm(warning, { title: 'Delete this section?', confirmLabel: 'Delete section', danger: true }))) return;
+  if (!(await askConfirm(warning, { title: 'Delete this section?', confirmLabel: 'Delete Section', danger: true }))) return;
   MASTER_SCHEDULE_DATA = MASTER_SCHEDULE_DATA.filter(c => !inSection(c));
   ACADEMIC_SECTIONS = ACADEMIC_SECTIONS.filter(s => s.id !== id);
   saveStateToStorage();

@@ -823,8 +823,6 @@ select:focus, input:focus {
 .term-box.is-current .term-box-current { color: #1E40AF; }
 .term-box-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .term-box-actions select { padding: 3px 6px; font-size: 0.857rem; }
-.term-box-actions .btn { font-size: 0.857rem; padding: 3px 8px; }
-.term-box-actions .term-box-delete { color: #DC2626; border-color: #FCA5A5; }
 .term-box-add { border-style: dashed; align-items: center; justify-content: center; min-height: 120px; font-size: 0.929rem; font-weight: 700; color: var(--accent-primary); background: #F8FAFD; cursor: pointer; }
 .term-box-add:hover, .term-box-add:focus-visible { border-color: var(--accent-primary); background: #EFF6FF; }
 .term-status-active { background: #DEF7EC; color: #03543F; font-weight: 800; font-size: 0.857rem; }
@@ -865,10 +863,9 @@ select:focus, input:focus {
 
 /* Step 2: the school's current term, and making a term current for everyone */
 .term-box-school { font-size: 0.85rem; font-weight: 700; color: #047857; margin-top: 4px; }
-.term-box-make-current { margin-top: 6px; font-size: 0.85rem; padding: 4px 10px; min-height: 2.25rem; }
+.term-box-make-current { margin-top: 6px; }
 
-/* Step 7: Section / Room / Professor */
+/* Step 7: Section / Room / Teacher */
 .grid-mode-switch { display: inline-flex; gap: 4px; margin-right: 8px; flex-wrap: wrap; }
-.grid-mode-switch .btn { min-height: 2.25rem; padding: 4px 12px; font-size: 0.9rem; }
 .grid-pickers { display: contents; }
 .grid-pickers[hidden] { display: none; }

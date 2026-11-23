@@ -15,7 +15,7 @@ window.alert = function(message) {
   }
 
   const isProblem = /^(\s*⚠|cannot|can't|could not|failed|access denied|the server did not|please|someone else|this class can't)/i.test(text)
-    || /(can't|cannot|wasn't saved|already exists|no changes were made|not available|reassign)/i.test(text);
+    || /(can't|cannot|wasn't saved|already exists|no changes were made|not available|reassign|isn't ready yet|needs sections)/i.test(text);
   const toast = document.createElement('div');
   toast.className = `toast ${isProblem ? 'toast-problem' : 'toast-info'}`;
   toast.setAttribute('role', isProblem ? 'alert' : 'status');
@@ -166,7 +166,7 @@ function clearTableSort(bodyId) {
 }
 
 // Click a column heading to sort. The sort is kept when the table redraws.
-const SORTABLE_HEADINGS = '#page-rooms .data-table th, #page-subjects .data-table th, #page-users .data-table th, #page-reports .data-table th, #stepPanel-5 .lifecycle-table th';
+const SORTABLE_HEADINGS = '#page-rooms .data-table th, #page-faculty .data-table th, #page-subjects .data-table th, #page-users .data-table th, #page-reports .data-table th, #stepPanel-5 .lifecycle-table th';
 const tableSorts = new WeakMap();
 
 function applyTableSort(table) {

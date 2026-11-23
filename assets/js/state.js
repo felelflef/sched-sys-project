@@ -321,12 +321,11 @@ let USERS = [
 
 const MODULE_TITLES = {
   schedule: { title: 'Master Schedule', sub: 'Set up the term and build the weekly timetable' },
-  viewer:   { title: 'View Schedule', sub: 'Weekly timetables by section, professor or room' },
+  viewer:   { title: 'View Schedule', sub: 'Weekly timetables by section, teacher or room' },
   reports:  { title: 'Schedule Overview', sub: 'Teacher loads, room use and missing hours' },
   rooms:    { title: 'Room Information', sub: 'Rooms, capacity and weekly schedules' },
-  faculty:  { title: 'Faculty Profiles', sub: 'Professors and the subjects they can teach' },
+  faculty:  { title: 'Faculty Profiles', sub: 'Teachers and the subjects they can teach' },
   subjects: { title: 'Subject Catalog', sub: 'Courses, subject areas and units' },
-  ai:       { title: 'AI Assistant', sub: 'Ask questions and get suggestions about rooms and schedules' },
   users:    { title: 'User Management', sub: 'Accounts, roles and passwords' },
   activity: { title: 'Activity Log', sub: 'Who changed what, and when' },
 };

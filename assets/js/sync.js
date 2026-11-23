@@ -240,7 +240,7 @@ async function loadServerState() {
       applyServerState(body.data);
     } else if (canManageData() && !publishOffered) {
       publishOffered = true;
-      const ok = await askConfirm('Publish the scheduling data in this browser so everyone uses it? This replaces the school years, terms, subjects, sections and schedules in the database.\n\nChoose Cancel if another browser has the correct data.', { title: 'The shared database has not been set up yet', confirmLabel: 'Publish this data' });
+      const ok = await askConfirm('Publish the scheduling data in this browser so everyone uses it? This replaces the school years, terms, subjects, sections and schedules in the database.\n\nChoose Cancel if another browser has the correct data.', { title: 'The shared database has not been set up yet', confirmLabel: 'Publish This Data' });
       if (ok) await publishLocalState();
     }
   } catch (e) {

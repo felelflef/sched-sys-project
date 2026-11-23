@@ -127,7 +127,7 @@ function getSchoolCurrentContext() {
   return { activeSy, activeTerm };
 }
 
-// Steps: 1 School Year, 2 School Term, 3 Load Subjects, 4 Create Sections, 5 Rooms & Instructors,
+// Steps: 1 School Year, 2 School Term, 3 Load Subjects, 4 Create Sections, 5 Rooms & Teachers,
 // 6 Validate Resources, 7 Timetable. Returns the first unfinished setup step, or null when all are done.
 function firstIncompleteStep() {
   if (!SCHOOL_YEARS.length) return { step: 1, reason: 'Add a school year.' };
@@ -151,11 +151,11 @@ function firstIncompleteStep() {
 function updateStepLocks() {
   const incomplete = firstIncompleteStep();
   const hasCritical = evaluateResourceReadiness().hasCritical;
-  // Sections need Steps 1-3; Rooms & Instructors needs sections; the timetable needs no critical shortages
+  // Sections need Steps 1-3; Rooms & Teachers needs sections; the timetable needs no critical shortages
   const lockReason = {
     4: incomplete && incomplete.step < 4 ? `Locked: finish Step ${incomplete.step} first` : '',
     5: incomplete && incomplete.step < 5 ? `Locked: finish Step ${incomplete.step} first` : '',
-    7: hasCritical ? 'Locked: resolve the critical professor and room shortages in Step 6 first' : ''
+    7: hasCritical ? 'Locked: resolve the critical teacher and room shortages in Step 6 first' : ''
   };
   [4, 5, 7].forEach(step => {
     const btn = document.getElementById(`stepBtn-${step}`);
@@ -181,15 +181,15 @@ function goToScheduleStep(stepNumber) {
   if (isScheduleInitialized && (stepNumber === 4 || stepNumber === 5)) {
     const incomplete = firstIncompleteStep();
     if (incomplete && incomplete.step < stepNumber) {
-      const names = { 4: 'Create Sections', 5: 'Rooms & Instructors' };
-      alert(`\u26A0 Step ${stepNumber} (${names[stepNumber]}) isn't ready yet.\n\nFinish Step ${incomplete.step} first:\n\u2022 ${incomplete.reason}`);
+      const names = { 4: 'Create Sections', 5: 'Rooms & Teachers' };
+      alert(`Step ${stepNumber} (${names[stepNumber]}) isn't ready yet.\n\nFinish Step ${incomplete.step} first:\n\u2022 ${incomplete.reason}`);
       goToScheduleStep(incomplete.step);
       return;
     }
   }
   if (isScheduleInitialized && stepNumber === 7 && canEditSchedule()
     && ACADEMIC_SECTIONS.filter(s => s.termId === getActiveAcademicContext().activeTerm.id).length === 0) {
-    alert(`\u26A0 Step 7 (Timetable) needs sections.\n\nCreate this term's sections in Step 4 first.`);
+    alert(`Step 7 (Timetable) needs sections.\n\nCreate this term's sections in Step 4 first.`);
     goToScheduleStep(4);
     return;
   }
