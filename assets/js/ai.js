@@ -46,16 +46,17 @@ async function runAiAnalysis(action = 'full_audit', customQuestion = '') {
 
   try {
         let outputText = '';
+    if (!csrfToken) await refreshCsrfToken();
     const res = await fetch('api/gemini_suggestions.php', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': csrfToken || '' },
       body: JSON.stringify({ action, question: customQuestion, term_id: getActiveAcademicContext().activeTerm.id })
     });
     const backendData = await res.json();
     if (backendData.success && backendData.data) {
       outputText = backendData.data;
     } else {
-      throw new Error(backendData.error || 'AI scheduling service returned an error.');
+      throw new Error(backendData.error || backendData.message || 'AI scheduling service returned an error.');
     }
 
     renderAiMarkdown(outputText || 'No insights returned.');

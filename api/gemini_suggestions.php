@@ -7,6 +7,8 @@ header('Content-Type: application/json');
 
 // A login is always required: this endpoint spends API quota and exposes schedule data.
 requireLogin();
+// The session token stops another site from sending questions in a signed-in user's name
+requireCSRF();
 
 // Read request payload
 $input = [];

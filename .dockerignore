@@ -2,8 +2,6 @@
 .git
 .gitignore
 *.md
-# The app reads sql/schema_pg.sql at runtime; only the old MySQL schema stays out
-sql/schema.sql
 .env
 .env.local
 .env.example

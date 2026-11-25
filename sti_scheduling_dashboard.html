@@ -8,8 +8,9 @@
   <link rel="stylesheet" href="assets/css/layout.css" />
   <link rel="stylesheet" href="assets/css/schedule.css" />
   <link rel="stylesheet" href="assets/css/modules.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js" defer></script>
+  <!-- Kept in the project (not loaded from the internet) so PDF and PNG export work on a school network without internet -->
+  <script src="assets/vendor/html2canvas-1.4.1.min.js"></script>
+  <script src="assets/vendor/jspdf-4.2.1.umd.min.js" defer></script>
   <script>
     try {
       if (localStorage.getItem('sti_auth_user')) {

@@ -351,14 +351,16 @@ foreach ($SECTION_COUNTS as $program => $years) {
 }
 
 /* ───────────── Teachers: what the terms need against who can teach ───────────── */
-// Weekly units each subject area needs, per level, for each term (SHS subjects count 1 unit per teaching hour)
+// Weekly load each subject area needs, per level, for each term. SHS subjects count their teaching hours; College
+// subjects count their units or their weekly hours, whichever is more, since a lab unit is 3 hours in the room
+// (counting units alone gave a lone Hospitality teacher 9 to 10 hour days of kitchen labs)
 $need = [];
 foreach ($sections as [$program, $year]) {
     $level = $PROGRAM_LEVEL[$program];
     foreach ($CURRICULUM[$program][$year] as $term => $codes) {
         foreach ($codes as $code) {
             $h = subjectHours($code);
-            $need[$level][$term][$catalogByCode[$code]['area']] = ($need[$level][$term][$catalogByCode[$code]['area']] ?? 0) + ($level === 'shs' ? $h[2] + $h[3] : $h[0]);
+            $need[$level][$term][$catalogByCode[$code]['area']] = ($need[$level][$term][$catalogByCode[$code]['area']] ?? 0) + ($level === 'shs' ? $h[2] + $h[3] : max($h[0], $h[2] + $h[3]));
         }
     }
 }
@@ -396,9 +398,7 @@ $teacherAreas = function (array $t): array {
     return array_keys($areas);
 };
 // Hand each teacher's units to the areas and levels they can teach (one-level teachers first). The generator
-// can't pack loads perfectly, so a teacher counts for 90% of their max load: with 3 sections of 30 everywhere
-// that gave the fewest teachers (37) whose days stayed healthy (no day over 8 hours, longest 7.5); one fewer
-// still placed every class but left some 9-hour days.
+// can't pack loads perfectly, so a teacher counts for 90% of their max load.
 const LOAD_PACKING = 0.9;
 // Demo teachers carry a regular full-time load (the app's default maximum, about 6 teaching hours a day)
 const SAMPLE_MAX_LOAD = 30;
@@ -469,7 +469,7 @@ echo "\nWILL ADD: {$YEAR_CODE} (active) with {$termCount} terms (College 1st Sem
     . "  {$collegeSecs} College and {$shsSecs} SHS sections in each regular term, {$subjectRows} curriculum entries, " . count($CATALOG) . " catalog subjects, "
     . count($ROOMS) . ' rooms (' . implode(', ', array_map(fn($type, $n) => "{$n} {$type}", array_keys(array_count_values(array_column($ROOMS, 1))), array_count_values(array_column($ROOMS, 1)))) . ").\n"
     . "  Active term: College 1st Sem (SHS 1st Term runs alongside it). Timetables are empty, ready to generate in Step 7.\n";
-echo "\nTEACHERS: weekly units needed at the busiest time against what the current faculty " . ($testSet ? 'and the test set\'s sample teachers can teach' : 'can teach') . "\n";
+echo "\nTEACHERS: weekly load (units, or hours where labs make it more) needed at the busiest time against what the current faculty " . ($testSet ? 'and the test set\'s sample teachers can teach' : 'can teach') . "\n";
 printf("  %-30s %-9s %8s %10s\n", 'Subject area', 'Level', 'Needed', 'Short by');
 $anyShort = false;
 foreach ($AREAS as $area) {

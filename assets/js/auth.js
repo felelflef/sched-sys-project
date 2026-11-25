@@ -336,6 +336,8 @@ function completeLoginTransition(user, normalizedEmail, sessionToken) {
 }
 
 async function syncUsersFromDB() {
+  // Nobody signed in yet: the list needs a session, so it loads after sign-in instead
+  if (!CURRENT_USER) return;
   try {
     const res = await fetch('api/users.php');
     if (res.ok) {
