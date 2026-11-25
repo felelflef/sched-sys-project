@@ -12,6 +12,10 @@
  *   add --add-only                             Deletes nothing: keeps the school year, terms, rooms, catalog, subject sets,
  *                                              sections, timetables, activity log and teachers, and only adds what is
  *                                              missing (with --add-teachers, only the teachers still needed)
+ *   add --test-set                             A smaller test year: only BSIT, BSCS, BSTM, HRS (College) and ICT-MAWD (SHS)
+ *                                              sections, and a fixed sample faculty of 8 General Education, 7 Tourism and
+ *                                              10 IT teachers, plus only the Hospitality and PE & NSTP teachers still needed
+ *                                              (replaces earlier sample teaching records; not with --add-only)
  *
  * Connection: the same variables the live site uses (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS, DB_SSL,
  * optional DB_SSL_CA), read from the environment or from a .env file in the project folder.
@@ -31,16 +35,23 @@ $args = array_slice($argv, 1);
 $apply = in_array('--apply', $args, true);
 $addTeachers = in_array('--add-teachers', $args, true);
 $addOnly = in_array('--add-only', $args, true);
+$testSet = in_array('--test-set', $args, true);
+// The test set brings its own sample teachers
+$addTeachers = $addTeachers || $testSet;
 $yearArg = null;
 foreach ($args as $a) {
     if (preg_match('/^--year=(\d{4})-(\d{4})$/', $a, $m) && (int)$m[2] === (int)$m[1] + 1) {
         $yearArg = [(int)$m[1], (int)$m[2]];
         continue;
     }
-    if (!in_array($a, ['--apply', '--add-teachers', '--add-only'], true)) {
+    if (!in_array($a, ['--apply', '--add-teachers', '--add-only', '--test-set'], true)) {
         fwrite(STDERR, str_starts_with($a, '--year') ? "Write the school year like --year=2027-2028.\n" : "Unknown option: {$a}\n");
         exit(2);
     }
+}
+if ($testSet && $addOnly) {
+    fwrite(STDERR, "--test-set replaces the scheduling data, so it can't be used with --add-only.\n");
+    exit(2);
 }
 [$FIRST_YEAR, $SECOND_YEAR] = $yearArg ?? [2026, 2027];
 $YEAR_CODE = "AY {$FIRST_YEAR}-{$SECOND_YEAR}";
@@ -211,7 +222,15 @@ $CATALOG = [
   ['SHS 105', 'Pag-aaral ng Kasaysayan at Lipunang Pilipino', 'General Education', 3],
   ['SHS 106', 'Physical Education and Health', 'PE & NSTP', 2],
 ];
-$SHS_PREFIXES = ['SCPT', 'HTTO', 'HTCUA', 'BE', 'ASSH', 'SHS'];
+// ICT-MAWD (SHS), --test-set only: sample subjects for testing, not an official curriculum
+if ($testSet) {
+    array_push($CATALOG,
+        ['MAWD 101', 'Computer Programming (Java) 1', 'IT / Computing', 3],
+        ['MAWD 102', 'Computer Programming (Java) 2', 'IT / Computing', 3],
+        ['MAWD 103', 'Web Development (HTML, CSS and JavaScript)', 'IT / Computing', 3],
+        ['MAWD 104', 'Mobile App Development', 'IT / Computing', 3]);
+}
+$SHS_PREFIXES = ['SCPT', 'HTTO', 'HTCUA', 'BE', 'ASSH', 'SHS', 'MAWD'];
 $catalogLevel = fn(string $code) => in_array(strtok($code, ' '), $SHS_PREFIXES, true) ? 'shs' : 'tertiary';
 $catalogByCode = [];
 foreach ($CATALOG as [$code, $title, $area, $units]) $catalogByCode[$code] = ['title' => $title, 'area' => $area, 'units' => $units];
@@ -223,7 +242,7 @@ function subjectHours(string $code): array {
     $lecture = [3, 0, 3, 0];
     if (preg_match('/^PATHFIT|^SHS 106$/', $code)) return [2, 0, 2, 0, 'pe'];
     // SHS subjects meet 4.5 hours a week: lecture only, or 1.5 hours lecture + 3 hours lab
-    if (preg_match('/^(SCPT|HTCUA 10[234]|HTTO 10[134])$|^SCPT /', $code)) return [3, 1, 1.5, 3, preg_match('/^HTCUA/', $code) ? 'lab' : 'lecture'];
+    if (preg_match('/^(SCPT|HTCUA 10[234]|HTTO 10[134])$|^(SCPT|MAWD) /', $code)) return [3, 1, 1.5, 3, preg_match('/^HTCUA/', $code) ? 'lab' : 'lecture'];
     if (preg_match('/^(SHS|BE|ASSH|HTTO|HTCUA) /', $code)) return [3, 0, 4.5, 0, 'lecture'];
     if (str_starts_with($code, 'NSTP')) return [3, 0, 3, 0, 'special'];
     if (in_array($code, ['IT 112', 'IT 113', 'CS 114', 'CS 115', 'CS 101', 'CS 102', 'CS 104', 'CS 105', 'CS 106'], true)) return [...$lecture, 'lecture'];
@@ -286,16 +305,25 @@ $SHS_STRAND = [
     'ICT-SCPT' => [11 => ['1st Term' => ['SCPT 101'], '2nd Term' => ['SCPT 102'], '3rd Term' => ['SCPT 103']], 12 => ['1st Term' => ['SCPT 103', 'SCPT 104'], '2nd Term' => ['SCPT 104', 'SCPT 102'], '3rd Term' => ['SCPT 104']]],
     'B&E'      => [11 => ['1st Term' => ['BE 101'], '2nd Term' => ['BE 102'], '3rd Term' => ['BE 104']], 12 => ['1st Term' => ['BE 103', 'BE 105'], '2nd Term' => ['BE 106'], '3rd Term' => ['BE 107']]],
 ];
+if ($testSet) {
+    $SHS_STRAND['ICT-MAWD'] = [11 => ['1st Term' => ['MAWD 101'], '2nd Term' => ['MAWD 102'], '3rd Term' => ['MAWD 103']], 12 => ['1st Term' => ['MAWD 103', 'MAWD 104'], '2nd Term' => ['MAWD 104', 'MAWD 102'], '3rd Term' => ['MAWD 104']]];
+}
 foreach ($SHS_STRAND as $strand => $years) {
     foreach ($years as $grade => $terms) {
         foreach ($terms as $term => $codes) $CURRICULUM[$strand][$grade][$term] = array_merge($SHS_CORE[$grade][$term], $codes);
     }
 }
 $PROGRAM_LEVEL = ['BSIT' => 'tertiary', 'BSCS' => 'tertiary', 'BSTM' => 'tertiary', 'HRS' => 'tertiary',
-    'HTCUA' => 'shs', 'HTTO' => 'shs', 'ICT-SCPT' => 'shs', 'B&E' => 'shs', 'ASSH' => 'shs'];
+    'HTCUA' => 'shs', 'HTTO' => 'shs', 'ICT-SCPT' => 'shs', 'ICT-MAWD' => 'shs', 'B&E' => 'shs', 'ASSH' => 'shs'];
 // Sections per program and year; each regular term of the level has the same sections
 $SECTION_COUNTS = ['BSIT' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSCS' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSTM' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'HRS' => [1 => 3, 2 => 3],
     'HTCUA' => [11 => 3, 12 => 3], 'HTTO' => [11 => 3, 12 => 3], 'ICT-SCPT' => [11 => 3, 12 => 3], 'B&E' => [11 => 3, 12 => 3]];
+if ($testSet) {
+    $SECTION_COUNTS = ['BSIT' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSCS' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSTM' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'HRS' => [1 => 3, 2 => 3],
+        'ICT-MAWD' => [11 => 3, 12 => 3]];
+    // Only the test programs get subjects
+    $CURRICULUM = array_intersect_key($CURRICULUM, $SECTION_COUNTS);
+}
 const SECTION_STUDENTS = 30;
 $ROOMS = [];
 // Floors 1-3: the app's room form and server accept floors 1 to 3 only
@@ -390,23 +418,13 @@ function shortages(array $teachers, array $demand, callable $teacherAreas): arra
     }
     return $left;
 }
-$left = shortages($teachers, $demand, $teacherAreas);
 $sampleTeachers = [];
 // Old sample records are replaced, so only a real account's email counts as taken
 $emailTaken = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.email = ?" . ($replaceSamples ? " AND NOT ({$SAMPLE_RECORD})" : ''));
 $slug =fn(string $area) => trim(preg_replace('/[^a-z]+/', '-', strtolower(explode(' ', $area)[0])), '-');
-// As few new teachers as cover the shortfall: Mixed (College and SHS) wherever the area has both levels' classes
-foreach ($AREAS as $area) {
-    $shortCollege = max(0, $left[$area]['tertiary'] ?? 0);
-    $shortShs = max(0, $left[$area]['shs'] ?? 0);
-    if ($shortCollege + $shortShs <= 0.001) continue;
-    $level = $shortCollege > 0.001 && $shortShs > 0.001 ? 'mixed' : ($shortShs > 0.001 ? 'shs' : 'tertiary');
-    // Both levels together peak lower than each level's own peak added up, since the peaks fall in different terms
-    $coveredByOthers = ($demand[$area]['tertiary'] ?? 0) + ($demand[$area]['shs'] ?? 0) - $shortCollege - $shortShs;
-    $short = $level === 'mixed' ? max(0, ($combined[$area] ?? 0) - $coveredByOthers) : $shortCollege + $shortShs;
-    $wanted = (int)ceil($short / (LOAD_PACKING * SAMPLE_MAX_LOAD));
+// A number an account already uses is skipped, so the wanted count is really added
+$addSamples = function (string $area, string $level, int $wanted) use (&$sampleTeachers, $emailTaken, $slug): void {
     $prefix = $level === 'mixed' ? '' : ($level === 'shs' ? 'SHS ' : 'College ');
-    // A number an account already uses is skipped, so the shortfall is really added
     for ($n = 1; $wanted > 0; $n++) {
         $email = "sample.{$slug($area)}." . ($level === 'mixed' ? 'mixed' : ($level === 'shs' ? 'shs' : 'college')) . ".{$n}@sti.edu";
         $emailTaken->execute([$email]);
@@ -414,7 +432,27 @@ foreach ($AREAS as $area) {
         $sampleTeachers[] = ['first' => 'Sample', 'last' => "{$prefix}{$area} Teacher {$n}", 'area' => $area, 'level' => $level, 'email' => $email];
         $wanted--;
     }
+};
+$asTeacherRows = fn(array $samples) => array_map(fn($t) => ['max_load' => SAMPLE_MAX_LOAD, 'teaching_level' => $t['level'], 'areas' => json_encode([$t['area']])], $samples);
+// --test-set: a fixed sample faculty; General Education and IT teach College and SHS (ICT-MAWD) classes, Tourism College only
+$FIXED_TEACHERS = $testSet ? ['General Education' => [8, 'mixed'], 'Tourism' => [7, 'tertiary'], 'IT / Computing' => [10, 'mixed']] : [];
+foreach ($FIXED_TEACHERS as $area => [$count, $level]) $addSamples($area, $level, $count);
+$left = shortages(array_merge($teachers, $asTeacherRows($sampleTeachers)), $demand, $teacherAreas);
+// As few new teachers as cover the shortfall: Mixed (College and SHS) wherever the area has both levels' classes
+foreach ($AREAS as $area) {
+    // The test set keeps its fixed counts, even where they fall short
+    if (isset($FIXED_TEACHERS[$area])) continue;
+    $shortCollege = max(0, $left[$area]['tertiary'] ?? 0);
+    $shortShs = max(0, $left[$area]['shs'] ?? 0);
+    if ($shortCollege + $shortShs <= 0.001) continue;
+    $level = $shortCollege > 0.001 && $shortShs > 0.001 ? 'mixed' : ($shortShs > 0.001 ? 'shs' : 'tertiary');
+    // Both levels together peak lower than each level's own peak added up, since the peaks fall in different terms
+    $coveredByOthers = ($demand[$area]['tertiary'] ?? 0) + ($demand[$area]['shs'] ?? 0) - $shortCollege - $shortShs;
+    $short = $level === 'mixed' ? max(0, ($combined[$area] ?? 0) - $coveredByOthers) : $shortCollege + $shortShs;
+    $addSamples($area, $level, (int)ceil($short / (LOAD_PACKING * SAMPLE_MAX_LOAD)));
 }
+// The test set's report shows what is still short with every sample teacher counted
+if ($testSet) $left = shortages(array_merge($teachers, $asTeacherRows($sampleTeachers)), $demand, $teacherAreas);
 
 /* ───────────── Report ───────────── */
 $tables = ['schedules', 'schedule_snapshots', 'academic_sections', 'term_subjects', 'school_terms', 'school_years', 'subject_sets', 'subject_catalog', 'classrooms', 'faculty_qualifications', 'activity_log'];
@@ -431,7 +469,7 @@ echo "\nWILL ADD: {$YEAR_CODE} (active) with {$termCount} terms (College 1st Sem
     . "  {$collegeSecs} College and {$shsSecs} SHS sections in each regular term, {$subjectRows} curriculum entries, " . count($CATALOG) . " catalog subjects, "
     . count($ROOMS) . ' rooms (' . implode(', ', array_map(fn($type, $n) => "{$n} {$type}", array_keys(array_count_values(array_column($ROOMS, 1))), array_count_values(array_column($ROOMS, 1)))) . ").\n"
     . "  Active term: College 1st Sem (SHS 1st Term runs alongside it). Timetables are empty, ready to generate in Step 7.\n";
-echo "\nTEACHERS: weekly units needed at the busiest time against what the current faculty can teach\n";
+echo "\nTEACHERS: weekly units needed at the busiest time against what the current faculty " . ($testSet ? 'and the test set\'s sample teachers can teach' : 'can teach') . "\n";
 printf("  %-30s %-9s %8s %10s\n", 'Subject area', 'Level', 'Needed', 'Short by');
 $anyShort = false;
 foreach ($AREAS as $area) {
@@ -442,7 +480,12 @@ foreach ($AREAS as $area) {
         printf("  %-30s %-9s %8d %10s\n", $area, $label, $demand[$area][$level], $short > 0.001 ? (string)round($short) : '-');
     }
 }
-if ($anyShort) {
+if ($testSet) {
+    $byArea = array_count_values(array_column($sampleTeachers, 'area'));
+    echo "\n  --test-set: will " . ($oldSamples ? "replace the {$oldSamples} sample teaching records from an earlier run with " : 'add ') . count($sampleTeachers)
+        . ' teaching records (no login, max ' . SAMPLE_MAX_LOAD . ' units): ' . implode(', ', array_map(fn($a, $n) => "{$n} {$a}", array_keys($byArea), $byArea)) . ".\n"
+        . ($anyShort ? "  Areas still short above keep the fixed count, so some of their classes may stay unplaced.\n" : '');
+} elseif ($anyShort) {
     echo $addTeachers
         ? "\n  --add-teachers: will " . ($oldSamples ? "replace the {$oldSamples} sample teaching records from an earlier run with " : 'add ') . count($sampleTeachers)
             . ' teaching records (no login, max ' . SAMPLE_MAX_LOAD . ' units, ' . count(array_filter($sampleTeachers, fn($t) => $t['level'] === 'mixed')) . " of them Mixed) holding the right certificate, to cover the shortfall.\n"

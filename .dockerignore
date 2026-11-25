@@ -10,3 +10,5 @@ Dockerfile
 .dockerignore
 # Command-line maintenance scripts (never served by the web server)
 tools/
+# Scripts for running a local copy on a school PC; not needed on Render
+local/
