@@ -189,10 +189,11 @@ function callGemini(string $model, array $payload, string $apiKey): array {
         CURLOPT_TIMEOUT => 45,
         CURLOPT_CONNECTTIMEOUT => 10,
     ]);
+    // PHP on Windows has no certificate list of its own, so it checks Google's certificate against Windows' list
+    if (PHP_OS_FAMILY === 'Windows') curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
     $body = curl_exec($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
-    curl_close($ch);
     return [$status, $error, is_string($body) ? json_decode($body, true) : null];
 }
 

@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────
 # Dockerfile for STI Classroom System
-# Deploys on Render via Docker (PHP 8.2 + Apache)
+# Deploys on Render via Docker (PHP 8.5 + Apache)
 # ─────────────────────────────────────────────────────────
-FROM php:8.2-apache
+FROM php:8.5-apache
 
 # Enable required PHP extensions (PostgreSQL driver; libpq-dev provides the client library it builds against)
 RUN apt-get update \

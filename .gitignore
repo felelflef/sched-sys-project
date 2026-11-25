@@ -10,3 +10,7 @@ Thumbs.db
 
 # Local database backups made by tools/reset_ay2026.php
 tools/backups/
+
+# Local copy on a school PC: generated Apache/PHP settings, logs, process file, database backups
+local/run/
+local/backups/

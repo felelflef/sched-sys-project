@@ -123,11 +123,12 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
 curl_setopt($ch, CURLOPT_TIMEOUT, 40);
 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+// PHP on Windows has no certificate list of its own, so it checks Google's certificate against Windows' list
+if (PHP_OS_FAMILY === 'Windows') curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
 
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlError = curl_error($ch);
-curl_close($ch);
 
 // Try the backup model if the main one is retired, busy, or times out
 if ($curlError || in_array($httpCode, [404, 429, 500, 503], true)) {
@@ -139,10 +140,10 @@ if ($curlError || in_array($httpCode, [404, 429, 500, 503], true)) {
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
     curl_setopt($ch, CURLOPT_TIMEOUT, 40);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    if (PHP_OS_FAMILY === 'Windows') curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlError = curl_error($ch);
-    curl_close($ch);
 }
 
 if ($curlError) {

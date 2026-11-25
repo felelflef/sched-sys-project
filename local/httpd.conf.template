@@ -1,0 +1,73 @@
+# Apache settings for running the scheduling system on a school PC.
+# start.ps1 fills in the {{...}} values and writes the result to local/run/httpd.conf; edit this file, not that one.
+
+ServerRoot "{{APACHE_ROOT}}"
+Listen {{PORT}}
+ServerName localhost:{{PORT}}
+PidFile "{{RUN_DIR}}/httpd.pid"
+
+LoadModule authz_core_module modules/mod_authz_core.so
+LoadModule authz_host_module modules/mod_authz_host.so
+LoadModule dir_module modules/mod_dir.so
+LoadModule mime_module modules/mod_mime.so
+LoadModule rewrite_module modules/mod_rewrite.so
+LoadModule log_config_module modules/mod_log_config.so
+LoadModule php_module "{{PHP_DIR}}/php8apache2_4.dll"
+PHPIniDir "{{RUN_DIR}}"
+
+TypesConfig conf/mime.types
+<FilesMatch "\.php$">
+    SetHandler application/x-httpd-php
+</FilesMatch>
+
+# Logs start a new file at 10 MB and keep the 5 newest (apache-error.log, apache-error.log.1 ... .4)
+ErrorLog "||\"{{APACHE_ROOT}}/bin/rotatelogs.exe\" -n 5 \"{{RUN_DIR}}/apache-error.log\" 10M"
+LogFormat "%h %t \"%r\" %>s %b" common
+CustomLog "||\"{{APACHE_ROOT}}/bin/rotatelogs.exe\" -n 5 \"{{RUN_DIR}}/apache-access.log\" 10M" common
+ServerTokens Prod
+ServerSignature Off
+
+<Directory />
+    AllowOverride None
+    Require all denied
+</Directory>
+
+DocumentRoot "{{APP_DIR}}"
+DirectoryIndex index.php
+<Directory "{{APP_DIR}}">
+    Options -Indexes +FollowSymLinks
+    # The project's .htaccess sends unknown addresses to the dashboard, as on the live site
+    AllowOverride All
+    # Only this PC and devices on a private (school) network: 10.x, 172.16-31.x, 192.168.x and their IPv6 equivalents
+    Require local
+    Require ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 fc00::/7 fe80::/10
+</Directory>
+
+# Never served: settings and passwords (.env), server-side code, database files, tools, these local files, git
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+<Directory "{{APP_DIR}}/config">
+    Require all denied
+</Directory>
+<Directory "{{APP_DIR}}/includes">
+    Require all denied
+</Directory>
+<Directory "{{APP_DIR}}/sql">
+    Require all denied
+</Directory>
+<Directory "{{APP_DIR}}/tools">
+    Require all denied
+</Directory>
+<Directory "{{APP_DIR}}/local">
+    Require all denied
+</Directory>
+<Directory "{{APP_DIR}}/.git">
+    Require all denied
+</Directory>
+<FilesMatch "\.(md|ps1|cmd|log|sql|template|conf|ini|dump)$">
+    Require all denied
+</FilesMatch>
+<Files "Dockerfile">
+    Require all denied
+</Files>
