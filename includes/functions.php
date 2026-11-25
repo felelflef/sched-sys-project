@@ -14,8 +14,8 @@ set_exception_handler(function (Throwable $e): void {
 require_once __DIR__ . '/activity.php';
 
 // STI's programs. College programs use Years 1-4 (HRS is a 2-year program); SHS strands use Grades 11-12.
-const TERTIARY_PROGRAMS = ['BSCS', 'BSIT', 'BSTM', 'HRS'];
-const SHS_STRANDS = ['HTCUA', 'HTTO', 'ASSH', 'B&E', 'ICT-SCPT'];
+const TERTIARY_PROGRAMS = ['BSCS', 'BSIT', 'BSTM', 'HRS', 'TEM'];
+const SHS_STRANDS = ['IT-MAWD', 'CUART', 'TOPER'];
 const VALID_PROGRAMS = [...TERTIARY_PROGRAMS, ...SHS_STRANDS];
 // Programs shorter than their level's usual years
 const PROGRAM_YEARS = ['HRS' => [1, 2]];

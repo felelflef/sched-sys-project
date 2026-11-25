@@ -89,10 +89,10 @@ let SUBJECTS = [
   { code: "CS 113", title: "Data Science and Analytics", dept: "IT / Computing", units: 3, level: 'tertiary' },
   { code: "CS 114", title: "Thesis 1", dept: "IT / Computing", units: 3, level: 'tertiary' },
   { code: "CS 115", title: "Thesis 2", dept: "IT / Computing", units: 3, level: 'tertiary' },
-  { code: "SCPT 101", title: "Computer Systems Servicing", dept: "IT / Computing", units: 3, level: 'shs' },
-  { code: "SCPT 102", title: "Computer Programming (SHS) 1", dept: "IT / Computing", units: 3, level: 'shs' },
-  { code: "SCPT 103", title: "Computer Programming (SHS) 2", dept: "IT / Computing", units: 3, level: 'shs' },
-  { code: "SCPT 104", title: "Web Development", dept: "IT / Computing", units: 3, level: 'shs' },
+  { code: "MAWD 101", title: "Computer Programming (Java) 1", dept: "IT / Computing", units: 3, level: 'shs' },
+  { code: "MAWD 102", title: "Computer Programming (Java) 2", dept: "IT / Computing", units: 3, level: 'shs' },
+  { code: "MAWD 103", title: "Web Development (HTML, CSS and JavaScript)", dept: "IT / Computing", units: 3, level: 'shs' },
+  { code: "MAWD 104", title: "Mobile App Development", dept: "IT / Computing", units: 3, level: 'shs' },
   { code: "THC 101", title: "Macro Perspective of Tourism and Hospitality", dept: "Tourism", units: 3, level: 'tertiary' },
   { code: "THC 102", title: "Risk Management as Applied to Safety, Security and Sanitation", dept: "Tourism", units: 3, level: 'tertiary' },
   { code: "THC 103", title: "Quality Service Management in Tourism and Hospitality", dept: "Tourism", units: 3, level: 'tertiary' },
@@ -111,34 +111,20 @@ let SUBJECTS = [
   { code: "TPC 107", title: "Introduction to MICE", dept: "Tourism", units: 3, level: 'tertiary' },
   { code: "TPC 108", title: "Airline Management and Operations", dept: "Tourism", units: 3, level: 'tertiary' },
   { code: "TPC 109", title: "Research in Tourism", dept: "Tourism", units: 3, level: 'tertiary' },
-  { code: "HTTO 101", title: "Travel and Tour Services", dept: "Tourism", units: 3, level: 'shs' },
-  { code: "HTTO 102", title: "Local Guiding Services", dept: "Tourism", units: 3, level: 'shs' },
-  { code: "HTTO 103", title: "Front Office Services (SHS)", dept: "Tourism", units: 3, level: 'shs' },
-  { code: "HTTO 104", title: "Events Management", dept: "Tourism", units: 3, level: 'shs' },
+  { code: "TOPER 101", title: "Travel and Tour Services", dept: "Tourism", units: 3, level: 'shs' },
+  { code: "TOPER 102", title: "Local Guiding Services", dept: "Tourism", units: 3, level: 'shs' },
+  { code: "TOPER 103", title: "Front Office Services (SHS)", dept: "Tourism", units: 3, level: 'shs' },
+  { code: "TOPER 104", title: "Events Management", dept: "Tourism", units: 3, level: 'shs' },
   { code: "HRS 101", title: "Cookery", dept: "Hospitality & Culinary", units: 3, level: 'tertiary' },
   { code: "HRS 102", title: "Food and Beverage Services", dept: "Hospitality & Culinary", units: 3, level: 'tertiary' },
   { code: "HRS 103", title: "Bread and Pastry Production", dept: "Hospitality & Culinary", units: 3, level: 'tertiary' },
   { code: "HRS 104", title: "Housekeeping", dept: "Hospitality & Culinary", units: 3, level: 'tertiary' },
   { code: "HRS 105", title: "Front Office Services", dept: "Hospitality & Culinary", units: 3, level: 'tertiary' },
   { code: "HRS 106", title: "Customer Communication Services", dept: "Hospitality & Culinary", units: 3, level: 'tertiary' },
-  { code: "HTCUA 101", title: "Kitchen Safety and Sanitation", dept: "Hospitality & Culinary", units: 3, level: 'shs' },
-  { code: "HTCUA 102", title: "Culinary Cookery", dept: "Hospitality & Culinary", units: 3, level: 'shs' },
-  { code: "HTCUA 103", title: "Baking and Pastry", dept: "Hospitality & Culinary", units: 3, level: 'shs' },
-  { code: "HTCUA 104", title: "Food and Beverage Service (SHS)", dept: "Hospitality & Culinary", units: 3, level: 'shs' },
-  { code: "BE 101", title: "Fundamentals of Accountancy, Business and Management 1", dept: "Business & Entrepreneurship", units: 3, level: 'shs' },
-  { code: "BE 102", title: "Fundamentals of Accountancy, Business and Management 2", dept: "Business & Entrepreneurship", units: 3, level: 'shs' },
-  { code: "BE 103", title: "Business Finance", dept: "Business & Entrepreneurship", units: 3, level: 'shs' },
-  { code: "BE 104", title: "Principles of Marketing", dept: "Business & Entrepreneurship", units: 3, level: 'shs' },
-  { code: "BE 105", title: "Applied Economics", dept: "Business & Entrepreneurship", units: 3, level: 'shs' },
-  { code: "BE 106", title: "Business Ethics and Social Responsibility", dept: "Business & Entrepreneurship", units: 3, level: 'shs' },
-  { code: "BE 107", title: "Entrepreneurship", dept: "Business & Entrepreneurship", units: 3, level: 'shs' },
-  { code: "ASSH 101", title: "Creative Writing", dept: "Arts & Social Sciences", units: 3, level: 'shs' },
-  { code: "ASSH 102", title: "Malikhaing Pagsulat", dept: "Arts & Social Sciences", units: 3, level: 'shs' },
-  { code: "ASSH 103", title: "Introduction to the Philosophy of the Human Person", dept: "Arts & Social Sciences", units: 3, level: 'shs' },
-  { code: "ASSH 104", title: "Disciplines and Ideas in the Social Sciences", dept: "Arts & Social Sciences", units: 3, level: 'shs' },
-  { code: "ASSH 105", title: "Philippine Politics and Governance", dept: "Arts & Social Sciences", units: 3, level: 'shs' },
-  { code: "ASSH 106", title: "Community Engagement, Solidarity and Citizenship", dept: "Arts & Social Sciences", units: 3, level: 'shs' },
-  { code: "ASSH 107", title: "Trends, Networks and Critical Thinking", dept: "Arts & Social Sciences", units: 3, level: 'shs' },
+  { code: "CUART 101", title: "Kitchen Safety and Sanitation", dept: "Hospitality & Culinary", units: 3, level: 'shs' },
+  { code: "CUART 102", title: "Culinary Cookery", dept: "Hospitality & Culinary", units: 3, level: 'shs' },
+  { code: "CUART 103", title: "Baking and Pastry", dept: "Hospitality & Culinary", units: 3, level: 'shs' },
+  { code: "CUART 104", title: "Food and Beverage Service (SHS)", dept: "Hospitality & Culinary", units: 3, level: 'shs' },
   { code: "SHS 101", title: "Effective Communication", dept: "General Education", units: 3, level: 'shs' },
   { code: "SHS 102", title: "General Mathematics", dept: "General Education", units: 3, level: 'shs' },
   { code: "SHS 103", title: "General Science", dept: "General Education", units: 3, level: 'shs' },
@@ -267,7 +253,7 @@ function subjectParts(subj) {
   const minutes = subjectPartMinutes(subj);
   return ['lec', 'lab'].filter(part => minutes[part] > 0).map(part => ({ part, minutes: minutes[part] }));
 }
-// Computer labs, except HRS and HTCUA use the Kitchen Lab and BSTM and HTTO the Tourism Lab
+// Computer labs, except HRS and CUART use the Kitchen Lab and BSTM, TEM and TOPER the Tourism Lab
 function isLabRoomFor(room, program) {
   if (!room) return false;
   // A specialized room counts for its own kind of lab only, so the Tourism Lab never hosts cookery and the reverse
@@ -345,7 +331,7 @@ let SCHOOL_YEARS = [
 
 // Each term is college (tertiary) or Senior High School, so a school year holds both kinds of terms.
 // STI's programs: college programs use Years 1-4 (HRS is a 2-year program); SHS strands use Grades 11-12.
-const LEVEL_PROGRAMS = { tertiary: ['BSCS', 'BSIT', 'BSTM', 'HRS'], shs: ['HTCUA', 'HTTO', 'ASSH', 'B&E', 'ICT-SCPT'] };
+const LEVEL_PROGRAMS = { tertiary: ['BSCS', 'BSIT', 'BSTM', 'HRS', 'TEM'], shs: ['IT-MAWD', 'CUART', 'TOPER'] };
 const LEVEL_YEARS = { tertiary: [1, 2, 3, 4], shs: [11, 12] };
 const PROGRAM_YEARS = { HRS: [1, 2] };
 // The years a program offers within its level
@@ -357,8 +343,8 @@ function isRetiredProgram(program) {
   return !Object.values(LEVEL_PROGRAMS).some(list => list.includes(program));
 }
 // Programs whose lab hours use the Kitchen Lab or the Tourism Lab instead of a computer lab
-const KITCHEN_PROGRAMS = ['HRS', 'HTCUA'];
-const TOURISM_LAB_PROGRAMS = ['BSTM', 'HTTO'];
+const KITCHEN_PROGRAMS = ['HRS', 'CUART'];
+const TOURISM_LAB_PROGRAMS = ['BSTM', 'TEM', 'TOPER'];
 const LEVEL_NAMES = { tertiary: 'College', shs: 'Senior High School' };
 
 // A term's level is saved on the term; data saved in this browser before that kept it on the school year
@@ -464,19 +450,14 @@ let CURRICULUM_SUBJECTS = [
   { id: 32, termId: 3, termName: "Summer", code: "IT 106", name: "Integrative Programming and Technologies", units: 3, labUnits: 1, lecHours: 2.0, labHours: 3.0, type: "lecture", program: "BSIT", year: 2, curriculum: '2024 Revised', isIncluded: true },
   { id: 33, termId: 3, termName: "Summer", code: "CS 103", name: "Object-Oriented Programming", units: 3, labUnits: 1, lecHours: 2.0, labHours: 3.0, type: "lecture", program: "BSCS", year: 1, curriculum: '2024 Revised', isIncluded: true },
   // 1st Term (term 7)
-  { id: 34, termId: 7, termName: "1st Term", code: "SCPT 101", name: "Computer Systems Servicing", units: 3, labUnits: 1, lecHours: 2.0, labHours: 3.0, type: "lecture", program: "ICT-SCPT", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 35, termId: 7, termName: "1st Term", code: "SHS 101", name: "Effective Communication", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "ICT-SCPT", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 36, termId: 7, termName: "1st Term", code: "SHS 102", name: "General Mathematics", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "ICT-SCPT", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 37, termId: 7, termName: "1st Term", code: "HTCUA 101", name: "Kitchen Safety and Sanitation", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "HTCUA", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 38, termId: 7, termName: "1st Term", code: "HTCUA 102", name: "Culinary Cookery", units: 3, labUnits: 2, lecHours: 1.0, labHours: 6.0, type: "lab", program: "HTCUA", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 39, termId: 7, termName: "1st Term", code: "SHS 101", name: "Effective Communication", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "HTCUA", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 40, termId: 7, termName: "1st Term", code: "HTTO 101", name: "Travel and Tour Services", units: 3, labUnits: 1, lecHours: 2.0, labHours: 3.0, type: "lecture", program: "HTTO", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 41, termId: 7, termName: "1st Term", code: "SHS 101", name: "Effective Communication", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "HTTO", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 42, termId: 7, termName: "1st Term", code: "BE 101", name: "Fundamentals of Accountancy, Business and Management 1", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "B&E", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 43, termId: 7, termName: "1st Term", code: "SHS 102", name: "General Mathematics", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "B&E", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 44, termId: 7, termName: "1st Term", code: "ASSH 101", name: "Creative Writing", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "ASSH", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 45, termId: 7, termName: "1st Term", code: "SHS 101", name: "Effective Communication", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "ASSH", year: 11, curriculum: '2024 Revised', isIncluded: true },
-  { id: 46, termId: 7, termName: "1st Term", code: "SHS 106", name: "Physical Education and Health", units: 2, labUnits: 0, lecHours: 2.0, labHours: 0.0, type: "pe", program: "ASSH", year: 11, curriculum: '2024 Revised', isIncluded: true }
+  { id: 34, termId: 7, termName: "1st Term", code: "MAWD 101", name: "Computer Programming (Java) 1", units: 3, labUnits: 1, lecHours: 2.0, labHours: 3.0, type: "lecture", program: "IT-MAWD", year: 11, curriculum: '2024 Revised', isIncluded: true },
+  { id: 35, termId: 7, termName: "1st Term", code: "SHS 101", name: "Effective Communication", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "IT-MAWD", year: 11, curriculum: '2024 Revised', isIncluded: true },
+  { id: 36, termId: 7, termName: "1st Term", code: "SHS 102", name: "General Mathematics", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "IT-MAWD", year: 11, curriculum: '2024 Revised', isIncluded: true },
+  { id: 37, termId: 7, termName: "1st Term", code: "CUART 101", name: "Kitchen Safety and Sanitation", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "CUART", year: 11, curriculum: '2024 Revised', isIncluded: true },
+  { id: 38, termId: 7, termName: "1st Term", code: "CUART 102", name: "Culinary Cookery", units: 3, labUnits: 2, lecHours: 1.0, labHours: 6.0, type: "lab", program: "CUART", year: 11, curriculum: '2024 Revised', isIncluded: true },
+  { id: 39, termId: 7, termName: "1st Term", code: "SHS 101", name: "Effective Communication", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "CUART", year: 11, curriculum: '2024 Revised', isIncluded: true },
+  { id: 40, termId: 7, termName: "1st Term", code: "TOPER 101", name: "Travel and Tour Services", units: 3, labUnits: 1, lecHours: 2.0, labHours: 3.0, type: "lecture", program: "TOPER", year: 11, curriculum: '2024 Revised', isIncluded: true },
+  { id: 41, termId: 7, termName: "1st Term", code: "SHS 101", name: "Effective Communication", units: 3, labUnits: 0, lecHours: 3.0, labHours: 0.0, type: "lecture", program: "TOPER", year: 11, curriculum: '2024 Revised', isIncluded: true }
 ];
 
 // 4. Saved Subject Sets: reusable subject lists kept in the Subject Catalog and loaded into a term in Step 3.
@@ -504,11 +485,9 @@ let ACADEMIC_SECTIONS = [
   { id: 10, termId: 4, code: "CS101M", name: "BSCS 1A", program: "BSCS", year: 1, studentCount: 32, shift: 'AM' },
   { id: 11, termId: 4, code: "TM101M", name: "BSTM 1A", program: "BSTM", year: 1, studentCount: 34, shift: 'AM' },
   { id: 12, termId: 4, code: "HRS101M", name: "HRS 1A", program: "HRS", year: 1, studentCount: 35, shift: 'AM' },
-  { id: 13, termId: 7, code: "ICT-SCPT11-A", name: "ICT-SCPT 11A", program: "ICT-SCPT", year: 11, studentCount: 36, shift: 'PM' },
-  { id: 14, termId: 7, code: "HTCUA11-A", name: "HTCUA 11A", program: "HTCUA", year: 11, studentCount: 30, shift: 'PM' },
-  { id: 15, termId: 7, code: "HTTO11-A", name: "HTTO 11A", program: "HTTO", year: 11, studentCount: 30, shift: 'PM' },
-  { id: 16, termId: 7, code: "BE11-A", name: "B&E 11A", program: "B&E", year: 11, studentCount: 38, shift: 'PM' },
-  { id: 17, termId: 7, code: "ASSH11-A", name: "ASSH 11A", program: "ASSH", year: 11, studentCount: 35, shift: 'PM' }
+  { id: 13, termId: 7, code: "IT-MAWD11-A", name: "IT-MAWD 11A", program: "IT-MAWD", year: 11, studentCount: 36, shift: 'PM' },
+  { id: 14, termId: 7, code: "CUART11-A", name: "CUART 11A", program: "CUART", year: 11, studentCount: 30, shift: 'PM' },
+  { id: 15, termId: 7, code: "TOPER11-A", name: "TOPER 11A", program: "TOPER", year: 11, studentCount: 30, shift: 'PM' }
 ];
 
 // Unassigned Classes Diagnostics

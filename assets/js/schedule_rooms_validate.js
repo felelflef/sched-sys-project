@@ -210,14 +210,14 @@ function evaluateResourceReadiness() {
     checks.push({
       status: 'critical',
       title: 'Missing Room Type: Commercial Kitchen Lab',
-      desc: `HRS and HTCUA subjects need the culinary kitchen lab for ${culinarySubjects.length} course(s), but NO kitchen lab is registered!`
+      desc: `HRS and CUART subjects need the culinary kitchen lab for ${culinarySubjects.length} course(s), but NO kitchen lab is registered!`
     });
     criticalReasons.push(`Missing Commercial Kitchen Lab for ${culinarySubjects.length} culinary courses.`);
   } else if (tourismSubjects.length > 0 && tourismRooms.length === 0) {
     checks.push({
       status: 'warning',
       title: 'Missing Room Type: Tourism Mock Center',
-      desc: `BSTM and HTTO subjects need the tourism mock center for ${tourismSubjects.length} course(s), but none is registered.`
+      desc: `BSTM, TEM and TOPER subjects need the tourism mock center for ${tourismSubjects.length} course(s), but none is registered.`
     });
   } else {
     checks.push({
