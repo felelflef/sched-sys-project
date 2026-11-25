@@ -12,7 +12,7 @@
  *   add --add-only                             Deletes nothing: keeps the school year, terms, rooms, catalog, subject sets,
  *                                              sections, timetables, activity log and teachers, and only adds what is
  *                                              missing (with --add-teachers, only the teachers still needed)
- *   add --test-set                             A smaller test year: only BSIT, BSCS, BSTM, HRS (College) and ICT-MAWD (SHS)
+ *   add --test-set                             A smaller test year: only BSIT, BSCS, BSTM, HRS (College) and IT-MAWD (SHS)
  *                                              sections, and a fixed sample faculty of 8 General Education, 7 Tourism and
  *                                              10 IT teachers, plus only the Hospitality and PE & NSTP teachers still needed
  *                                              (replaces earlier sample teaching records; not with --add-only)
@@ -165,11 +165,11 @@ $CATALOG = [
   ['CS 113', 'Data Science and Analytics', 'IT / Computing', 3],
   ['CS 114', 'Thesis 1', 'IT / Computing', 3],
   ['CS 115', 'Thesis 2', 'IT / Computing', 3],
-  // ICT-SCPT (SHS)
-  ['SCPT 101', 'Computer Systems Servicing', 'IT / Computing', 3],
-  ['SCPT 102', 'Computer Programming (SHS) 1', 'IT / Computing', 3],
-  ['SCPT 103', 'Computer Programming (SHS) 2', 'IT / Computing', 3],
-  ['SCPT 104', 'Web Development', 'IT / Computing', 3],
+  // IT-MAWD (SHS): sample subjects for testing, not an official curriculum
+  ['MAWD 101', 'Computer Programming (Java) 1', 'IT / Computing', 3],
+  ['MAWD 102', 'Computer Programming (Java) 2', 'IT / Computing', 3],
+  ['MAWD 103', 'Web Development (HTML, CSS and JavaScript)', 'IT / Computing', 3],
+  ['MAWD 104', 'Mobile App Development', 'IT / Computing', 3],
   // Tourism: BSTM (CMO 62)
   ['THC 101', 'Macro Perspective of Tourism and Hospitality', 'Tourism', 3],
   ['THC 102', 'Risk Management as Applied to Safety, Security and Sanitation', 'Tourism', 3],
@@ -189,11 +189,11 @@ $CATALOG = [
   ['TPC 107', 'Introduction to MICE', 'Tourism', 3],
   ['TPC 108', 'Airline Management and Operations', 'Tourism', 3],
   ['TPC 109', 'Research in Tourism', 'Tourism', 3],
-  // HTTO (SHS)
-  ['HTTO 101', 'Travel and Tour Services', 'Tourism', 3],
-  ['HTTO 102', 'Local Guiding Services', 'Tourism', 3],
-  ['HTTO 103', 'Front Office Services (SHS)', 'Tourism', 3],
-  ['HTTO 104', 'Events Management', 'Tourism', 3],
+  // TOPER (SHS)
+  ['TOPER 101', 'Travel and Tour Services', 'Tourism', 3],
+  ['TOPER 102', 'Local Guiding Services', 'Tourism', 3],
+  ['TOPER 103', 'Front Office Services (SHS)', 'Tourism', 3],
+  ['TOPER 104', 'Events Management', 'Tourism', 3],
   // Hospitality & Culinary: HRS (TESDA NC II)
   ['HRS 101', 'Cookery', 'Hospitality & Culinary', 3],
   ['HRS 102', 'Food and Beverage Services', 'Hospitality & Culinary', 3],
@@ -201,19 +201,11 @@ $CATALOG = [
   ['HRS 104', 'Housekeeping', 'Hospitality & Culinary', 3],
   ['HRS 105', 'Front Office Services', 'Hospitality & Culinary', 3],
   ['HRS 106', 'Customer Communication Services', 'Hospitality & Culinary', 3],
-  // HTCUA (SHS)
-  ['HTCUA 101', 'Kitchen Safety and Sanitation', 'Hospitality & Culinary', 3],
-  ['HTCUA 102', 'Culinary Cookery', 'Hospitality & Culinary', 3],
-  ['HTCUA 103', 'Baking and Pastry', 'Hospitality & Culinary', 3],
-  ['HTCUA 104', 'Food and Beverage Service (SHS)', 'Hospitality & Culinary', 3],
-  // Business & Entrepreneurship (SHS B&E)
-  ['BE 101', 'Fundamentals of Accountancy, Business and Management 1', 'Business & Entrepreneurship', 3],
-  ['BE 102', 'Fundamentals of Accountancy, Business and Management 2', 'Business & Entrepreneurship', 3],
-  ['BE 103', 'Business Finance', 'Business & Entrepreneurship', 3],
-  ['BE 104', 'Principles of Marketing', 'Business & Entrepreneurship', 3],
-  ['BE 105', 'Applied Economics', 'Business & Entrepreneurship', 3],
-  ['BE 106', 'Business Ethics and Social Responsibility', 'Business & Entrepreneurship', 3],
-  ['BE 107', 'Entrepreneurship', 'Business & Entrepreneurship', 3],
+  // CUART (SHS)
+  ['CUART 101', 'Kitchen Safety and Sanitation', 'Hospitality & Culinary', 3],
+  ['CUART 102', 'Culinary Cookery', 'Hospitality & Culinary', 3],
+  ['CUART 103', 'Baking and Pastry', 'Hospitality & Culinary', 3],
+  ['CUART 104', 'Food and Beverage Service (SHS)', 'Hospitality & Culinary', 3],
   // SHS core
   ['SHS 101', 'Effective Communication', 'General Education', 3],
   ['SHS 102', 'General Mathematics', 'General Education', 3],
@@ -222,15 +214,7 @@ $CATALOG = [
   ['SHS 105', 'Pag-aaral ng Kasaysayan at Lipunang Pilipino', 'General Education', 3],
   ['SHS 106', 'Physical Education and Health', 'PE & NSTP', 2],
 ];
-// ICT-MAWD (SHS), --test-set only: sample subjects for testing, not an official curriculum
-if ($testSet) {
-    array_push($CATALOG,
-        ['MAWD 101', 'Computer Programming (Java) 1', 'IT / Computing', 3],
-        ['MAWD 102', 'Computer Programming (Java) 2', 'IT / Computing', 3],
-        ['MAWD 103', 'Web Development (HTML, CSS and JavaScript)', 'IT / Computing', 3],
-        ['MAWD 104', 'Mobile App Development', 'IT / Computing', 3]);
-}
-$SHS_PREFIXES = ['SCPT', 'HTTO', 'HTCUA', 'BE', 'ASSH', 'SHS', 'MAWD'];
+$SHS_PREFIXES = ['MAWD', 'CUART', 'TOPER', 'SHS'];
 $catalogLevel = fn(string $code) => in_array(strtok($code, ' '), $SHS_PREFIXES, true) ? 'shs' : 'tertiary';
 $catalogByCode = [];
 foreach ($CATALOG as [$code, $title, $area, $units]) $catalogByCode[$code] = ['title' => $title, 'area' => $area, 'units' => $units];
@@ -242,14 +226,14 @@ function subjectHours(string $code): array {
     $lecture = [3, 0, 3, 0];
     if (preg_match('/^PATHFIT|^SHS 106$/', $code)) return [2, 0, 2, 0, 'pe'];
     // SHS subjects meet 4.5 hours a week: lecture only, or 1.5 hours lecture + 3 hours lab
-    if (preg_match('/^(SCPT|HTCUA 10[234]|HTTO 10[134])$|^(SCPT|MAWD) /', $code)) return [3, 1, 1.5, 3, preg_match('/^HTCUA/', $code) ? 'lab' : 'lecture'];
-    if (preg_match('/^(SHS|BE|ASSH|HTTO|HTCUA) /', $code)) return [3, 0, 4.5, 0, 'lecture'];
+    if (preg_match('/^(CUART 10[234]|TOPER 10[134])$|^MAWD /', $code)) return [3, 1, 1.5, 3, preg_match('/^CUART/', $code) ? 'lab' : 'lecture'];
+    if (preg_match('/^(SHS|TOPER|CUART) /', $code)) return [3, 0, 4.5, 0, 'lecture'];
     if (str_starts_with($code, 'NSTP')) return [3, 0, 3, 0, 'special'];
     if (in_array($code, ['IT 112', 'IT 113', 'CS 114', 'CS 115', 'CS 101', 'CS 102', 'CS 104', 'CS 105', 'CS 106'], true)) return [...$lecture, 'lecture'];
-    if (preg_match('/^(COMP|IT|CS|SCPT) /', $code)) return [...$lab1, 'lecture'];
-    if (in_array($code, ['TPC 101', 'TPC 106', 'TPC 108', 'HTTO 101', 'HTTO 103', 'HTTO 104'], true)) return [...$lab1, 'lecture'];
-    if (in_array($code, ['HRS 101', 'HRS 103', 'HTCUA 102', 'HTCUA 103'], true)) return [...$lab2, 'lab'];
-    if (in_array($code, ['HRS 102', 'HRS 104', 'HRS 105', 'HTCUA 104'], true)) return [...$lab1, 'lab'];
+    if (preg_match('/^(COMP|IT|CS) /', $code)) return [...$lab1, 'lecture'];
+    if (in_array($code, ['TPC 101', 'TPC 106', 'TPC 108'], true)) return [...$lab1, 'lecture'];
+    if (in_array($code, ['HRS 101', 'HRS 103'], true)) return [...$lab2, 'lab'];
+    if (in_array($code, ['HRS 102', 'HRS 104', 'HRS 105'], true)) return [...$lab1, 'lab'];
     return [...$lecture, 'lecture'];
 }
 
@@ -300,27 +284,23 @@ $SHS_CORE = [
     12 => ['1st Term' => ['SHS 105', 'SHS 106'], '2nd Term' => ['SHS 104', 'SHS 106'], '3rd Term' => ['SHS 103', 'SHS 106']],
 ];
 $SHS_STRAND = [
-    'HTCUA'    => [11 => ['1st Term' => ['HTCUA 101'], '2nd Term' => ['HTCUA 102'], '3rd Term' => ['HTCUA 103']], 12 => ['1st Term' => ['HTCUA 103', 'HTCUA 104'], '2nd Term' => ['HTCUA 104', 'HTCUA 102'], '3rd Term' => ['HTCUA 104']]],
-    'HTTO'     => [11 => ['1st Term' => ['HTTO 101'], '2nd Term' => ['HTTO 102'], '3rd Term' => ['HTTO 103']], 12 => ['1st Term' => ['HTTO 103', 'HTTO 104'], '2nd Term' => ['HTTO 104', 'HTTO 102'], '3rd Term' => ['HTTO 104']]],
-    'ICT-SCPT' => [11 => ['1st Term' => ['SCPT 101'], '2nd Term' => ['SCPT 102'], '3rd Term' => ['SCPT 103']], 12 => ['1st Term' => ['SCPT 103', 'SCPT 104'], '2nd Term' => ['SCPT 104', 'SCPT 102'], '3rd Term' => ['SCPT 104']]],
-    'B&E'      => [11 => ['1st Term' => ['BE 101'], '2nd Term' => ['BE 102'], '3rd Term' => ['BE 104']], 12 => ['1st Term' => ['BE 103', 'BE 105'], '2nd Term' => ['BE 106'], '3rd Term' => ['BE 107']]],
+    'CUART'   => [11 => ['1st Term' => ['CUART 101'], '2nd Term' => ['CUART 102'], '3rd Term' => ['CUART 103']], 12 => ['1st Term' => ['CUART 103', 'CUART 104'], '2nd Term' => ['CUART 104', 'CUART 102'], '3rd Term' => ['CUART 104']]],
+    'TOPER'   => [11 => ['1st Term' => ['TOPER 101'], '2nd Term' => ['TOPER 102'], '3rd Term' => ['TOPER 103']], 12 => ['1st Term' => ['TOPER 103', 'TOPER 104'], '2nd Term' => ['TOPER 104', 'TOPER 102'], '3rd Term' => ['TOPER 104']]],
+    'IT-MAWD' => [11 => ['1st Term' => ['MAWD 101'], '2nd Term' => ['MAWD 102'], '3rd Term' => ['MAWD 103']], 12 => ['1st Term' => ['MAWD 103', 'MAWD 104'], '2nd Term' => ['MAWD 104', 'MAWD 102'], '3rd Term' => ['MAWD 104']]],
 ];
-if ($testSet) {
-    $SHS_STRAND['ICT-MAWD'] = [11 => ['1st Term' => ['MAWD 101'], '2nd Term' => ['MAWD 102'], '3rd Term' => ['MAWD 103']], 12 => ['1st Term' => ['MAWD 103', 'MAWD 104'], '2nd Term' => ['MAWD 104', 'MAWD 102'], '3rd Term' => ['MAWD 104']]];
-}
 foreach ($SHS_STRAND as $strand => $years) {
     foreach ($years as $grade => $terms) {
         foreach ($terms as $term => $codes) $CURRICULUM[$strand][$grade][$term] = array_merge($SHS_CORE[$grade][$term], $codes);
     }
 }
-$PROGRAM_LEVEL = ['BSIT' => 'tertiary', 'BSCS' => 'tertiary', 'BSTM' => 'tertiary', 'HRS' => 'tertiary',
-    'HTCUA' => 'shs', 'HTTO' => 'shs', 'ICT-SCPT' => 'shs', 'ICT-MAWD' => 'shs', 'B&E' => 'shs', 'ASSH' => 'shs'];
+$PROGRAM_LEVEL = ['BSIT' => 'tertiary', 'BSCS' => 'tertiary', 'BSTM' => 'tertiary', 'HRS' => 'tertiary', 'TEM' => 'tertiary',
+    'IT-MAWD' => 'shs', 'CUART' => 'shs', 'TOPER' => 'shs'];
 // Sections per program and year; each regular term of the level has the same sections
 $SECTION_COUNTS = ['BSIT' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSCS' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSTM' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'HRS' => [1 => 3, 2 => 3],
-    'HTCUA' => [11 => 3, 12 => 3], 'HTTO' => [11 => 3, 12 => 3], 'ICT-SCPT' => [11 => 3, 12 => 3], 'B&E' => [11 => 3, 12 => 3]];
+    'CUART' => [11 => 3, 12 => 3], 'TOPER' => [11 => 3, 12 => 3], 'IT-MAWD' => [11 => 3, 12 => 3]];
 if ($testSet) {
     $SECTION_COUNTS = ['BSIT' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSCS' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'BSTM' => [1 => 3, 2 => 3, 3 => 3, 4 => 3], 'HRS' => [1 => 3, 2 => 3],
-        'ICT-MAWD' => [11 => 3, 12 => 3]];
+        'IT-MAWD' => [11 => 3, 12 => 3]];
     // Only the test programs get subjects
     $CURRICULUM = array_intersect_key($CURRICULUM, $SECTION_COUNTS);
 }
@@ -434,7 +414,7 @@ $addSamples = function (string $area, string $level, int $wanted) use (&$sampleT
     }
 };
 $asTeacherRows = fn(array $samples) => array_map(fn($t) => ['max_load' => SAMPLE_MAX_LOAD, 'teaching_level' => $t['level'], 'areas' => json_encode([$t['area']])], $samples);
-// --test-set: a fixed sample faculty; General Education and IT teach College and SHS (ICT-MAWD) classes, Tourism College only
+// --test-set: a fixed sample faculty; General Education and IT teach College and SHS (IT-MAWD) classes, Tourism College only
 $FIXED_TEACHERS = $testSet ? ['General Education' => [8, 'mixed'], 'Tourism' => [7, 'tertiary'], 'IT / Computing' => [10, 'mixed']] : [];
 foreach ($FIXED_TEACHERS as $area => [$count, $level]) $addSamples($area, $level, $count);
 $left = shortages(array_merge($teachers, $asTeacherRows($sampleTeachers)), $demand, $teacherAreas);

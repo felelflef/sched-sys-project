@@ -75,7 +75,7 @@ CAMPUS ROOM DIRECTORY:
 " . (!empty($roomsText) ? $roomsText : "15 Lecture Rooms (LR-101 to LR-306), 4 Computer Labs (CL-101 to CL-104), Kitchen Lab, Tourism Lab.") . "
 
 CURRENT MASTER SCHEDULES:
-" . (!empty($schedText) ? $schedText : "Schedules across BSCS, BSIT, BSTM and HRS college sections and HTCUA, HTTO, ASSH, B&E and ICT-SCPT senior high sections.") . "
+" . (!empty($schedText) ? $schedText : "Schedules across BSCS, BSIT, BSTM, HRS and TEM college sections and IT-MAWD, CUART and TOPER senior high sections.") . "
 
 STRICT DOMAIN GUARDRAILS:
 1. You are an expert AI dedicated EXCLUSIVELY to STI College classroom scheduling, room space utilization, faculty timetable assignments, conflict detection, and academic scheduling logistics.

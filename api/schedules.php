@@ -373,7 +373,7 @@ function requireProgramFitsTerm(PDO $db, int $termId, string $program, int $year
     }
 }
 
-/** A section code prefix: BSIT -> IT, HRS -> HRS, B&E -> BE (codes allow only letters, numbers, spaces and hyphens). */
+/** A section code prefix: BSIT -> IT, HRS -> HRS, IT-MAWD -> IT-MAWD (codes allow only letters, numbers, spaces and hyphens). */
 function sectionCodePrefix(string $program): string {
     return str_starts_with($program, 'BS') ? substr($program, 2) : preg_replace('/[^A-Za-z0-9\-]/', '', $program);
 }
@@ -1436,7 +1436,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 if (!$offers($prog, $yr)) continue;
                 for ($i = 0; $i < $sec_count; $i++) {
                     $letter = $letters[$i] ?? (string)($i + 1);
-                    // SHS sections read like HTTO11-A; college sections keep the IT101M pattern
+                    // SHS sections read like TOPER11-A; college sections keep the IT101M pattern
                     $prefix = sectionCodePrefix((string)$prog);
                     if ((int)$yr >= 11) {
                         $code = "{$prefix}{$yr}-{$letter}";

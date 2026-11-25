@@ -45,7 +45,7 @@ function renderSectionsTable() {
 // SHS sections read like STEM11-A; college sections keep the IT701M pattern. The server builds the same codes.
 function sectionCodeFor(prog, yr, index) {
   const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-  // Codes allow only letters, numbers, spaces and hyphens: BSIT -> IT, HRS -> HRS, B&E -> BE
+  // Codes allow only letters, numbers, spaces and hyphens: BSIT -> IT, HRS -> HRS, IT-MAWD -> IT-MAWD
   const prefix = prog.startsWith('BS') ? prog.substring(2) : prog.replace(/[^A-Za-z0-9-]/g, '');
   if (Number(yr) >= 11) return `${prefix}${yr}-${letters[index] || index + 1}`;
   return `${prefix}${yr}0${index + 1}M`;
