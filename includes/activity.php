@@ -122,6 +122,8 @@ function describeActivity(?PDO $db, string $key, array $in): ?array {
         // Accounts
         case 'users:add': return ['Accounts', "Created a Faculty / Professor account for {$text('first_name')} {$text('last_name')} ({$text('email')})"];
         case 'users:edit_user': return ['Accounts', 'Updated the account of ' . activityPerson($db, $text('email'))];
+        // Only a save is a change; the summary with the real count is set once the rows are saved
+        case 'users:import_faculty': return ($in['mode'] ?? '') === 'save' ? ['Accounts', 'Imported faculty accounts from a file'] : null;
         case 'users:delete':
         case 'users:delete_by_email':
             $email = $text('email') !== '' ? $text('email') : activityLookup($db, "SELECT email FROM users WHERE user_id = ?", [(int)($in['user_id'] ?? 0)]);

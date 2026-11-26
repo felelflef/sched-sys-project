@@ -14,6 +14,10 @@ function renderUserTable() {
   if (addAccBtn) {
     addAccBtn.style.display = isAdmin ? 'inline-flex' : 'none';
   }
+  const importBtn = document.getElementById('btnImportFaculty');
+  if (importBtn) {
+    importBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
 
   USERS.forEach(u => {
     const tr = document.createElement('tr');

@@ -215,21 +215,6 @@ function requireNoNewClashesOrOverloads(PDO $db, array $rows, int $termId): void
     }
 }
 
-/** The school's default loads in units (Faculty Profiles > Default Loads), or the built-in ones */
-function loadDefaultLoads(PDO $db): array {
-    $loads = ['Full-time' => ['min' => 24, 'max' => 30], 'Part-time' => ['min' => 15, 'max' => 24]];
-    try {
-        $find = $db->prepare("SELECT setting_value FROM app_settings WHERE setting_key = 'default_loads'");
-        $find->execute();
-        $saved = json_decode((string)$find->fetchColumn(), true);
-        foreach (['Full-time', 'Part-time'] as $status) {
-            if (isset($saved[$status]['min'], $saved[$status]['max'])) $loads[$status] = ['min' => (int)$saved[$status]['min'], 'max' => (int)$saved[$status]['max']];
-        }
-    } catch (\Throwable $e) {
-        // Before the settings table exists the built-in defaults apply
-    }
-    return $loads;
-}
 
 function isStatePublished(PDO $db): bool {
     return (bool)$db->query("SELECT COUNT(*) FROM app_settings WHERE setting_key = 'state_published'")->fetchColumn();
@@ -284,20 +269,6 @@ function loadAvailability(PDO $db): array {
     return $map;
 }
 
-/** An availability entry is a time range such as "13:00-17:00", or a shift name (AM, MIDSHIFT, PM) saved before
- *  ranges existed. Returns [start, end] as HH:MM:SS, or null when the entry is neither. */
-function availabilityWindow($entry): ?array {
-    if (!is_string($entry)) {
-        return null;
-    }
-    if (isset(SHIFT_WINDOWS[$entry])) {
-        return SHIFT_WINDOWS[$entry];
-    }
-    if (preg_match('/^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/', $entry, $m)) {
-        return ["{$m[1]}:{$m[2]}:00", "{$m[3]}:{$m[4]}:00"];
-    }
-    return null;
-}
 
 /** Times are HH:MM:SS. Available hours that touch or overlap count as one continuous window. */
 function isWithinAvailability(array $availability, string $day, string $start, string $end): bool {
