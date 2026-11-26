@@ -365,28 +365,14 @@ select:focus, input:focus { box-shadow: 0 0 0 3px rgba(37, 68, 122, 0.1); }
 .availability-option small { font-weight: 400; color: var(--text-secondary); }
 .availability-option:has(input:checked) { background: #EEF1F7; border-color: var(--accent-primary); color: var(--accent-primary); }
 
-/* Timetable on screen; printed and exported copies keep their own black lines */
+/* Timetable on screen (grid lines and blocks are styled in schedule.css) */
 @media screen {
   .timetable-sheet-card .timetable-sheet-header {
     border-bottom: 1px solid var(--border-subtle);
   }
   .timetable-sheet-card .section-title-large { font-size: 1.714rem; }
-  .timetable-sheet-card .section-spreadsheet-table,
-  .timetable-sheet-card .section-spreadsheet-table thead th,
-  .timetable-sheet-card .section-spreadsheet-table td.time-col-cell,
-  .timetable-sheet-card .section-spreadsheet-table td.empty-cell,
-  .timetable-sheet-card .section-spreadsheet-table td.class-block-cell:not(.has-conflict),
-  .timetable-sheet-card .section-spreadsheet-table tfoot th,
-  .timetable-sheet-card .section-spreadsheet-table tfoot td {
-    border-color: #D9DFE9;
-  }
-  .timetable-sheet-card .section-spreadsheet-table td.time-col-cell {
-    background: #F8FAFD;
-    color: var(--text-secondary);
-    font-weight: 600;
-  }
-  .cell-quick-edit-btn { opacity: 0.6; }
-  .class-block-cell:hover .cell-quick-edit-btn { opacity: 1; }
+  .class-block-cell:hover .cell-quick-edit-btn,
+  .class-block-cell:focus-within .cell-quick-edit-btn { opacity: 1; }
 
   /* Shows that an empty Master Schedule slot can be clicked to add a class */
   #sectionGridBody td.empty-cell:hover::after {
