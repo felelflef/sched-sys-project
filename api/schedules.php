@@ -723,6 +723,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         jsonResponse(['success' => true, 'message' => 'Availability saved']);
     }
 
+    // Course catalog import: "check" validates every row and saves nothing; "save" checks again and adds only the
+    // ready rows, in one transaction. Codes already in the catalog are skipped, never changed.
+    if ($action === 'import_catalog') {
+        requireAdminRole();
+        $rows = $input['rows'] ?? null;
+        $mode = ($input['mode'] ?? 'check') === 'save' ? 'save' : 'check';
+        if (!is_array($rows) || !$rows) {
+            rejectInput('The file has no subject rows.');
+        }
+        if (count($rows) > 1000) {
+            rejectInput('Import at most 1,000 subjects at a time.');
+        }
+        $departments = [];
+        foreach ($db->query("SELECT department_name FROM departments")->fetchAll(PDO::FETCH_COLUMN) as $name) $departments[mb_strtolower($name)] = $name;
+        $existing = [];
+        $existingTitles = [];
+        foreach ($db->query("SELECT subject_code, subject_title FROM subject_catalog")->fetchAll() as $s) {
+            $existing[strtoupper($s['subject_code'])] = true;
+            $existingTitles[mb_strtolower($s['subject_title'])] = $s['subject_code'];
+        }
+        $results = [];
+        $seenCodes = [];
+        foreach (array_values($rows) as $i => $row) {
+            $row = is_array($row) ? $row : [];
+            $line = (int)($row['line'] ?? $i + 2);
+            $text = fn(string $key) => trim(preg_replace('/\s+/u', ' ', (string)($row[$key] ?? '')));
+            $errors = [];
+            $notes = [];
+            $code = strtoupper($text('subject_code'));
+            $title = $text('subject_title');
+            $areaIn = $text('department');
+            $unitsIn = $text('units');
+            foreach (['Course code' => $code, 'Subject title' => $title, 'Subject area' => $areaIn, 'Units' => $unitsIn] as $label => $value) {
+                if ($value === '') $errors[] = "{$label} is missing";
+            }
+            if ($code !== '' && (mb_strlen($code) > 20 || !preg_match('/^[A-Za-z0-9][A-Za-z0-9 \-]*$/', $code))) $errors[] = 'Course code can only have letters, numbers, spaces and hyphens (20 at most)';
+            if ($title !== '' && (mb_strlen($title) > 100 || !preg_match("/^[\p{L}\p{N}][\p{L}\p{M}\p{N} .,:;&\/()'+#\-]*$/u", $title) || !preg_match('/\p{L}/u', $title))) $errors[] = 'Subject title must contain a letter and only ordinary punctuation (100 at most)';
+            $area = $departments[mb_strtolower($areaIn)] ?? null;
+            if ($areaIn !== '' && $area === null) $errors[] = "Subject area \"{$areaIn}\" isn't in the list";
+            if ($unitsIn !== '' && (!preg_match('/^\d+$/', $unitsIn) || (int)$unitsIn < 1 || (int)$unitsIn > 6)) $errors[] = "Units must be a whole number from 1 to 6 (got \"{$unitsIn}\")";
+            $levelIn = strtolower($text('level'));
+            $level = match (true) {
+                $levelIn === '' || in_array($levelIn, ['both', 'college and shs', 'shs and college', 'mixed'], true) => 'both',
+                in_array($levelIn, ['college', 'tertiary'], true) => 'tertiary',
+                in_array($levelIn, ['shs', 'senior high', 'senior high school'], true) => 'shs',
+                default => null,
+            };
+            if ($level === null) $errors[] = 'Level must be College, SHS or Both';
+            $status = $errors ? 'error' : 'ready';
+            // A skipped row only needs the reason it is skipped
+            if ($code !== '' && isset($existing[$code])) {
+                $status = 'duplicate';
+                $errors = [];
+                $notes = ['Already in the catalog, so it will be skipped'];
+            } elseif ($code !== '' && isset($seenCodes[$code])) {
+                $status = 'duplicate';
+                $errors = [];
+                $notes = ["Same course code as row {$seenCodes[$code]}, so it will be skipped"];
+            } elseif ($code !== '') {
+                $seenCodes[$code] = $line;
+            }
+            if ($status === 'ready' && isset($existingTitles[mb_strtolower($title)])) {
+                $notes[] = "The catalog already has this title as {$existingTitles[mb_strtolower($title)]}: check it isn't the same subject";
+            }
+            $results[] = ['line' => $line, 'status' => $status, 'notes' => array_merge($errors, $notes),
+                'values' => ['subject_code' => $code, 'subject_title' => $title, 'department' => $area, 'units' => (int)$unitsIn, 'level' => $level]];
+        }
+        $counts = ['ready' => 0, 'error' => 0, 'duplicate' => 0];
+        foreach ($results as $r) $counts[$r['status']]++;
+
+        if ($mode === 'check') {
+            jsonResponse(['success' => true, 'data' => ['rows' => array_map(fn($r) => ['line' => $r['line'], 'status' => $r['status'], 'notes' => $r['notes'],
+                'code' => $r['values']['subject_code'], 'title' => $r['values']['subject_title'], 'units' => $r['values']['units'] ?: null], $results), 'counts' => $counts]]);
+        }
+        if ($counts['ready'] === 0) {
+            rejectInput('No rows are ready to import. Fix the rows marked with problems and check the file again.');
+        }
+        $added = 0;
+        $db->beginTransaction();
+        try {
+            $ins = $db->prepare("INSERT INTO subject_catalog (subject_code, subject_title, department, it_only, units, level) VALUES (?, ?, ?, 0, ?, ?) ON CONFLICT (subject_code) DO NOTHING");
+            foreach ($results as $r) {
+                if ($r['status'] !== 'ready') continue;
+                $v = $r['values'];
+                $ins->execute([$v['subject_code'], $v['subject_title'], $v['department'], $v['units'], $v['level']]);
+                $added += $ins->rowCount();
+            }
+            $db->commit();
+        } catch (PDOException $e) {
+            $db->rollBack();
+            error_log('schedules.php import_catalog: ' . $e->getMessage());
+            jsonResponse(['success' => false, 'message' => 'The import failed and nothing was saved. Please try again.'], 500);
+        }
+        $skipped = count($results) - $added;
+        setActivitySummary("Imported {$added} subject" . ($added === 1 ? '' : 's') . ' into the Subject Catalog from a file' . ($skipped ? " ({$skipped} rows skipped)" : ''));
+        jsonResponse(['success' => true, 'data' => ['added' => $added, 'counts' => $counts]]);
+    }
+
     if ($action === 'save_catalog_subject') {
         requireAdminRole();
         $code = strtoupper(trim($input['subject_code'] ?? ''));

@@ -152,6 +152,8 @@ function describeActivity(?PDO $db, string $key, array $in): ?array {
             return ['Resources', 'Deleted the FCC certificate' . ($cert !== '' ? " \"{$cert}\"" : '')];
 
         case 'schedules:delete_catalog_subject': return ['Resources', 'Removed subject ' . strtoupper($text('subject_code')) . ' from the Subject Catalog'];
+        // Only a save is a change; the summary with the real count is set once the rows are saved
+        case 'schedules:import_catalog': return ($in['mode'] ?? '') === 'save' ? ['Resources', 'Imported subjects into the Subject Catalog from a file'] : null;
         case 'schedules:save_departments': return ['Resources', 'Updated the list of departments (' . activityCount(count((array)($in['departments'] ?? [])), 'department') . ')'];
         case 'schedules:save_subject_set':
             return ['Resources', ((int)($in['set_id'] ?? 0) > 0 ? 'Updated' : 'Created') . " the saved subject set \"{$text('set_name')}\" (" . activityCount(count((array)($in['items'] ?? [])), 'subject') . ')'];
