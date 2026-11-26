@@ -38,6 +38,10 @@ function renderSubjectTable() {
   if (btnAdd) {
     btnAdd.style.display = isAdmin ? 'inline-flex' : 'none';
   }
+  const btnImport = document.getElementById('btnImportSubjects');
+  if (btnImport) {
+    btnImport.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
 
   renderSubjectSetTable();
   showCatalogTab(catalogTab);

@@ -202,6 +202,8 @@ function openAddCurriculumSubjectModal() {
   fillCurriculumFormPrograms('');
   fillCurriculumAreaSelect('');
   populateCurriculumCatalogSelect();
+  curriculumAutoFilledCode = '';
+  updateCurriculumUnitsHint();
   document.getElementById('curricSubjCatalogRow').style.display = '';
   document.getElementById('manualSubjectModal').style.display = 'flex';
 }
@@ -229,6 +231,54 @@ function syncCurriculumUnitHours() {
   document.getElementById('curricSubjUnits').value = lecUnits + labUnits;
   document.getElementById('curricSubjLecHrs').value = hours.lec;
   document.getElementById('curricSubjLabHrs').value = hours.lab;
+  updateCurriculumUnitsHint();
+}
+
+// Course codes compare without regard to case or extra spaces ("it  102" is IT 102)
+function normalizeCourseCode(code) {
+  return String(code || '').toUpperCase().replace(/\s+/g, ' ').trim();
+}
+function catalogSubjectForCode(code) {
+  const key = normalizeCourseCode(code);
+  return key ? SUBJECTS.find(s => normalizeCourseCode(s.code) === key) : null;
+}
+
+// Says where the units came from: the catalog's units, a change from them, or a subject not in the catalog yet
+function updateCurriculumUnitsHint() {
+  const hint = document.getElementById('curricSubjUnitsHint');
+  if (!hint) return;
+  const typed = document.getElementById('curricSubjCode').value;
+  const subj = catalogSubjectForCode(typed);
+  const total = parseInt(document.getElementById('curricSubjUnits').value, 10) || 0;
+  if (subj && Number(subj.units)) {
+    hint.style.color = total === Number(subj.units) ? 'var(--text-secondary)' : '#B45309';
+    hint.textContent = total === Number(subj.units)
+      ? `Units from the Subject Catalog: ${subj.code} has ${subj.units} units.`
+      : `The Subject Catalog lists ${subj.units} units for ${subj.code}; this term will use ${total}.`;
+  } else {
+    hint.style.color = 'var(--text-secondary)';
+    // Still typing the start of a catalog code: no note yet
+    const key = normalizeCourseCode(typed);
+    const partOfACode = key && SUBJECTS.some(s => normalizeCourseCode(s.code).startsWith(key));
+    hint.textContent = key && !partOfACode ? 'Not in the Subject Catalog yet, so enter its units.' : '';
+  }
+}
+
+// A typed course code that matches the catalog fills in its title, units and subject area, as picking it does.
+// Only while adding: editing a subject never overwrites what is already set.
+let curriculumAutoFilledCode = '';
+function handleCurriculumCodeInput() {
+  const subj = catalogSubjectForCode(document.getElementById('curricSubjCode').value);
+  const adding = !document.getElementById('curricSubjEditId').value;
+  if (adding && subj && curriculumAutoFilledCode !== subj.code) {
+    curriculumAutoFilledCode = subj.code;
+    fillCurriculumFromCatalog(subj.code);
+    const sel = document.getElementById('curricSubjCatalogSelect');
+    if (sel && [...sel.options].some(o => o.value === subj.code)) sel.value = subj.code;
+  } else if (!subj) {
+    curriculumAutoFilledCode = '';
+  }
+  updateCurriculumUnitsHint();
 }
 
 // The subject area comes from the Subject Catalog; a subject not in the catalog yet defaults to the first area
@@ -252,6 +302,9 @@ function populateCurriculumCatalogSelect() {
     return `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} - ${escapeHtml(s.title || s.code)}${note}</option>`;
   }).join('');
   sel.value = '';
+  // The code box suggests the same catalog subjects while typing
+  const list = document.getElementById('curricSubjCodeList');
+  if (list) list.innerHTML = catalog.map(s => `<option value="${escapeHtml(s.code)}">${escapeHtml(s.title || s.code)} (${Number(s.units) || '?'} units)</option>`).join('');
 }
 
 // Fills the form from the catalog. Hours and type come from the newest curriculum entry with the same code, if any.
@@ -271,6 +324,8 @@ function fillCurriculumFromCatalog(code) {
   }
   document.getElementById('curricSubjType').value = previous ? (previous.type || 'lecture') : 'lecture';
   fillCurriculumAreaSelect(subj.code);
+  curriculumAutoFilledCode = subj.code;
+  updateCurriculumUnitsHint();
 }
 
 function openEditCurriculumSubjectModal(id) {
@@ -288,6 +343,9 @@ function openEditCurriculumSubjectModal(id) {
   document.getElementById('curricSubjYear').value = String(subj.year || 1);
   document.getElementById('curricSubjCatalogRow').style.display = 'none';
   fillCurriculumAreaSelect(subj.code);
+  // The code box suggests catalog subjects here too; the note compares the units with the catalog
+  populateCurriculumCatalogSelect();
+  updateCurriculumUnitsHint();
   document.getElementById('manualSubjectModal').style.display = 'flex';
 }
 

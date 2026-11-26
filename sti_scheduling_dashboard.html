@@ -1062,6 +1062,7 @@
                 <p id="subjectSummaryText"></p>
               </div>
               <div class="card-header-tools">
+                <button class="btn btn-outline" id="btnImportSubjects" onclick="openCatalogImportModal()">Import Subjects</button>
                 <button class="btn btn-primary" id="btnAddSubject" onclick="openAddSubjectModal()">+ Add Subject</button>
               </div>
             </div>
@@ -1223,7 +1224,10 @@
           <div class="card" style="margin-bottom:20px;">
             <div class="card-header">
               <div><h3>System Users & Faculty Accounts</h3><p>Admin-controlled account provisioning and access management for teachers and staff</p></div>
-              <button class="btn btn-primary" id="btnAddAccount" onclick="openAddUserModal()">+ Add Account</button>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-outline" id="btnImportFaculty" onclick="openFacultyImportModal()">Import Faculty</button>
+                <button class="btn btn-primary" id="btnAddAccount" onclick="openAddUserModal()">+ Add Account</button>
+              </div>
             </div>
             <div class="card-body" style="padding:0;">
               <div class="data-table-wrapper">
@@ -1490,6 +1494,114 @@
   </div>
 
   <!-- ═══ ADD USER ACCOUNT MODAL ═══ -->
+  <!-- Import Subjects: upload course codes, titles and units to the Subject Catalog, review the checked rows, then save -->
+  <div class="modal-overlay" id="catalogImportModal" style="display:none; z-index:1000;">
+    <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:920px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Import Subjects into the Catalog</h3>
+        <button class="btn-close" onclick="closeCatalogImportModal()" aria-label="Close">&times;</button>
+      </div>
+      <div style="padding:20px 24px; overflow:auto;">
+        <div id="catalogImportError" style="display:none; color:var(--danger); font-size:0.857rem; margin-bottom:14px; padding:9px 14px; background:#FFF5F5; border-radius:6px; border:1px solid #FADBD8;"></div>
+
+        <div id="catalogImportStepFile">
+          <p style="font-size:0.929rem; margin:0 0 10px;">Add many subjects at once from an Excel (.xlsx, .xls) or CSV file. Every row is checked before anything is saved. Once a subject is in the catalog, typing or picking its code when loading a term fills in its title, units and subject area.</p>
+          <ul style="font-size:0.857rem; color:var(--text-secondary); margin:0 0 14px 18px; padding:0; line-height:1.6;">
+            <li><strong>Required:</strong> Course Code, Subject Title, Subject Area and Units (1 to 6).</li>
+            <li><strong>Optional:</strong> Level (College, SHS or Both; blank means Both).</li>
+            <li>Codes already in the catalog, or repeated in the file, are skipped; existing subjects are never changed.</li>
+          </ul>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="downloadCatalogImportTemplate()">Download Template</button>
+            <label class="btn btn-primary" style="cursor:pointer; margin:0;">Choose File
+              <input type="file" id="catalogImportFile" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleCatalogImportFile(this)" />
+            </label>
+            <span id="catalogImportFileLabel" style="font-size:0.857rem; color:var(--text-secondary);"></span>
+          </div>
+        </div>
+
+        <div id="catalogImportStepCheck" style="display:none;">
+          <p id="catalogImportSummary" style="font-size:0.929rem; margin:0 0 12px;"></p>
+          <div class="data-table-wrapper" style="max-height:48vh; overflow:auto;">
+            <table class="data-table">
+              <thead><tr><th>Row</th><th>Course Code</th><th>Subject Title</th><th>Units</th><th>Status</th><th>Notes</th></tr></thead>
+              <tbody id="catalogImportTableBody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+            <button class="btn btn-outline" onclick="backToCatalogImportFile()">Choose Another File</button>
+            <button class="btn btn-primary" id="btnCatalogImportSave" onclick="saveCatalogImport()">Import Ready Rows</button>
+          </div>
+        </div>
+
+        <div id="catalogImportStepDone" style="display:none;">
+          <p id="catalogImportDoneSummary" style="font-size:0.929rem; margin:0 0 12px;"></p>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+            <button class="btn btn-primary" onclick="closeCatalogImportModal()">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Faculty: upload an Excel or CSV file, review the checked rows, then save the ready ones -->
+  <div class="modal-overlay" id="facultyImportModal" style="display:none; z-index:1000;">
+    <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:920px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
+      <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
+        <h3 style="margin:0; font-size:1.143rem; font-weight:700; color:var(--accent-primary);">Import Faculty from a File</h3>
+        <button class="btn-close" onclick="closeFacultyImportModal()" aria-label="Close">&times;</button>
+      </div>
+      <div style="padding:20px 24px; overflow:auto;">
+        <div id="facultyImportError" style="display:none; color:var(--danger); font-size:0.857rem; margin-bottom:14px; padding:9px 14px; background:#FFF5F5; border-radius:6px; border:1px solid #FADBD8;"></div>
+
+        <div id="facultyImportStepFile">
+          <p style="font-size:0.929rem; margin:0 0 10px;">Add many faculty at once from an Excel (.xlsx, .xls) or CSV file, such as a list exported from another system. Every row is checked before anything is saved.</p>
+          <ul style="font-size:0.857rem; color:var(--text-secondary); margin:0 0 14px 18px; padding:0; line-height:1.6;">
+            <li><strong>Required:</strong> First Name, Last Name, Email (@sti.edu) and Department.</li>
+            <li><strong>Optional:</strong> Role (Faculty or Program Head), Employment Status (Full-time or Part-time), Available Days, Available From and To (part-time only), Min Load and Max Load (units), Teaches (College, SHS or Both) and FCC Certificates (separate several with semicolons).</li>
+            <li>Rows with an email that already has an account, or that repeat an email in the file, are skipped.</li>
+            <li>Each new account gets a temporary password, which you download after the import.</li>
+          </ul>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="downloadFacultyImportTemplate()">Download Template</button>
+            <label class="btn btn-primary" style="cursor:pointer; margin:0;">Choose File
+              <input type="file" id="facultyImportFile" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleFacultyImportFile(this)" />
+            </label>
+            <span id="facultyImportFileLabel" style="font-size:0.857rem; color:var(--text-secondary);"></span>
+          </div>
+        </div>
+
+        <div id="facultyImportStepCheck" style="display:none;">
+          <p id="facultyImportSummary" style="font-size:0.929rem; margin:0 0 12px;"></p>
+          <div class="data-table-wrapper" style="max-height:48vh; overflow:auto;">
+            <table class="data-table">
+              <thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Status</th><th>Notes</th></tr></thead>
+              <tbody id="facultyImportTableBody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+            <button class="btn btn-outline" onclick="backToFacultyImportFile()">Choose Another File</button>
+            <button class="btn btn-primary" id="btnFacultyImportSave" onclick="saveFacultyImport()">Import Ready Rows</button>
+          </div>
+        </div>
+
+        <div id="facultyImportStepDone" style="display:none;">
+          <p id="facultyImportDoneSummary" style="font-size:0.929rem; margin:0 0 12px;"></p>
+          <div class="data-table-wrapper" style="max-height:48vh; overflow:auto;">
+            <table class="data-table">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Temporary Password</th></tr></thead>
+              <tbody id="facultyImportDoneBody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+            <button class="btn btn-primary" onclick="downloadFacultyImportPasswords()">Download Passwords (CSV)</button>
+            <button class="btn btn-outline" onclick="closeFacultyImportModal()">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="addUserModal" style="display:none; z-index:1000;">
     <div class="modal modal-wide" style="background:#fff; border-radius:12px; width:100%; max-width:460px; box-shadow:0 20px 40px rgba(0,0,0,0.2); overflow:hidden;">
       <div style="padding:18px 24px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background:#F8FAFD;">
@@ -2096,7 +2208,8 @@
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
           <div>
             <label class="form-label" style="font-weight:700; font-size:0.857rem;">Subject Code</label>
-            <input type="text" id="curricSubjCode" placeholder="e.g. ITE 101" style="width:100%;" />
+            <input type="text" id="curricSubjCode" list="curricSubjCodeList" oninput="handleCurriculumCodeInput()" autocomplete="off" placeholder="e.g. ITE 101" style="width:100%;" />
+            <datalist id="curricSubjCodeList"></datalist>
           </div>
           <div>
             <label class="form-label" style="font-weight:700; font-size:0.857rem;">Subject Type</label>
@@ -2130,6 +2243,7 @@
             <label class="form-label" for="curricSubjUnits" style="font-weight:700; font-size:0.857rem;">Total Units</label>
             <input type="number" id="curricSubjUnits" value="3" readonly tabindex="-1" style="width:100%;" />
           </div>
+          <span id="curricSubjUnitsHint" style="grid-column:1 / -1; font-size:0.857rem; color:var(--text-secondary);"></span>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:4px;">
           <div>
@@ -2438,6 +2552,8 @@
   <script src="assets/js/faculty.js"></script>
   <script src="assets/js/subjects.js"></script>
   <script src="assets/js/users.js"></script>
+  <script src="assets/js/faculty_import.js"></script>
+  <script src="assets/js/catalog_import.js"></script>
   <script src="assets/js/activity.js"></script>
   <script src="assets/js/ai.js"></script>
   <script src="assets/js/sync.js"></script>
