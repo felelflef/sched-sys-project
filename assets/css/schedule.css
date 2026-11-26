@@ -359,11 +359,15 @@ select:focus, input:focus {
   .section-spreadsheet-table thead th { position: sticky; top: var(--timetable-head-top, 0px); z-index: 5; }
 }
 
-/* ─── Spreadsheet Table (Thin Black Borders & Tight Rows) ─── */
+/* ─── Timetable (calendar view: soft grid, solid hour lines, dashed half-hour lines) ─── */
 .section-spreadsheet-table {
+  --tt-line: #D5DCE6;
+  --tt-line-soft: #E9EDF3;
   width: 100%;
-  border-collapse: collapse;
-  border: 1.5px solid #000000;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--tt-line);
+  border-radius: 10px;
   background: #FFFFFF;
   table-layout: fixed;
   font-family: inherit;
@@ -375,12 +379,15 @@ select:focus, input:focus {
   font-size: 0.857rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
-  padding: 8px 4px;
+  letter-spacing: 0.8px;
+  padding: 10px 4px;
   text-align: center;
-  border: 1px solid #000000;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
   box-sizing: border-box;
 }
+.section-spreadsheet-table thead th:first-child { border-left: none; border-top-left-radius: 9px; }
+.section-spreadsheet-table thead th:last-child { border-top-right-radius: 9px; }
 
 .section-spreadsheet-table th.time-col-header {
   width: 82px;
@@ -391,38 +398,64 @@ select:focus, input:focus {
 }
 
 .section-spreadsheet-table tbody tr {
-  height: 28px;
+  height: 36px;
+}
+
+/* Every body cell draws only its top and left line, so each line is drawn once */
+.section-spreadsheet-table tbody td {
+  border: none;
+  border-left: 1px solid var(--tt-line);
+  box-sizing: border-box;
+}
+.section-spreadsheet-table tbody tr.slot-hour > td {
+  border-top: 1px solid var(--tt-line);
+}
+.section-spreadsheet-table tbody tr.slot-half > td {
+  border-top: 1px dashed var(--tt-line-soft);
+}
+.section-spreadsheet-table tbody tr:first-child > td {
+  border-top: none;
+}
+.section-spreadsheet-table tbody td:first-child {
+  border-left: none;
 }
 
 .section-spreadsheet-table td.time-col-cell {
-  background: #F3F4F6;
-  color: #111827;
+  background: #F7F9FC;
+  color: #1F2937;
   font-weight: 700;
-  font-size: 0.857rem;
-  text-align: center;
-  vertical-align: middle;
-  border: 1px solid #000000;
+  font-size: 0.786rem;
+  text-align: right;
+  vertical-align: top;
   width: 82px;
-  padding: 2px 4px;
-  box-sizing: border-box;
+  padding: 4px 10px 0 4px;
+  white-space: nowrap;
   user-select: none;
+}
+/* The half-hour rows carry a quieter label so the hours stand out */
+.section-spreadsheet-table tbody tr.slot-half > td.time-col-cell {
+  border-top-color: transparent;
+}
+.time-half-label {
+  color: #9CA3AF;
+  font-weight: 500;
+  font-size: 0.75rem;
 }
 
 .section-spreadsheet-table td.empty-cell {
   background: #FFFFFF;
-  border: 1px solid #000000;
   padding: 0;
-  height: 28px;
-  box-sizing: border-box;
+  height: 36px;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .section-spreadsheet-table td.empty-cell:hover {
-  background: #F1F5F9;
+  background: #F1F5FB;
 }
 .section-spreadsheet-table td.empty-cell.drag-over {
   background: #DBEAFE !important;
   outline: 2px dashed #2563EB;
+  outline-offset: -2px;
 }
 /* While a class is dragged: green where it fits, red where it can't go (hover a spot for the reason) */
 .section-spreadsheet-table td.empty-cell.drop-ok {
@@ -431,88 +464,152 @@ select:focus, input:focus {
 .section-spreadsheet-table td.empty-cell.drop-bad {
   background: #FEF2F2;
 }
-.section-spreadsheet-table td.class-block-cell.drop-ok {
+.section-spreadsheet-table td.class-block-cell.drop-ok .class-cell-inner {
   outline: 3px solid #16A34A;
   outline-offset: -3px;
 }
 .section-spreadsheet-table td.class-block-cell.drop-bad {
   opacity: 0.55;
 }
-.section-spreadsheet-table td.class-block-cell.drag-over {
+.section-spreadsheet-table td.class-block-cell.drag-over .class-cell-inner {
   outline: 3px dashed #2563EB;
   outline-offset: -3px;
 }
 
-/* ─── Class Block Cell (Merged Cell with Rowspan) ─── */
+/* ─── Class Block (merged cell holding a rounded card) ─── */
 .section-spreadsheet-table td.class-block-cell {
-  border: 1px solid #000000;
-  padding: 4px 6px !important;
+  --block-bg: #E8F0FE;
+  --block-accent: #2563EB;
+  --block-text: #1E3A8A;
+  --block-time: #1D4ED8;
+  --block-edge: rgba(37, 99, 235, 0.22);
+  padding: 0 !important;
   vertical-align: top;
   cursor: grab;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
   user-select: none;
-  box-sizing: border-box;
   position: relative;
-  overflow: visible;
+  background: #FFFFFF;
+  color: var(--block-text);
 }
 .section-spreadsheet-table td.class-block-cell:active {
   cursor: grabbing;
 }
 
-.section-spreadsheet-table td.class-block-cell:hover {
-  filter: brightness(0.96);
-  z-index: 10;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+/* The two alternating block colors: STI blue and gold */
+.section-spreadsheet-table td.class-block-cell.tone-a {
+  --block-bg: #E8F0FE;
+  --block-accent: #2563EB;
+  --block-text: #1E3A8A;
+  --block-time: #1D4ED8;
+  --block-edge: rgba(37, 99, 235, 0.22);
 }
-
-/* ─── Block Themes by Type ─── */
-.section-spreadsheet-table td.class-block-cell.type-lecture {
-  background-color: #EBF3FC !important;
-  color: #1E3A8A;
-  border-left: 4.5px solid #2563EB !important;
+.section-spreadsheet-table td.class-block-cell.tone-b {
+  --block-bg: #FFF6D6;
+  --block-accent: #D4A106;
+  --block-text: #5C4300;
+  --block-time: #8A6400;
+  --block-edge: rgba(212, 161, 6, 0.35);
 }
-
-.section-spreadsheet-table td.class-block-cell.type-lab {
-  background-color: #ECFDF5 !important;
-  color: #065F46;
-  border-left: 4.5px solid #059669 !important;
-}
-
-.section-spreadsheet-table td.class-block-cell.type-special,
-.section-spreadsheet-table td.class-block-cell.type-pe {
-  background-color: #FEF3C7 !important;
-  color: #92400E;
-  border-left: 4.5px solid #D97706 !important;
-}
-
-/* ─── Conflict Highlight (Red) ─── */
+/* Clashes always show in red */
 .section-spreadsheet-table td.class-block-cell.has-conflict {
-  background-color: #FEE2E2 !important;
-  color: #991B1B !important;
-  border: 2px solid #DC2626 !important;
-  border-left: 5px solid #DC2626 !important;
+  --block-bg: #FEE2E2;
+  --block-accent: #DC2626;
+  --block-text: #991B1B;
+  --block-time: #B91C1C;
+  --block-edge: rgba(220, 38, 38, 0.5);
+}
+
+.class-cell-inner {
+  position: absolute;
+  inset: 3px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 7px 5px 9px;
+  background: var(--block-bg);
+  border: 1px solid var(--block-edge);
+  border-left: 4px solid var(--block-accent);
+  border-radius: 7px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+/* Lines keep their height; a block too short for all of them hides the last ones instead of squeezing them */
+.class-cell-inner > * {
+  flex-shrink: 0;
+}
+.section-spreadsheet-table td.class-block-cell:hover .class-cell-inner,
+.section-spreadsheet-table td.class-block-cell:focus-visible .class-cell-inner {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+  transform: translateY(-1px);
+}
+.section-spreadsheet-table td.class-block-cell:focus-visible { outline: none; }
+.section-spreadsheet-table td.class-block-cell:focus-visible .class-cell-inner {
+  outline: 2px solid var(--block-accent);
+  outline-offset: 1px;
+}
+.section-spreadsheet-table td.class-block-cell.has-conflict .class-cell-inner {
+  border-width: 2px 2px 2px 5px;
   animation: conflict-border-pulse 2s infinite ease-in-out;
 }
 
 @keyframes conflict-border-pulse {
-  0%, 100% { outline: 2px solid transparent; }
-  50% { outline: 2px solid #EF4444; }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35); }
 }
 
 /* ─── Class Content Layout ─── */
-.class-cell-inner {
+/* Time first, then the AI / Locked badges (they drop below the time when the block is narrow) */
+.class-time-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  height: 100%;
-  justify-content: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 5px;
+  min-height: 18px;
+}
+.class-time-range {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--block-time);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.class-time-row .class-ai-badge,
+.class-time-row .class-lock-badge {
+  margin-left: 0;
+}
+.has-conflict .class-time-range { color: #B91C1C; }
+.class-subj-title {
+  font-size: 0.857rem;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.class-type-tag {
+  font-weight: 600;
+  opacity: 0.75;
+}
+.class-subj-name,
+.class-meta-line {
+  font-size: 0.786rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.class-subj-name {
+  font-weight: 600;
+}
+.class-meta-line {
+  font-weight: 500;
+  opacity: 0.85;
 }
 .class-sec-badge {
-  font-size: 0.857rem;
   font-weight: 700;
-  opacity: 0.75;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
 }
 .class-ai-badge {
   display: inline-block;
@@ -521,36 +618,30 @@ select:focus, input:focus {
   border-radius: 3px;
   background: #6C3483;
   color: #FFFFFF;
-  font-size: 0.857rem;
+  font-size: 0.714rem;
   font-weight: 800;
   line-height: 1.5;
 }
-.class-subj-title {
-  font-size: 0.857rem;
-  font-weight: 800;
-  line-height: 1.25;
-  word-break: break-word;
-}
+/* Edit sits in the block's top corner and shows when the block is hovered or focused */
 .cell-quick-edit-btn {
-  background: rgba(255, 255, 255, 0.85);
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 0.857rem;
+  padding: 0 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1F2937;
   cursor: pointer;
-  line-height: 1.2;
+  line-height: 1.5;
   transition: all 0.15s ease;
 }
 .cell-quick-edit-btn:hover {
   background: #FFFFFF;
   border-color: var(--accent-primary);
-  transform: scale(1.1);
-}
-.class-meta-line {
-  font-size: 0.857rem;
-  font-weight: 600;
-  opacity: 0.9;
-  word-break: break-word;
 }
 .class-conflict-badge {
   display: inline-flex;
@@ -560,10 +651,14 @@ select:focus, input:focus {
   color: #FFFFFF;
   padding: 1px 5px;
   border-radius: 3px;
-  font-size: 0.857rem;
+  font-size: 0.714rem;
   font-weight: 800;
-  margin-top: 3px;
+  margin-top: 2px;
   width: fit-content;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ─── Footer Rows ─── */
@@ -573,7 +668,9 @@ select:focus, input:focus {
   font-weight: 800;
   font-size: 0.857rem;
   text-align: center;
-  border: 1px solid #000000;
+  border: none;
+  border-top: 1px solid var(--tt-line);
+  border-left: 1px solid var(--tt-line);
   padding: 6px 4px;
 }
 .section-spreadsheet-table tfoot tr.footer-hours-row td {
@@ -582,7 +679,9 @@ select:focus, input:focus {
   font-size: 0.857rem;
   font-weight: 700;
   text-align: center;
-  border: 1px solid #000000;
+  border: none;
+  border-top: 1px solid var(--tt-line);
+  border-left: 1px solid var(--tt-line);
   padding: 6px 4px;
 }
 .section-spreadsheet-table tfoot tr.footer-weekly-row td.weekly-total-cell {
@@ -592,8 +691,11 @@ select:focus, input:focus {
   font-size: 0.857rem;
   font-weight: 600;
   padding: 7px 16px;
-  border: 1px solid #000000;
+  border: none;
 }
+.section-spreadsheet-table tfoot th.time-col-footer { border-left: none; }
+.section-spreadsheet-table tfoot tr:last-child > :first-child { border-bottom-left-radius: 9px; }
+.section-spreadsheet-table tfoot tr:last-child > :last-child { border-bottom-right-radius: 9px; }
 .section-spreadsheet-table tfoot tr.footer-weekly-row strong {
   color: #FFD400;
   font-size: 0.929rem;
@@ -661,9 +763,9 @@ select:focus, input:focus {
 .schedule-viewer-sheet .section-spreadsheet-table td.class-block-cell:active {
   cursor: default;
 }
-.schedule-viewer-sheet .section-spreadsheet-table td.class-block-cell:hover {
-  filter: none;
-  box-shadow: none;
+.schedule-viewer-sheet .section-spreadsheet-table td.class-block-cell:hover .class-cell-inner {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  transform: none;
 }
 @media (max-width: 800px) {
   .schedule-viewer-sheet .section-spreadsheet-table,
@@ -678,17 +780,17 @@ select:focus, input:focus {
   display: inline-block;
   border: 1px solid rgba(0, 0, 0, 0.2);
 }
-.legend-swatch.lecture {
-  background: #EBF3FC;
+.legend-swatch.tone-a {
+  background: #E8F0FE;
   border-left: 3.5px solid #2563EB;
 }
-.legend-swatch.lab {
-  background: #ECFDF5;
-  border-left: 3.5px solid #059669;
+.legend-swatch.tone-b {
+  background: #FFF6D6;
+  border-left: 3.5px solid #D4A106;
 }
-.legend-swatch.pe {
-  background: #FEF3C7;
-  border-left: 3.5px solid #D97706;
+.legend-swatch.clash {
+  background: #FEE2E2;
+  border-left: 3.5px solid #DC2626;
 }
 
 /* ─── Readiness Checklist & Badges ─── */
@@ -774,37 +876,22 @@ select:focus, input:focus {
     padding: 0 !important;
     margin: 0 !important;
   }
+  /* Paper keeps the same calendar look, with grid lines a little darker so they survive printing */
   .section-spreadsheet-table {
-    border: 1.5px solid #000000 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+    --tt-line: #B8C2D0;
+    --tt-line-soft: #DCE2EA;
   }
+  .section-spreadsheet-table,
   .section-spreadsheet-table th,
-  .section-spreadsheet-table td {
-    border: 1px solid #000000 !important;
+  .section-spreadsheet-table td,
+  .class-cell-inner {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  .class-block-cell {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .class-block-cell.type-lecture {
-    background-color: #EBF3FC !important;
-    border-left: 4.5px solid #2563EB !important;
-  }
-  .class-block-cell.type-lab {
-    background-color: #ECFDF5 !important;
-    border-left: 4.5px solid #059669 !important;
-  }
-  .class-block-cell.type-special,
-  .class-block-cell.type-pe {
-    background-color: #FEF3C7 !important;
-    border-left: 4.5px solid #D97706 !important;
-  }
-  .class-block-cell.has-conflict {
-    background-color: #FEE2E2 !important;
-    border: 2px solid #DC2626 !important;
+  .class-cell-inner {
+    box-shadow: none !important;
+    animation: none !important;
+    transform: none !important;
   }
 }
 

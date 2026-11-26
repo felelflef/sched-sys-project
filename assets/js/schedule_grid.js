@@ -568,12 +568,18 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
     return facultyAvailabilityProblem(classItem.instructor, classItem.day, classItem.startTime, classItem.endTime);
   }
 
-  // Render HTML rows
+  // Subjects take turns between two block colors (in course-code order) so neighbouring subjects stand apart
+  const subjectCodes = [...new Set(filteredClasses.map(c => c.subjectCode))].sort();
+  const toneOf = code => (subjectCodes.indexOf(code) % 2 === 0 ? 'tone-a' : 'tone-b');
+  const typeLabels = { lecture: 'Lecture', lab: 'Lab', pe: 'PE', special: 'Special' };
+
+  // Render HTML rows: hour rows get a solid line and a full label, half-hour rows a lighter line
   let rowsHtml = '';
   slots.forEach(slotMin => {
     const timeStr = minutesToTime(slotMin);
-    rowsHtml += `<tr>`;
-    rowsHtml += `<td class="time-col-cell">${formatTime12(timeStr)}</td>`;
+    const onHour = slotMin % 60 === 0;
+    rowsHtml += `<tr class="${onHour ? 'slot-hour' : 'slot-half'}">`;
+    rowsHtml += `<td class="time-col-cell">${onHour ? formatTime12(timeStr) : `<span class="time-half-label">${formatTime12(timeStr).slice(0, -3)}</span>`}</td>`;
 
     DAYS.forEach(day => {
       const cell = gridMatrix[day][slotMin];
@@ -590,9 +596,14 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
         const conflictReason = cellReadOnly ? null : checkClassConflict(item);
         const conflictClass = conflictReason ? 'has-conflict' : '';
         const itemType = (item.type || 'lecture').toLowerCase();
+        const typeTag = classPartTag(item) || ` · ${typeLabels[itemType] || 'Lecture'}`;
+        const startLabel = formatTime12(item.startTime);
+        const endLabel = formatTime12(item.endTime);
+        // "7:00 – 8:30 AM" when both ends share AM/PM, otherwise "11:30 AM – 1:00 PM"
+        const timeRange = startLabel.slice(-2) === endLabel.slice(-2) ? `${startLabel.slice(0, -3)} – ${endLabel}` : `${startLabel} – ${endLabel}`;
 
         rowsHtml += `
-          <td class="class-block-cell type-${itemType} ${conflictClass}"
+          <td class="class-block-cell type-${itemType} ${toneOf(item.subjectCode)} ${conflictClass}"
               rowspan="${cell.rowspan}"
               ${cellReadOnly ? '' : `draggable="true" data-class-id="${escapeHtml(item.id)}"
               ondragstart="handleClassDragStart(event, '${item.id}')"
@@ -605,14 +616,17 @@ function timetableRowsHtml(filteredClasses, readOnly = false) {
               aria-label="${escapeHtml(item.subjectCode)} for ${escapeHtml(item.section)}, ${escapeHtml(item.day)} ${formatTime12(item.startTime)} to ${formatTime12(item.endTime)}, ${escapeHtml(item.room)}, ${escapeHtml(item.instructor)}. Press Enter for details."`}
               title="${escapeHtml(item.subjectCode)}: ${escapeHtml(item.subjectTitle || '')} (${formatTime12(item.startTime)} – ${formatTime12(item.endTime)})">
             <div class="class-cell-inner">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
-                <span class="class-sec-badge">${escapeHtml(item.section)}${item.aiPlaced ? ' <span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}${item.locked ? ' <span class="class-lock-badge" title="Locked: Generate keeps this class where it is">Locked</span>' : ''}</span>
+              <div class="class-time-row">
+                <span class="class-time-range">${timeRange}</span>
+                ${item.aiPlaced ? '<span class="class-ai-badge" title="Placed by AI">AI</span>' : ''}
+                ${item.locked ? '<span class="class-lock-badge" title="Locked: Generate keeps this class where it is">Locked</span>' : ''}
                 ${cellReadOnly ? '' : `<button class="cell-quick-edit-btn" onclick="event.stopPropagation(); openEditClassScheduleModal('${item.id}')" title="Edit subject or time" aria-label="Edit ${escapeHtml(item.subjectCode)}">Edit</button>`}
               </div>
-              <span class="class-subj-title">${escapeHtml(item.subjectCode)}${classPartTag(item)}</span>
-              <span class="class-meta-line">Room ${escapeHtml(item.room)}</span>
+              <span class="class-subj-title">${escapeHtml(item.subjectCode)}<span class="class-type-tag">${typeTag}</span></span>
+              ${conflictReason ? `<span class="class-conflict-badge" title="${escapeHtml(conflictReason)}">Clash: ${escapeHtml(conflictReason)}</span>` : ''}
+              ${item.subjectTitle && item.subjectTitle !== item.subjectCode ? `<span class="class-subj-name">${escapeHtml(item.subjectTitle)}</span>` : ''}
+              <span class="class-meta-line">Room ${escapeHtml(item.room)} · <span class="class-sec-badge">${escapeHtml(item.section)}</span></span>
               <span class="class-meta-line">${escapeHtml(item.instructor)}</span>
-              ${conflictReason ? `<span class="class-conflict-badge">Clash: ${escapeHtml(conflictReason)}</span>` : ''}
             </div>
           </td>
         `;
